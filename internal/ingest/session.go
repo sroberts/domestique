@@ -50,7 +50,11 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	}
 	var st activity.Stream
 	for _, h := range hr {
-		st.T = append(st.T, int32((h.T-sess.StartedAt)/1000))
+		t := int32((h.T - sess.StartedAt) / 1000)
+		if n := len(st.T); n > 0 && t <= st.T[n-1] {
+			continue // sub-second samples, or two sources at once: one per second
+		}
+		st.T = append(st.T, t)
 		st.HR = append(st.HR, int32(h.BPM))
 	}
 

@@ -275,6 +275,8 @@ func (s *Server) send(r *http.Request, method, path string, body any) (any, erro
 
 // ---- Transport ------------------------------------------------------------------------
 
+const maxBatch = 32
+
 var supported = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -300,6 +302,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var reqs []rpcReq
 		if err := json.Unmarshal(raw, &reqs); err != nil {
 			writeRPC(w, rpcResp{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcErr{-32600, "invalid request"}})
+			return
+		}
+		// Each call can run a full REST handler (get_trends scans every
+		// ride): bound the work one HTTP request can ask for.
+		if len(reqs) > maxBatch {
+			writeRPC(w, rpcResp{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcErr{-32600, fmt.Sprintf("batch larger than %d", maxBatch)}})
 			return
 		}
 		var out []rpcResp

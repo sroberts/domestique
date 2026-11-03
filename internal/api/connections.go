@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,6 +74,13 @@ func (a *API) provider(w http.ResponseWriter, r *http.Request) *provider.Client 
 func envPrefix(name string) string { return "DOMESTIQUE_" + strings.ToUpper(name) }
 
 func (a *API) oauthStart(w http.ResponseWriter, r *http.Request) {
+	// A GET that replaces the pending sign-in state: only our own page (or a
+	// typed address) may start it, not another site's link or <img>.
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		writeErr(w, http.StatusForbidden, "start the connection from Settings")
+		return
+	}
 	c := a.provider(w, r)
 	if c == nil {
 		return
@@ -198,7 +206,7 @@ func (a *API) upload(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	var results []map[string]any
+	results := []map[string]any{}
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
@@ -232,7 +240,11 @@ func (a *API) upload(w http.ResponseWriter, r *http.Request) {
 			results = append(results, map[string]any{"file": name, "job": job.ID})
 			continue
 		}
-		data, err := io.ReadAll(io.LimitReader(part, 256<<20))
+		data, err := ingest.ReadLimited(part)
+		if errors.Is(err, ingest.ErrTooLarge) {
+			results = append(results, map[string]any{"file": name, "error": err.Error()})
+			continue
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "upload interrupted: "+err.Error())
 			return

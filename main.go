@@ -152,7 +152,7 @@ func run() error {
 		app.Store = s
 		// Upload spools from a run that was stopped mid-import.
 		_ = os.RemoveAll(filepath.Join(storage, "tmp"))
-		ing := &ingest.Ingester{Store: s, StorageDir: storage, Log: log}
+		ing := &ingest.Ingester{Store: s, StorageDir: storage, Log: log, Loc: loc}
 		app.Ingest = ing
 		app.SetBackground(ctx)
 		if os.Getenv("DOMESTIQUE_DEMO") == "1" {
@@ -270,6 +270,13 @@ func runImport(args []string) error {
 	}
 	defer st.Close()
 	ing := &ingest.Ingester{Store: st, StorageDir: storage, Log: log}
+	if tz := os.Getenv("DOMESTIQUE_TZ"); tz != "" {
+		l, err := time.LoadLocation(tz)
+		if err != nil {
+			return fmt.Errorf("DOMESTIQUE_TZ: %w", err)
+		}
+		ing.Loc = l
+	}
 	for _, p := range args {
 		info, err := os.Stat(p)
 		if err != nil {

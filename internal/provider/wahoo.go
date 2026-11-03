@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -93,6 +93,12 @@ func (w *Wahoo) importOne(ctx context.Context, wo wahooWorkout) error {
 		return nil
 	}
 	// The CDN download needs no token and doesn't count against rate limits.
+	// The address comes from an API response: only ever fetch it over HTTPS,
+	// never from this machine's loopback or the LAN by plain HTTP.
+	if u, err := url.Parse(sum.File.URL); err != nil || u.Scheme != "https" || u.Host == "" {
+		_ = w.C.Store.SetSyncState(ctx, "wahoo:skip:"+id, "bad file url")
+		return fmt.Errorf("download fit: refusing file URL %q", sum.File.URL)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sum.File.URL, nil)
 	if err != nil {
 		return err
@@ -105,11 +111,20 @@ func (w *Wahoo) importOne(ctx context.Context, wo wahooWorkout) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download fit: %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 128<<20))
+	data, err := ingest.ReadLimited(resp.Body)
 	if err != nil {
 		return err
 	}
-	_, err = w.In.Ingest(ctx, "wahoo-"+id+".fit", data, "wahoo-api",
+	res, err := w.In.Ingest(ctx, "wahoo-"+id+".fit", data, "wahoo-api",
 		ingest.Hint{Source: "wahoo", ExternalID: id, Name: wo.Name})
-	return err
+	if err != nil {
+		return err
+	}
+	if res.Duplicate {
+		// The same file already came in another way (the Dropbox folder), so no
+		// wahoo:<id> source exists. Remember it, or every poll downloads it again
+		// and walks every page of history.
+		return w.C.Store.SetSyncState(ctx, "wahoo:skip:"+id, "duplicate of "+res.SourceID)
+	}
+	return nil
 }

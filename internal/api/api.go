@@ -128,7 +128,7 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	// The athlete's local date comes from the device; the Mini's zone may differ.
 	date := r.URL.Query().Get("date")
 	if date == "" {
-		date = time.Now().Format("2006-01-02")
+		date = time.Now().In(a.loc()).Format("2006-01-02")
 	}
 	if !validDate(date) {
 		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
@@ -409,6 +409,16 @@ func (a *API) putSet(w http.ResponseWriter, r *http.Request) {
 	if err := a.Store.PutSet(r.Context(), s); err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	// A set edited (or synced late) after its session finished must reach the
+	// activity too, or its volume and set count go stale.
+	if a.Ingest != nil {
+		if sess, err := a.Store.GetSession(r.Context(), s.SessionID); err == nil && sess.FinishedAt != nil {
+			if err := a.Ingest.UpsertSession(r.Context(), sess.ID); err != nil {
+				a.Log.Warn("session to activity", "session", sess.ID, "err", err.Error())
+			}
+			a.kickRecalc()
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": s.ID})
 }

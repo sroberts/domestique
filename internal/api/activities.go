@@ -381,7 +381,8 @@ func (a *API) getTrends(w http.ResponseWriter, r *http.Request) {
 		weeks[i].Start = first.AddDate(0, 0, 7*i).Format("2006-01-02")
 	}
 	for _, x := range acts {
-		i := int(monday(time.UnixMilli(x.StartAt).In(loc)).Sub(first).Hours() / (24 * 7))
+		// Round to whole days: a week spanning a DST change is 167 or 169 hours.
+		i := int(math.Round(monday(time.UnixMilli(x.StartAt).In(loc)).Sub(first).Hours()/24)) / 7
 		if i < 0 || i >= len(weeks) {
 			continue
 		}
@@ -499,15 +500,20 @@ func (a *API) putAthlete(w http.ResponseWriter, r *http.Request) {
 		if v == nil {
 			return true
 		}
+		var err error
 		if *v == 0 {
-			_ = a.Store.DeleteAthlete(ctx, key) // 0 clears the override: back to detection
-			return true
-		}
-		if *v < lo || *v > hi {
+			err = a.Store.DeleteAthlete(ctx, key) // 0 clears the override: back to detection
+		} else if *v < lo || *v > hi {
 			writeErr(w, http.StatusBadRequest, key+" is out of range")
 			return false
+		} else {
+			err = a.Store.SetAthlete(ctx, key, strconv.Itoa(*v))
 		}
-		return a.Store.SetAthlete(ctx, key, strconv.Itoa(*v)) == nil
+		if err != nil {
+			a.fail(w, r, err) // never leave the request without a response
+			return false
+		}
+		return true
 	}
 	if !set("ftp_override", body.FTPOverride, 80, 600) || !set("max_hr_override", body.MaxHROverride, 120, 230) {
 		return

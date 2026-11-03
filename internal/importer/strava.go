@@ -51,7 +51,8 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 	if err != nil {
 		return Progress{}, err
 	}
-	rows, err := csv.NewReader(rc).ReadAll()
+	// The CSV is decompressed from an untrusted archive: bound it like a file.
+	rows, err := csv.NewReader(io.LimitReader(rc, ingest.MaxFileBytes)).ReadAll()
 	rc.Close()
 	if err != nil {
 		return Progress{}, fmt.Errorf("read activities.csv: %w", err)
@@ -170,7 +171,7 @@ func readZip(f *zip.File) ([]byte, error) {
 		return nil, err
 	}
 	defer rc.Close()
-	return io.ReadAll(io.LimitReader(rc, 256<<20))
+	return ingest.ReadLimited(rc)
 }
 
 // parseStravaDate reads "Jan 2, 2021, 3:04:05 PM" (UTC) and older variants.

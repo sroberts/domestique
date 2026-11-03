@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -43,23 +45,85 @@ type Gateway struct {
 	jwksURL string
 	log     *slog.Logger
 	client  *http.Client
+	// hosts are the names we are served at, from DOMESTIQUE_PUBLIC_URL and
+	// DOMESTIQUE_ALLOWED_HOSTS (lower case, no port). Behind the gateway they
+	// pin the identity token's audience; without it they extend the Host
+	// allowlist that stops DNS rebinding.
+	hosts []string
 
-	mu    sync.Mutex
-	keys  map[string]ed25519.PublicKey
-	tried map[string]time.Time // last refetch attempted for an unknown kid
+	mu        sync.Mutex
+	keys      map[string]ed25519.PublicKey
+	tried     map[string]time.Time // last refetch attempted for an unknown kid
+	lastFetch time.Time            // last JWKS fetch of any kind
+	minFetch  time.Duration        // least time between JWKS fetches
 }
 
-// FromEnv reads OUTPOST_AUTH, OUTPOST_ISSUER and OUTPOST_JWKS_URL.
+// FromEnv reads OUTPOST_AUTH, OUTPOST_ISSUER, OUTPOST_JWKS_URL,
+// DOMESTIQUE_PUBLIC_URL and DOMESTIQUE_ALLOWED_HOSTS.
 func FromEnv(log *slog.Logger) *Gateway {
-	return &Gateway{
-		Enabled: os.Getenv("OUTPOST_AUTH") == "gateway",
-		issuer:  os.Getenv("OUTPOST_ISSUER"),
-		jwksURL: os.Getenv("OUTPOST_JWKS_URL"),
-		log:     log,
-		client:  &http.Client{Timeout: 5 * time.Second},
-		keys:    map[string]ed25519.PublicKey{},
-		tried:   map[string]time.Time{},
+	g := &Gateway{
+		Enabled:  os.Getenv("OUTPOST_AUTH") == "gateway",
+		issuer:   os.Getenv("OUTPOST_ISSUER"),
+		jwksURL:  os.Getenv("OUTPOST_JWKS_URL"),
+		log:      log,
+		client:   &http.Client{Timeout: 5 * time.Second},
+		keys:     map[string]ed25519.PublicKey{},
+		tried:    map[string]time.Time{},
+		minFetch: 5 * time.Second,
 	}
+	if u, err := url.Parse(os.Getenv("DOMESTIQUE_PUBLIC_URL")); err == nil && u.Host != "" {
+		g.hosts = append(g.hosts, hostOnly(u.Host))
+	}
+	for _, h := range strings.Split(os.Getenv("DOMESTIQUE_ALLOWED_HOSTS"), ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			g.hosts = append(g.hosts, hostOnly(h))
+		}
+	}
+	if g.Enabled && len(g.hosts) == 0 {
+		// Without a pinned host the token's audience can only be checked
+		// against the request's own Host, which a process on this machine
+		// connecting to the loopback port directly chooses itself.
+		log.Warn("DOMESTIQUE_PUBLIC_URL is not set: identity-token audience is checked against the request's Host; " +
+			"set it (or DOMESTIQUE_ALLOWED_HOSTS) so a sibling service can't replay its tokens here")
+	}
+	return g
+}
+
+// hostOnly lower-cases a host[:port] and drops the port.
+func hostOnly(h string) string {
+	h = strings.ToLower(strings.TrimSpace(h))
+	if host, _, err := net.SplitHostPort(h); err == nil {
+		return strings.Trim(host, "[]")
+	}
+	return strings.Trim(h, "[]")
+}
+
+func (g *Gateway) pinned(host string) bool {
+	host = hostOnly(host)
+	for _, h := range g.hosts {
+		if h == host {
+			return true
+		}
+	}
+	return false
+}
+
+// hostAllowed is the DNS-rebinding guard used when no gateway is in front: a
+// page on another site whose name has been re-pointed at 127.0.0.1 is same
+// origin with us as far as the browser is concerned, so the Host it sends is
+// the only tell. Names an attacker cannot point at this machine are allowed:
+// IP literals, localhost, single-label and .local names, Tailscale's
+// *.ts.net, and the configured hosts.
+func (g *Gateway) hostAllowed(host string) bool {
+	h := hostOnly(host)
+	switch {
+	case h == "":
+		return true // HTTP/1.0 or a hand-rolled client: not a browser
+	case net.ParseIP(h) != nil, h == "localhost", strings.HasSuffix(h, ".localhost"),
+		!strings.Contains(h, "."), strings.HasSuffix(h, ".local"), strings.HasSuffix(h, ".ts.net"):
+		return true
+	}
+	return g.pinned(h)
 }
 
 // Middleware enforces Origin checks and, behind the gateway, identity.
@@ -68,6 +132,11 @@ func (g *Gateway) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		unsafe := !(r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions)
 
+		if !g.Enabled && !g.hostAllowed(r.Host) {
+			g.log.Warn("rejected unknown host", "host", r.Host, "path", r.URL.Path)
+			writeErr(w, http.StatusMisdirectedRequest, "unknown host: set DOMESTIQUE_ALLOWED_HOSTS")
+			return
+		}
 		if unsafe {
 			if err := checkOrigin(r); err != nil {
 				g.log.Warn("rejected cross-origin write", "path", r.URL.Path, "err", err.Error())
@@ -153,16 +222,35 @@ type claims struct {
 }
 
 func (c claims) hasAudience(host string) bool {
+	host = hostOnly(host)
+	if host == "" {
+		return false
+	}
 	var one string
 	if json.Unmarshal(c.Aud, &one) == nil {
-		return strings.EqualFold(one, host)
+		return hostOnly(one) == host
 	}
 	var many []string
 	if json.Unmarshal(c.Aud, &many) == nil {
 		for _, a := range many {
-			if strings.EqualFold(a, host) {
+			if hostOnly(a) == host {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// audienceOK checks aud against the pinned hosts when configured. Only
+// without them does it fall back to the request's Host, which a direct
+// loopback caller controls.
+func (g *Gateway) audienceOK(c claims, r *http.Request) bool {
+	if len(g.hosts) == 0 {
+		return c.hasAudience(requestHost(r))
+	}
+	for _, h := range g.hosts {
+		if c.hasAudience(h) {
+			return true
 		}
 	}
 	return false
@@ -208,7 +296,7 @@ func (g *Gateway) verify(r *http.Request) (User, error) {
 		return User{}, errors.New("token not yet valid")
 	case g.issuer != "" && c.Iss != g.issuer:
 		return User{}, fmt.Errorf("issuer %q", c.Iss)
-	case !c.hasAudience(requestHost(r)):
+	case !g.audienceOK(c, r):
 		return User{}, fmt.Errorf("audience does not match %s", requestHost(r))
 	case c.Sub == "":
 		return User{}, errors.New("no subject")
@@ -236,6 +324,13 @@ func (g *Gateway) key(ctx context.Context, kid string) (ed25519.PublicKey, error
 	if t, ok := g.tried[kid]; ok && time.Since(t) < 30*time.Second {
 		return nil, fmt.Errorf("unknown key %q", kid)
 	}
+	// However many distinct kids arrive, fetch at most once every few
+	// seconds: unauthenticated callers choose kids freely. Any fetch loads a
+	// rotated key, so a genuine new kid waits at most this long.
+	if !g.lastFetch.IsZero() && time.Since(g.lastFetch) < g.minFetch {
+		return nil, fmt.Errorf("unknown key %q", kid)
+	}
+	g.lastFetch = time.Now()
 	if len(g.tried) > 64 {
 		g.tried = map[string]time.Time{}
 	}
@@ -283,7 +378,7 @@ func (g *Gateway) fetch(ctx context.Context) error {
 			Kid string `json:"kid"`
 		} `json:"keys"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&set); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&set); err != nil {
 		return err
 	}
 	keys := map[string]ed25519.PublicKey{}

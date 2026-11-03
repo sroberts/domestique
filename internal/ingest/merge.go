@@ -312,7 +312,11 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 		}
 	}
 	if a.Name == "" {
-		a.Name = DefaultName(a.Sport, time.UnixMilli(a.StartAt))
+		loc := in.Loc
+		if loc == nil {
+			loc = time.Local
+		}
+		a.Name = DefaultName(a.Sport, time.UnixMilli(a.StartAt).In(loc))
 	}
 
 	// Strain is Whoop's.
@@ -351,9 +355,10 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 }
 
 // DefaultName is what Strava would call it: "Morning Ride", "Evening Lift".
+// t should be in the athlete's zone.
 func DefaultName(sport string, t time.Time) string {
 	part := "Night"
-	switch h := t.Local().Hour(); {
+	switch h := t.Hour(); {
 	case h >= 5 && h < 12:
 		part = "Morning"
 	case h >= 12 && h < 17:

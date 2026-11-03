@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
   import HrTrace from '../components/HrTrace.svelte';
@@ -87,7 +88,9 @@
   }
 
   $effect(() => {
-    void load();
+    // untrack: load() reads `workout` before its first await, and assigning it
+    // would otherwise re-run this effect (a second fetch, a new interval).
+    untrack(() => void load());
     // Poll while heart rate hasn't arrived, and only while the screen is visible.
     const t = setInterval(() => {
       if (document.visibilityState === 'visible' && (summary?.hr_status !== 'ready' || problem)) void load();

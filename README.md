@@ -21,7 +21,8 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 | `DOMESTIQUE_WHOOP_CLIENT_ID`, `DOMESTIQUE_WHOOP_CLIENT_SECRET_FILE` | Whoop developer app (scopes incl. `offline`) |
 | `DOMESTIQUE_WAHOO_CLIENT_ID`, `DOMESTIQUE_WAHOO_CLIENT_SECRET_FILE` | Wahoo Cloud API app |
 | `DOMESTIQUE_WATCH_DIRS` | `:`-separated folders polled for FIT/GPX/TCX files |
-| `DOMESTIQUE_PUBLIC_URL` | Override the OAuth redirect base (default: the address you browsed from) |
+| `DOMESTIQUE_PUBLIC_URL` | The address Domestique is served at, e.g. `https://domestique.tail1234.ts.net`. Sets the OAuth redirect base (default: the address you browsed from) and, behind the gateway, pins the identity token's audience so another service on the machine can't replay its own tokens here. Set it. |
+| `DOMESTIQUE_ALLOWED_HOSTS` | Comma-separated extra host names Domestique is reached at (a renamed node, a custom name). Behind the gateway they are accepted audiences; without it, requests for any other non-local name are refused (DNS-rebinding guard) |
 | `DOMESTIQUE_TZ` | Athlete's time zone for days and weeks (default: system) |
 | `DOMESTIQUE_MAX_HR` | Fallback max HR until one is detected (default 190) |
 | `DOMESTIQUE_DEMO=1` | Stand-in Whoop data until Whoop is connected |

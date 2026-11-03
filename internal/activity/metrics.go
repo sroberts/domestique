@@ -38,12 +38,15 @@ type dense struct {
 func resample(t []int32, v []int32) dense {
 	var d dense
 	var cur []float64
+	var lastT int32
 	for i := range t {
 		if v[i] < 0 {
 			continue
 		}
-		if i > 0 && len(cur) > 0 {
-			gap := int(t[i] - t[i-1])
+		if len(cur) > 0 {
+			// Measure from the last valid sample, so a run of missing samples
+			// counts as a gap rather than being collapsed out of the timeline.
+			gap := int(t[i] - lastT)
 			if gap > 10 {
 				d.segs = append(d.segs, cur)
 				cur = nil
@@ -54,6 +57,7 @@ func resample(t []int32, v []int32) dense {
 			}
 		}
 		cur = append(cur, float64(v[i]))
+		lastT = t[i]
 	}
 	if len(cur) > 0 {
 		d.segs = append(d.segs, cur)

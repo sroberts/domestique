@@ -34,6 +34,9 @@ function serviceWorker(): Plugin {
         .replace('__PRECACHE__', JSON.stringify(precache))
         .replace('__VERSION__', JSON.stringify(version));
       writeFileSync(join(outDir, 'sw.js'), src);
+      // Keep the placeholder Go's //go:embed needs, so a fresh clone builds
+      // before the PWA has been.
+      writeFileSync(join(outDir, '.gitkeep'), '');
     },
   };
 }

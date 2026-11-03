@@ -33,7 +33,10 @@ type Ingester struct {
 	Store      *store.Store
 	StorageDir string
 	Log        *slog.Logger
-	mu         sync.Mutex
+	// Loc is the athlete's time zone, for default names ("Morning Ride").
+	// Nil means the process's local zone.
+	Loc *time.Location
+	mu  sync.Mutex
 }
 
 // Hint carries what the origin knows beyond the file itself, e.g. the
@@ -56,8 +59,32 @@ type Result struct {
 	Merged     bool   `json:"merged"`    // joined an existing activity
 }
 
+// MaxFileBytes bounds one activity file, compressed or not. A day-long 1 Hz
+// ride is a few megabytes of FIT or a few tens of GPX; parsing expands a file
+// many times over in memory, so anything far beyond that is refused rather
+// than decoded (a gzip or zip bomb, or simply the wrong file).
+const MaxFileBytes = 64 << 20
+
+// ErrTooLarge is returned for a file over MaxFileBytes.
+var ErrTooLarge = fmt.Errorf("file is larger than %d MB", MaxFileBytes>>20)
+
+// ReadLimited reads all of r, failing with ErrTooLarge past MaxFileBytes.
+func ReadLimited(r io.Reader) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, MaxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > MaxFileBytes {
+		return nil, ErrTooLarge
+	}
+	return b, nil
+}
+
 // Ingest imports one file. name is used for its extension (.fit, .gpx.gz, ...).
 func (in *Ingester) Ingest(ctx context.Context, name string, data []byte, origin string, h Hint) (Result, error) {
+	if len(data) > MaxFileBytes {
+		return Result{}, fmt.Errorf("%s: %w", filepath.Base(name), ErrTooLarge)
+	}
 	in.mu.Lock()
 	defer in.mu.Unlock()
 
@@ -153,9 +180,17 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 		src.ID = "manual:" + randID()
 	}
 
-	// Find the activity this records, if one exists.
-	actID, merged, err := in.match(ctx, src, &p.Stream)
-	if err != nil {
+	// Find the activity this records, if one exists. A source seen before
+	// (the same Strava activity from a newer export, whose bytes differ) stays
+	// with its activity; matching afresh would skip its own old record and
+	// strand the old activity with no sources.
+	var actID string
+	var merged bool
+	if prev, err := in.Store.GetSource(ctx, src.ID); err == nil {
+		actID = prev.ActivityID
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return Result{}, err
+	} else if actID, merged, err = in.match(ctx, src, &p.Stream); err != nil {
 		return Result{}, err
 	}
 	if actID == "" {
@@ -223,7 +258,7 @@ func decode(name string, data []byte) (format string, plain []byte, err error) {
 		if err != nil {
 			return "", nil, fmt.Errorf("gunzip: %w", err)
 		}
-		if plain, err = io.ReadAll(io.LimitReader(zr, 256<<20)); err != nil {
+		if plain, err = ReadLimited(zr); err != nil {
 			return "", nil, fmt.Errorf("gunzip: %w", err)
 		}
 		l = strings.TrimSuffix(l, ".gz")
@@ -385,7 +420,10 @@ func (in *Ingester) AddWhoopWorkout(ctx context.Context, id string, start time.T
 		extra["strain"] = *h.Strain
 	}
 	srcID := "whoop:" + id
+	// One critical section: releasing the lock between the lookup and the
+	// insert would let two syncs both create the workout.
 	in.mu.Lock()
+	defer in.mu.Unlock()
 	if prev, err := in.Store.GetSource(ctx, srcID); err == nil {
 		prev.Extra, _ = json.Marshal(extra)
 		prev.ElapsedS = elapsedS
@@ -393,15 +431,13 @@ func (in *Ingester) AddWhoopWorkout(ctx context.Context, id string, start time.T
 		if err == nil {
 			err = in.Rebuild(ctx, prev.ActivityID)
 		}
-		in.mu.Unlock()
 		return Result{SourceID: srcID, ActivityID: prev.ActivityID, Duplicate: true}, err
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return Result{}, err
 	}
-	in.mu.Unlock()
 
 	p := &activity.Parsed{Start: start, ElapsedS: elapsedS, MovingS: elapsedS, DistanceM: distanceM,
 		Sport: activity.TextSport(h.Sport, false)}
-	in.mu.Lock()
-	defer in.mu.Unlock()
 	res, err := in.addParsed(ctx, p, nil, h)
 	if err != nil {
 		return res, err

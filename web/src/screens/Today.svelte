@@ -78,6 +78,12 @@
     return { reps: repText, kg: kgText };
   }
 
+  /** h:mm, rounding to the minute first so 7:59:40 reads 8:00, not 7:60. */
+  function sleepText(seconds: number): string {
+    const mins = Math.round(seconds / 60);
+    return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`;
+  }
+
   function formWord(tsb: number): string {
     if (tsb > 5) return 'fresh';
     if (tsb >= -10) return 'neutral';
@@ -140,7 +146,7 @@
           <div><dt class="label">Resting</dt><dd><span class="num">{today.recovery.resting_hr}</span><span class="unit">bpm</span></dd></div>
         {/if}
         {#if today.sleep}
-          <div><dt class="label">Sleep</dt><dd><span class="num">{Math.floor(today.sleep.asleep_s / 3600)}:{String(Math.round((today.sleep.asleep_s % 3600) / 60)).padStart(2, '0')}</span>{#if today.sleep.performance != null}<span class="unit">{today.sleep.performance}%</span>{/if}</dd></div>
+          <div><dt class="label">Sleep</dt><dd><span class="num">{sleepText(today.sleep.asleep_s)}</span>{#if today.sleep.performance != null}<span class="unit">{today.sleep.performance}%</span>{/if}</dd></div>
         {/if}
       </dl>
     </section>

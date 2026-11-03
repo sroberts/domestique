@@ -47,6 +47,10 @@ func Open(ctx context.Context, storageDir string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
+	// The database holds OAuth tokens: owner-only, whatever the umask.
+	for _, f := range []string{path, path + "-wal", path + "-shm"} {
+		_ = os.Chmod(f, 0o600)
+	}
 	s := &Store{db: db}
 	if err := s.migrate(ctx); err != nil {
 		db.Close()

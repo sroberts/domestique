@@ -82,7 +82,14 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 			hit := hitAll(last)
 			missedTwice := !hit && len(hist) > 1 && !hitAll(hist[1])
 			bodyweight := lastW == 0
+			// Bodyweight progression adds reps, so build on last session's
+			// target, not the template's, or it never gets past template+1.
 			targetReps := ex.Sets[0].Reps
+			if bodyweight {
+				for _, s := range last {
+					targetReps = max(targetReps, s.TargetReps)
+				}
+			}
 			w := lastW
 			switch {
 			case missedTwice && !bodyweight:

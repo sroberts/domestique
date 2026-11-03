@@ -31,12 +31,17 @@
     return 'all';
   }
 
+  let generation = 0;
+
   async function load(reset: boolean) {
+    // A reply for a filter the athlete has already left must not land.
+    const gen = reset ? ++generation : generation;
     loading = true;
     const q = new URLSearchParams({ limit: '40' });
     if (filter !== 'all') q.set('sport', filter);
     if (!reset && next) q.set('before', String(next));
     const res = await fetchActivities('?' + q.toString());
+    if (gen !== generation) return;
     if (res.data) {
       rows = reset ? res.data.activities : [...rows, ...res.data.activities];
       next = res.data.next_before;

@@ -49,6 +49,10 @@ func Handler() http.Handler {
 			w.Header().Set("Cache-Control", "no-cache")
 		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Sibling apps behind the gateway are same-site: none may frame us
+		// and trick a tap on Disconnect or a set's weight.
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
 		if p == "manifest.webmanifest" {
 			w.Header().Set("Content-Type", "application/manifest+json")
 		}
