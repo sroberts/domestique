@@ -1,0 +1,11 @@
+# Outpost descriptor (outpost-service-spec.md §14).
+# Domestique reads its port from OUTPOST_PORT, so no args are needed.
+name        = "domestique"
+healthcheck = "/up"
+mcp         = true
+restart_policy = "on-failure"
+start_grace_seconds = 30
+
+# Provider apps: the client IDs aren't secret; secrets are read from files so
+# they never sit in the manifest. Folders are watched for new FIT files.
+env = { DOMESTIQUE_WHOOP_CLIENT_ID = "", DOMESTIQUE_WHOOP_CLIENT_SECRET_FILE = "~/.config/domestique/whoop-secret", DOMESTIQUE_WAHOO_CLIENT_ID = "", DOMESTIQUE_WAHOO_CLIENT_SECRET_FILE = "~/.config/domestique/wahoo-secret", DOMESTIQUE_WATCH_DIRS = "~/Dropbox/Apps/WahooFitness:~/Documents/Zwift/Activities" }

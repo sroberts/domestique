@@ -1,0 +1,330 @@
+// Package provider connects Domestique to Whoop and Wahoo over OAuth 2.0 and
+// polls them for new data. Webhooks can't reach a loopback-only Outpost
+// service through the login gateway, so everything is polled.
+//
+// Client secrets come from files named in the environment, never the
+// manifest; OAuth tokens live in SQLite under OUTPOST_STORAGE_DIR so backup
+// and restore carry them.
+package provider
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"domestique/internal/store"
+)
+
+// Config is one provider's OAuth application.
+type Config struct {
+	Name         string // whoop | wahoo
+	AuthURL      string
+	TokenURL     string
+	Scopes       []string
+	ClientID     string
+	ClientSecret string
+}
+
+// Configured reports whether credentials were supplied.
+func (c Config) Configured() bool { return c.ClientID != "" && c.ClientSecret != "" }
+
+// LoadConfig reads <PREFIX>_CLIENT_ID (or _CLIENT_ID_FILE) and
+// <PREFIX>_CLIENT_SECRET_FILE (or _CLIENT_SECRET) from the environment.
+func LoadConfig(c Config, prefix string) (Config, error) {
+	var err error
+	if c.ClientID, err = secret(prefix + "_CLIENT_ID"); err != nil {
+		return c, err
+	}
+	if c.ClientID == "" {
+		return c, nil // not set up yet: the secret file needn't exist
+	}
+	if c.ClientSecret, err = secret(prefix + "_CLIENT_SECRET"); err != nil {
+		return c, err
+	}
+	return c, nil
+}
+
+func secret(key string) (string, error) {
+	if p := os.Getenv(key + "_FILE"); p != "" {
+		if strings.HasPrefix(p, "~/") {
+			home, _ := os.UserHomeDir()
+			p = home + p[1:]
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "", fmt.Errorf("%s_FILE: %w", key, err)
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	return strings.TrimSpace(os.Getenv(key)), nil
+}
+
+// Client performs authenticated requests, refreshing tokens as needed.
+type Client struct {
+	Cfg   Config
+	Store *store.Store
+	HTTP  *http.Client
+	Log   *slog.Logger
+
+	mu     sync.Mutex
+	status Status
+}
+
+// Status is what the Settings screen shows for a provider.
+type Status struct {
+	Provider   string `json:"provider"`
+	Configured bool   `json:"configured"`
+	Connected  bool   `json:"connected"`
+	LastSync   int64  `json:"last_sync"`
+	LastError  string `json:"last_error,omitempty"`
+	Syncing    bool   `json:"syncing"`
+}
+
+func NewClient(cfg Config, st *store.Store, log *slog.Logger) *Client {
+	return &Client{Cfg: cfg, Store: st, HTTP: &http.Client{Timeout: 60 * time.Second}, Log: log,
+		status: Status{Provider: cfg.Name}}
+}
+
+func (c *Client) Status(ctx context.Context) Status {
+	c.mu.Lock()
+	s := c.status
+	c.mu.Unlock()
+	s.Configured = c.Cfg.Configured()
+	_, err := c.Store.GetToken(ctx, c.Cfg.Name)
+	s.Connected = err == nil
+	if v, err := c.Store.SyncState(ctx, c.Cfg.Name+":last_sync"); err == nil {
+		s.LastSync, _ = strconv.ParseInt(v, 10, 64)
+	}
+	return s
+}
+
+func (c *Client) setStatus(f func(*Status)) {
+	c.mu.Lock()
+	f(&c.status)
+	c.mu.Unlock()
+}
+
+// AuthorizeURL starts the OAuth flow. The state is remembered for 15 minutes.
+func (c *Client) AuthorizeURL(ctx context.Context, redirectURI string) (string, error) {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	state := hex.EncodeToString(b) // 24 chars; Whoop needs at least 8
+	if err := c.Store.SetSyncState(ctx, c.Cfg.Name+":oauth_state",
+		state+" "+strconv.FormatInt(time.Now().Unix(), 10)+" "+redirectURI); err != nil {
+		return "", err
+	}
+	q := url.Values{
+		"response_type": {"code"},
+		"client_id":     {c.Cfg.ClientID},
+		"redirect_uri":  {redirectURI},
+		"scope":         {strings.Join(c.Cfg.Scopes, " ")},
+		"state":         {state},
+	}
+	return c.Cfg.AuthURL + "?" + q.Encode(), nil
+}
+
+// Exchange completes the flow with the authorization code.
+func (c *Client) Exchange(ctx context.Context, code, state string) error {
+	saved, err := c.Store.SyncState(ctx, c.Cfg.Name+":oauth_state")
+	if err != nil {
+		return errors.New("no sign-in in progress; start again from Settings")
+	}
+	parts := strings.SplitN(saved, " ", 3)
+	if len(parts) != 3 || parts[0] != state {
+		return errors.New("sign-in state did not match; start again from Settings")
+	}
+	if at, _ := strconv.ParseInt(parts[1], 10, 64); time.Since(time.Unix(at, 0)) > 15*time.Minute {
+		return errors.New("sign-in took too long; start again from Settings")
+	}
+	tok, err := c.tokenRequest(ctx, url.Values{
+		"grant_type":   {"authorization_code"},
+		"code":         {code},
+		"redirect_uri": {parts[2]},
+	})
+	if err != nil {
+		return err
+	}
+	_ = c.Store.SetSyncState(ctx, c.Cfg.Name+":oauth_state", "used")
+	return c.Store.PutToken(ctx, tok)
+}
+
+func (c *Client) tokenRequest(ctx context.Context, form url.Values) (store.Token, error) {
+	form.Set("client_id", c.Cfg.ClientID)
+	form.Set("client_secret", c.Cfg.ClientSecret)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Cfg.TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return store.Token{}, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return store.Token{}, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return store.Token{}, fmt.Errorf("%s token endpoint: %d %s", c.Cfg.Name, resp.StatusCode, truncate(string(body), 200))
+	}
+	var t struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		Scope        string `json:"scope"`
+	}
+	if err := json.Unmarshal(body, &t); err != nil || t.AccessToken == "" {
+		return store.Token{}, fmt.Errorf("%s token endpoint: unreadable response", c.Cfg.Name)
+	}
+	if t.ExpiresIn == 0 {
+		t.ExpiresIn = 3600
+	}
+	return store.Token{Provider: c.Cfg.Name, AccessToken: t.AccessToken, RefreshToken: t.RefreshToken,
+		ExpiresAt: time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli(), Scope: t.Scope}, nil
+}
+
+// ErrNotConnected means the athlete hasn't signed in to this provider.
+var ErrNotConnected = errors.New("not connected")
+
+// token returns a valid access token, refreshing just before use. Refresh
+// tokens may be single-use (Wahoo), so the new one is saved immediately.
+func (c *Client) token(ctx context.Context) (string, error) {
+	t, err := c.Store.GetToken(ctx, c.Cfg.Name)
+	if errors.Is(err, store.ErrNotFound) {
+		return "", ErrNotConnected
+	} else if err != nil {
+		return "", err
+	}
+	if time.Now().Add(2*time.Minute).UnixMilli() < t.ExpiresAt {
+		return t.AccessToken, nil
+	}
+	if t.RefreshToken == "" {
+		return "", fmt.Errorf("%s session expired; reconnect in Settings", c.Cfg.Name)
+	}
+	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {t.RefreshToken}}
+	if c.Cfg.Name == "whoop" {
+		form.Set("scope", "offline")
+	}
+	nt, err := c.tokenRequest(ctx, form)
+	if err != nil {
+		return "", err
+	}
+	if nt.RefreshToken == "" {
+		nt.RefreshToken = t.RefreshToken
+	}
+	if err := c.Store.PutToken(ctx, nt); err != nil {
+		return "", err
+	}
+	return nt.AccessToken, nil
+}
+
+// GetJSON performs an authenticated GET and decodes JSON into v.
+func (c *Client) GetJSON(ctx context.Context, u string, v any) error {
+	tok, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Accept", "application/json")
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return errRateLimited
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		// Force a refresh next time.
+		if t, err := c.Store.GetToken(ctx, c.Cfg.Name); err == nil {
+			t.ExpiresAt = 0
+			_ = c.Store.PutToken(ctx, t)
+		}
+		return fmt.Errorf("%s: unauthorized", c.Cfg.Name)
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("%s %s: %d %s", c.Cfg.Name, u, resp.StatusCode, truncate(string(b), 200))
+	}
+	return json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(v)
+}
+
+var errRateLimited = errors.New("rate limited")
+
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "…"
+	}
+	return s
+}
+
+// Loop runs sync every interval until ctx ends, recording status.
+func (c *Client) Loop(ctx context.Context, interval time.Duration, sync func(context.Context) error, after func(context.Context)) {
+	if !c.Cfg.Configured() {
+		return
+	}
+	backoff := interval
+	for {
+		c.setStatus(func(s *Status) { s.Syncing = true })
+		err := sync(ctx)
+		c.setStatus(func(s *Status) {
+			s.Syncing = false
+			if err != nil && !errors.Is(err, ErrNotConnected) && ctx.Err() == nil {
+				s.LastError = err.Error()
+			} else {
+				s.LastError = ""
+			}
+		})
+		wait := interval
+		switch {
+		case err == nil:
+			_ = c.Store.SetSyncState(ctx, c.Cfg.Name+":last_sync", strconv.FormatInt(time.Now().UnixMilli(), 10))
+			backoff = interval
+			if after != nil {
+				after(ctx)
+			}
+		case errors.Is(err, ErrNotConnected):
+			wait = time.Minute // pick up a new connection quickly
+		case ctx.Err() == nil:
+			c.Log.Warn("sync failed", "provider", c.Cfg.Name, "err", err.Error())
+			backoff = min(backoff*2, 6*time.Hour)
+			wait = backoff
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.kick():
+		case <-time.After(wait):
+		}
+	}
+}
+
+var kicks sync.Map // provider name -> chan struct{}
+
+func (c *Client) kick() chan struct{} {
+	ch, _ := kicks.LoadOrStore(c.Cfg.Name, make(chan struct{}, 1))
+	return ch.(chan struct{})
+}
+
+// SyncNow wakes the loop (after connecting, or from a "Sync now" button).
+func (c *Client) SyncNow() {
+	select {
+	case c.kick() <- struct{}{}:
+	default:
+	}
+}

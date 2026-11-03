@@ -1,0 +1,112 @@
+/* Domestique design tokens: "Team Car".
+   Colors are the spec's committed palette. Dark is the default theme. */
+
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #16171a;
+  --surface: #1f2126;
+  --surface-raised: #272a30;
+  --line: #2e3138;
+  --line-strong: #444852;
+  --text: #ece8df;
+  --text-muted: #8a8f98;
+  --signal: #f2c230;
+  --signal-press: #d9ab1f;
+  --on-signal: #16171a;
+  --plate: #ece8df;       /* race-number plate: painted bone on graphite */
+  --on-plate: #16171a;
+  --band: rgb(236 232 223 / 0.06);
+  --band-active: rgb(236 232 223 / 0.14);
+  --zone-1: #7d8590;
+  --zone-2: #4f8fd9;
+  --zone-3: #45b07a;
+  --zone-4: #f2a33a;
+  --zone-5: #e5484d;
+  --danger: #e5484d;
+  --focus: #f2c230;
+  /* Sport identity in charts (validated for CVD on surface) */
+  --sport-ride: #4f8fd9;
+  --sport-strength: #cf7a26;
+  --sport-other: #3fa88a;
+  --grid: #2a2d33;
+  --map-style: 'dark';
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f4f1ea;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --line: #ddd8cc;
+  --line-strong: #c4bead;
+  --text: #1b1c1f;
+  --text-muted: #6b6f76;
+  --signal: #a87d00;
+  --signal-press: #8e6a00;
+  --on-signal: #1b1c1f;
+  --plate: #1b1c1f;
+  --on-plate: #f4f1ea;
+  --band: rgb(27 28 31 / 0.05);
+  --band-active: rgb(27 28 31 / 0.12);
+  --zone-1: #7d8590;
+  --zone-2: #2f6fb9;
+  --zone-3: #2a8a57;
+  --zone-4: #c77a12;
+  --zone-5: #c8323a;
+  --danger: #c8323a;
+  --focus: #8e6a00;
+  --sport-ride: #2f6fb9;
+  --sport-strength: #b8661a;
+  --sport-other: #238a6a;
+  --grid: #e7e2d6;
+  --map-style: 'positron';
+}
+
+:root {
+  /* Type families */
+  --font-num: 'Barlow Condensed', 'Arial Narrow', sans-serif-condensed, sans-serif;
+  --font-ui: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Type scale (spec): live 96, target 48, heading 24, body 16, label 12 */
+  --size-live: 6rem;
+  --size-target: 3rem;
+  --size-stat: 2rem;
+  --size-heading: 1.5rem;
+  --size-lead: 1.125rem;
+  --size-body: 1rem;
+  --size-small: 0.875rem;
+  --size-label: 0.75rem;
+  --tracking-label: 0.08em;
+
+  /* Spacing on the 8px grid, with 4 and 12 for tight internals */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+  --gutter: 1rem;
+
+  /* Shape: tape and painted plates, barely rounded */
+  --radius-s: 3px;
+  --radius-m: 6px;
+
+  /* Touch: workout actions are at least 56px for sweaty hands */
+  --tap-min: 3.5rem;
+  --action-height: 4rem;
+
+  /* Motion: state changes only */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-state: 150ms;
+
+  /* Layers */
+  --tabbar-h: 3.5rem;
+  --z-sticky: 10;
+  --z-action: 20;
+  --z-dialog: 40;
+  --z-toast: 50;
+}

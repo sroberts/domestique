@@ -1,0 +1,30 @@
+[
+  {
+    "id": "lower-a",
+    "name": "Lower A",
+    "exercises": [
+      { "name": "Back squat", "rest_seconds": 180,
+        "sets": [ {"reps": 6, "weight_kg": 100}, {"reps": 6, "weight_kg": 100}, {"reps": 6, "weight_kg": 100}, {"reps": 6, "weight_kg": 100} ] },
+      { "name": "Romanian deadlift", "rest_seconds": 120,
+        "sets": [ {"reps": 8, "weight_kg": 80}, {"reps": 8, "weight_kg": 80}, {"reps": 8, "weight_kg": 80} ] },
+      { "name": "Bulgarian split squat", "rest_seconds": 90, "notes": "Weight per hand. Reps per leg.",
+        "sets": [ {"reps": 8, "weight_kg": 20}, {"reps": 8, "weight_kg": 20}, {"reps": 8, "weight_kg": 20} ] },
+      { "name": "Standing calf raise", "rest_seconds": 60,
+        "sets": [ {"reps": 12, "weight_kg": 60}, {"reps": 12, "weight_kg": 60}, {"reps": 12, "weight_kg": 60} ] }
+    ]
+  },
+  {
+    "id": "upper-a",
+    "name": "Upper A",
+    "exercises": [
+      { "name": "Bench press", "rest_seconds": 180,
+        "sets": [ {"reps": 6, "weight_kg": 80}, {"reps": 6, "weight_kg": 80}, {"reps": 6, "weight_kg": 80}, {"reps": 6, "weight_kg": 80} ] },
+      { "name": "Pull-up", "rest_seconds": 120, "notes": "Bodyweight. Add load when all sets hit 8.",
+        "sets": [ {"reps": 6, "weight_kg": 0}, {"reps": 6, "weight_kg": 0}, {"reps": 6, "weight_kg": 0}, {"reps": 6, "weight_kg": 0} ] },
+      { "name": "Overhead press", "rest_seconds": 120,
+        "sets": [ {"reps": 8, "weight_kg": 45}, {"reps": 8, "weight_kg": 45}, {"reps": 8, "weight_kg": 45} ] },
+      { "name": "Chest-supported row", "rest_seconds": 90,
+        "sets": [ {"reps": 10, "weight_kg": 60}, {"reps": 10, "weight_kg": 60}, {"reps": 10, "weight_kg": 60} ] }
+    ]
+  }
+]

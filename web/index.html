@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-GB" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Domestique</title>
+    <meta name="description" content="Live strength log and workout store." />
+    <meta name="theme-color" content="#16171a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Domestique" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="color-scheme" content="dark light" />
+    <!-- use-credentials: behind the Outpost gateway, an uncredentialed manifest
+         fetch is redirected to sign-in and Add to Home Screen breaks. -->
+    <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+    <link rel="icon" href="/icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <script>
+      try {
+        if (localStorage.getItem('domestique:theme') === 'light') {
+          document.documentElement.dataset.theme = 'light';
+          document.querySelector('meta[name="theme-color"]').content = '#f4f1ea';
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
