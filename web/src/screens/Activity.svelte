@@ -117,7 +117,7 @@
         <div><dt class="label">Strain</dt><dd><span class="num">{a.strain.toFixed(1)}</span></dd></div>
       {/if}
     </dl>
-    <p class="mono note">{loadNote()}</p>
+    <p class="note">{loadNote()}</p>
 
     {#if d.stream.t.length > 1}
       <section class="block" aria-labelledby="streams-h">
@@ -165,7 +165,7 @@
         {/each}
       </ul>
       {#if d.sources.length > 1}
-        <p class="mono note">Merged into one: {channelNote.join('; ')}. Every original file is kept.</p>
+        <p class="note">Merged into one: {channelNote.join('; ')}. Every original file is kept.</p>
       {/if}
     </section>
   {/if}

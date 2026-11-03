@@ -2,6 +2,7 @@
   // The Session Summary trace: heart rate over time with every set shaded as a
   // band, like a stage profile with its climbs marked. Lifts are labelled along
   // the foot like towns on the route.
+  import { link } from '../lib/router.svelte';
   import type { Summary } from '../lib/types';
 
   interface Props {
@@ -13,7 +14,7 @@
 
   let width = $state(0);
   let height = $derived(width >= 640 ? 280 : 220);
-  const PAD = { top: 22, right: 28, bottom: 30, left: 0 };
+  const PAD = { top: 22, right: 28, bottom: 46, left: 0 };
 
   let sets = $derived(summary.sets);
   let start = $derived(summary.session.started_at);
@@ -65,19 +66,30 @@
     summary.zones.map((bpm, i) => ({ zone: i + 1, bpm })).filter((z) => z.bpm > lo + 4 && z.bpm < hi - 2),
   );
 
-  // Lift labels along the foot, truncated to the space before the next lift.
+  // Lift labels along the foot, on two rows so a short lift doesn't cut off
+  // its neighbour's name. A label shortens only at the chart's edge; where
+  // both rows are taken it's left to the table below.
+  const CHAR = 6.6;
   let lifts = $derived.by(() => {
     const groups: { name: string; from: number }[] = [];
     for (const s of sets) {
       if (!groups.length || groups.at(-1)!.name !== s.exercise_name) groups.push({ name: s.exercise_name, from: s.started_at });
     }
-    return groups.map((g, i) => {
+    const plotEnd = PAD.left + plotW;
+    const free = [-Infinity, -Infinity]; // x where each row is next free
+    return groups.map((g) => {
       const left = x(g.from);
-      const right = i + 1 < groups.length ? x(groups[i + 1]!.from) : PAD.left + plotW;
-      const room = Math.max(0, right - left - 8);
-      const maxChars = Math.floor(room / 6.6);
-      const label = g.name.length <= maxChars ? g.name : maxChars >= 4 ? g.name.slice(0, maxChars - 1).trimEnd() + '…' : '';
-      return { left, label, full: g.name };
+      const fits = (n: string) => n.length * CHAR + 10;
+      let row = free.findIndex((f) => f <= left);
+      let label = '';
+      if (row !== -1) {
+        // Room runs to the chart's right edge; the next lift is on the other row.
+        const room = plotEnd + PAD.right - left;
+        const maxChars = Math.floor((room - 10) / CHAR);
+        label = g.name.length <= maxChars ? g.name : maxChars >= 4 ? g.name.slice(0, maxChars - 1).trimEnd() + '…' : '';
+        if (label) free[row] = left + fits(label);
+      } else row = 0; // both rows busy here: tick only, the table names it
+      return { left, label, row, full: g.name };
     });
   });
 
@@ -100,7 +112,7 @@
   let label = $derived(
     summary.hr_status === 'ready'
       ? `Heart rate across the session, peaking at ${summary.peak_bpm} bpm. ${sets.length} sets shown as shaded bands. The table below lists each set.`
-      : `${sets.length} sets shown as bands. Heart rate not available yet.`,
+      : summary.hr_status === 'pending' ? `${sets.length} sets shown as bands. Heart rate not available yet.` : `${sets.length} sets shown as bands. No heart rate was recorded.`,
   );
 </script>
 
@@ -137,16 +149,23 @@
       {#each lifts as l (l.left)}
         <line class="tick" x1={l.left} x2={l.left} y1={PAD.top + plotH} y2={PAD.top + plotH + 6} />
         {#if l.label}
-          <text class="lift" x={l.left + 3} y={PAD.top + plotH + 20}><title>{l.full}</title>{l.label}</text>
+          <text class="lift" x={l.left + 3} y={PAD.top + plotH + 20 + l.row * 16}><title>{l.full}</title>{l.label}</text>
         {/if}
       {/each}
     </svg>
   {/if}
-  {#if summary.hr_status !== 'ready'}
+  {#if summary.hr_status === 'pending'}
     <div class="pending">
       <div class="pending-card">
-        <p>Heart rate arrives after Whoop syncs.</p>
-        <p class="muted">Checking every 10 seconds.</p>
+        <p>Heart rate arrives when your watch syncs.</p>
+        <p class="muted">This page checks every 10 seconds.</p>
+      </div>
+    </div>
+  {:else if summary.hr_status === 'none'}
+    <div class="pending">
+      <div class="pending-card">
+        <p>No heart rate for this session.</p>
+        <p class="muted"><a href="/settings#hr-h2" use:link>Set up heart rate for lifting</a></p>
       </div>
     </div>
   {/if}
@@ -187,11 +206,11 @@
     font-weight: 500;
   }
   .band {
-    fill: var(--band);
+    fill: var(--set-band);
     transition: fill var(--dur-state) var(--ease-out);
   }
   .band.active {
-    fill: var(--band-active);
+    fill: var(--set-band-active);
   }
   .band-cap {
     fill: var(--text);
@@ -208,7 +227,7 @@
   }
   .pending {
     position: absolute;
-    inset: 0 0 30px;
+    inset: 0 0 46px;
     display: grid;
     place-content: center;
     gap: var(--space-1);

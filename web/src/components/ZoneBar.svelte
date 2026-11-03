@@ -14,7 +14,7 @@
 <div class="zones">
   <div class="bar" aria-hidden="true">
     {#each rows as r (r.zone)}
-      {#if r.pct > 0}
+      {#if r.pct >= 0.5}
         <span style:width={`${r.pct}%`} style:background={r.zone === 0 ? 'var(--line-strong)' : `var(--zone-${r.zone})`}></span>
       {/if}
     {/each}

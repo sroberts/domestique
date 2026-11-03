@@ -7,7 +7,7 @@
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
   import { day, duration, recoveryBand, time, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
-  import { beginSession, estimateMinutes } from '../lib/workout.svelte';
+  import { beginSession, complete, estimateMinutes } from '../lib/workout.svelte';
   import type { LocalSession, Today } from '../lib/types';
 
   type Load = 'loading' | 'fresh' | 'stale' | 'none' | 'auth';
@@ -52,7 +52,7 @@
   // Today's planned session, already done.
   let doneToday = $derived(
     plan && today
-      ? (today.recent.find((r) => r.template_id === plan.id && r.finished_at && localDate(new Date(r.started_at)) === date) ?? null)
+      ? (today.recent.find((r) => r.template_id === plan.id && r.finished_at && complete(r.progress) && localDate(new Date(r.started_at)) === date) ?? null)
       : null,
   );
   let hasLoad = $derived(!!ld && ld.ctl > 1);
@@ -211,7 +211,7 @@
               <span class="mono wn">{w.n}</span>
             </div>
           {/each}
-          <p class="mono wsum"><span class="num">{Math.round(weekTSS)}</span>TSS · {weekHours.toFixed(1)} h</p>
+          <p class="mono wsum"><span class="label">Week</span><span class="num">{Math.round(weekTSS)}</span>TSS · {weekHours.toFixed(1)} h</p>
         </div>
         <p class="legend small">
           <span><span class="lk seg-ride" aria-hidden="true"></span>Rides</span>
@@ -235,18 +235,18 @@
 </main>
 
 {#if active}
-  <ActionBar>
+  <ActionBar column>
     <a class="btn btn-primary" href={`/session/${active.id}`} use:link>
       Resume {active.name} · set {Math.min(activeDone + 1, totalOf(active))} of {totalOf(active)}
     </a>
   </ActionBar>
 {:else if plan && doneToday}
-  <ActionBar>
+  <ActionBar column>
     <a class="btn btn-primary" href={`/session/${doneToday.id}/summary`} use:link>{plan.name} done · View summary</a>
     <button class="btn btn-quiet again" onclick={start} disabled={starting}>Start {plan.name} again</button>
   </ActionBar>
 {:else if plan}
-  <ActionBar>
+  <ActionBar column>
     <button class="btn btn-primary" onclick={start} disabled={starting}>Start {plan.name}</button>
   </ActionBar>
 {/if}
@@ -500,6 +500,9 @@
     font-size: var(--size-label);
     color: var(--text-muted);
     text-align: right;
+  }
+  .wsum .label {
+    display: block;
   }
   .wsum .num {
     display: block;

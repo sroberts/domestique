@@ -3,6 +3,7 @@
   import Sources from './Sources.svelte';
   import { duration, km, relDay, time } from '../lib/format';
   import { link } from '../lib/router.svelte';
+  import { earlyText, endedEarly } from '../lib/workout.svelte';
   import type { ActivityRow } from '../lib/types';
 
   let { a, showDay = true }: { a: ActivityRow; showDay?: boolean } = $props();
@@ -14,7 +15,11 @@
       time(a.start_at),
       duration(a.moving_s || a.elapsed_s),
       a.distance_m > 0 && a.sport !== 'strength' ? `${km(a.distance_m)} km` : '',
-    ].filter(Boolean).join(' · '),
+    ]
+      .filter(Boolean)
+      // Each field stays whole; only the separators may break.
+      .map((f) => f.replaceAll(' ', '\u00a0'))
+      .join(' · '),
   );
 </script>
 
@@ -23,6 +28,9 @@
   <span class="main">
     <span class="name">{a.name}</span>
     <span class="meta mono">{meta}</span>
+    {#if endedEarly(a.progress)}
+      <span class="early">{earlyText(a.progress!)}</span>
+    {/if}
     <!-- Logged in this app with nothing else attached: no chip, it's the default. -->
     {#if !(a.sources.length === 1 && a.sources[0]?.source === 'app')}<Sources sources={a.sources} />{/if}
   </span>
@@ -74,6 +82,15 @@
   }
   .meta {
     font-size: var(--size-label);
+    color: var(--text-muted);
+  }
+  .early {
+    justify-self: start;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+    font-size: var(--size-label);
+    font-weight: 600;
     color: var(--text-muted);
   }
   .figs {

@@ -71,3 +71,40 @@ func TestPrescribeIgnoresAbortedSession(t *testing.T) {
 		t.Fatalf("aborted session changed the prescription: %v kg, %q", got, out.Exercises[0].Change)
 	}
 }
+
+func TestRealSet(t *testing.T) {
+	set := func(reps int, secs float64) store.Set {
+		return store.Set{Reps: reps, StartedAt: 1_000_000, EndedAt: 1_000_000 + int64(secs*1000)}
+	}
+	cases := []struct {
+		reps int
+		secs float64
+		want bool
+	}{
+		{1, 4.9, false}, // a tap, even for a single
+		{1, 5, true},
+		{5, 5.5, false}, // five reps in five seconds wasn't lifted
+		{5, 10, true},
+		{10, 19, false},
+		{10, 25, true},
+	}
+	for _, c := range cases {
+		if got := Real(set(c.reps, c.secs)); got != c.want {
+			t.Errorf("Real(%d reps, %.1fs) = %v, want %v", c.reps, c.secs, got, c.want)
+		}
+	}
+}
+
+func TestProgressComplete(t *testing.T) {
+	plan := []store.Exercise{{Sets: make([]store.TargetSet, 4)}, {Sets: make([]store.TargetSet, 4)}}
+	real := store.Set{Reps: 5, StartedAt: 0, EndedAt: 30_000}
+	tap := store.Set{Reps: 5, StartedAt: 0, EndedAt: 1_000}
+	p := ProgressOf(plan, []store.Set{real, real, real, tap, tap, tap})
+	if p.Done != 3 || p.Planned != 8 || p.Complete() {
+		t.Fatalf("3 real of 8 planned: got %+v complete=%v", p, p.Complete())
+	}
+	p = ProgressOf(plan, []store.Set{real, real, real, real})
+	if !p.Complete() {
+		t.Fatalf("4 of 8 should count as done: %+v", p)
+	}
+}

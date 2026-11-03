@@ -119,7 +119,7 @@ type todayResp struct {
 	Load      *load.Day          `json:"load"`
 	RampCTL   float64            `json:"ramp_ctl"` // fitness change over 7 days
 	Week      []load.Day         `json:"week"`     // Monday to today
-	Recent    []store.Session    `json:"recent"`
+	Recent    []sessionRow       `json:"recent"`
 	Latest    []ActivityRow      `json:"latest"`
 	Athlete   load.Athlete       `json:"athlete"`
 }
@@ -161,7 +161,7 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	recent, err := a.Store.RecentSessions(ctx, 5)
+	recent, err := a.sessionRows(ctx, 5)
 	if err != nil {
 		a.fail(w, r, err)
 		return
@@ -351,12 +351,34 @@ func (a *API) listSessions(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
 		limit = v
 	}
-	ss, err := a.Store.RecentSessions(r.Context(), limit)
+	ss, err := a.sessionRows(r.Context(), limit)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ss)
+}
+
+// sessionRow is a finished session with how much of its plan was lifted.
+type sessionRow struct {
+	store.Session
+	Progress strength.Progress `json:"progress"`
+}
+
+func (a *API) sessionRows(ctx context.Context, limit int) ([]sessionRow, error) {
+	ss, err := a.Store.RecentSessions(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sessionRow, len(ss))
+	for i, s := range ss {
+		sets, err := a.Store.SessionSets(ctx, s.ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = sessionRow{s, strength.ProgressOf(s.Plan, sets)}
+	}
+	return out, nil
 }
 
 func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
@@ -495,6 +517,18 @@ func (a *API) strengthSummary(r *http.Request, id string) (*strength.Summary, er
 	}
 	maxHR := load.Current(ctx, a.Store, a.MaxHR).MaxHR
 	sum := strength.Build(sess, sets, hr, maxHR)
+	if sum.HRStatus == "pending" && !a.demoOn(r) {
+		// Only promise heart rate when something is sending it: a source that
+		// has posted samples lately, and a session recent enough to still sync.
+		latest, err := a.Store.LatestHR(ctx)
+		if err != nil {
+			return nil, err
+		}
+		const window = 14 * 24 * time.Hour
+		if latest == 0 || time.Since(time.UnixMilli(latest)) > window || time.Since(time.UnixMilli(end)) > 24*time.Hour {
+			sum.HRStatus = "none"
+		}
+	}
 	return &sum, nil
 }
 

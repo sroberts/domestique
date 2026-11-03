@@ -18,6 +18,8 @@
   --on-plate: #16171a;
   --band: rgb(236 232 223 / 0.06);
   --band-active: rgb(236 232 223 / 0.14);
+  --set-band: rgb(236 232 223 / 0.12);       /* sets on the HR trace */
+  --set-band-active: rgb(236 232 223 / 0.24);
   --zone-1: #7d8590;
   --zone-2: #4f8fd9;
   --zone-3: #45b07a;
@@ -49,6 +51,8 @@
   --on-plate: #f4f1ea;
   --band: rgb(27 28 31 / 0.05);
   --band-active: rgb(27 28 31 / 0.12);
+  --set-band: rgb(27 28 31 / 0.08);
+  --set-band-active: rgb(27 28 31 / 0.18);
   --zone-1: #7d8590;
   --zone-2: #2f6fb9;
   --zone-3: #2a8a57;

@@ -37,6 +37,15 @@ export interface Session {
   finished_at: number | null;
   strain?: number | null;
   updated_at: number;
+  /** How much of the plan was lifted. Server-side lists only. */
+  progress?: Progress;
+}
+
+export interface Progress {
+  /** Sets really lifted; taps under 5 s (or 2 s a rep) don't count. */
+  done: number;
+  logged: number;
+  planned: number;
 }
 
 export type Phase = 'ready' | 'active' | 'rest' | 'last';
@@ -97,7 +106,7 @@ export interface Summary {
   session: Session;
   sets: SetRecord[];
   hr: HRSample[];
-  hr_status: 'ready' | 'pending';
+  hr_status: 'ready' | 'pending' | 'none';
   max_hr: number;
   zones: [number, number, number, number, number];
   duration_s: number;
@@ -107,6 +116,7 @@ export interface Summary {
   avg_bpm: number;
   zone_seconds: [number, number, number, number, number, number];
   set_stats: SetStat[];
+  progress: Progress;
 }
 
 export interface Today {
@@ -155,6 +165,7 @@ export interface Activity {
 export interface ActivityRow extends Activity {
   sources: Badge[];
   summary: { avg_power: number; np: number; avg_hr: number; max_hr: number; ascent_m: number; kj: number };
+  progress?: Progress;
 }
 
 export interface Metrics {

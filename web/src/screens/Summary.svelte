@@ -9,7 +9,7 @@
   import { AuthError, HTTPError, OfflineError, fetchSummary } from '../lib/api';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link } from '../lib/router.svelte';
-  import { Workout } from '../lib/workout.svelte';
+  import { Workout, earlyText, endedEarly, progressOf } from '../lib/workout.svelte';
   import type { SetRecord, SetStat, Summary } from '../lib/types';
 
   let { id }: { id: string } = $props();
@@ -17,7 +17,6 @@
   const back = backTarget({ href: '/activities', label: 'Activities' });
 
   let summary = $state<Summary | null>(null);
-  let planned = $derived(summary ? summary.session.plan.reduce((n, e) => n + e.sets.length, 0) : 0);
   // "Done" ends a session just finished; elsewhere it would be a second Back.
   // (The screen is keyed by id, so reading it once is correct.)
   // svelte-ignore state_referenced_locally
@@ -54,6 +53,7 @@
       peak_bpm: 0,
       avg_bpm: 0,
       zone_seconds: [0, 0, 0, 0, 0, 0],
+      progress: progressOf(w.session.plan, sets),
       set_stats: sets.map((s, i) => ({
         set_id: s.id,
         has_hr: false,
@@ -81,6 +81,7 @@
         for (const l of workout.sets) if (!s.sets.some((x) => x.id === l.id)) s.sets.push({ ...l });
         s.sets.sort((a, b) => a.started_at - b.started_at);
         recompute(s);
+        s.progress = progressOf(s.session.plan, s.sets);
       }
       summary = s;
       source = 'server';
@@ -109,7 +110,7 @@
     untrack(() => void load());
     // Poll while heart rate hasn't arrived, and only while the screen is visible.
     const t = setInterval(() => {
-      if (document.visibilityState === 'visible' && (summary?.hr_status !== 'ready' || problem)) void load();
+      if (document.visibilityState === 'visible' && (summary?.hr_status === 'pending' || problem)) void load();
     }, 10_000);
     return () => clearInterval(t);
   });
@@ -165,8 +166,8 @@
     <p class="mono meta">
       {day(summary.session.started_at)} · {time(summary.session.started_at)}–{time(end)} · {duration(summary.duration_s)}
     </p>
-    {#if planned > 0 && summary.sets.length < planned}
-      <p class="early">Ended early · {summary.sets.length} of {planned} sets</p>
+    {#if endedEarly(summary.progress)}
+      <p class="early">{earlyText(summary.progress)}</p>
     {/if}
 
     {#if source === 'local'}
@@ -185,8 +186,8 @@
     </dl>
 
     <section class="hr" aria-labelledby="hr-h">
+      <h2 id="hr-h" class="block-h">Heart rate by set</h2>
       <div class="readout" aria-live="polite">
-        <h2 id="hr-h" class="visually-hidden">Heart rate by set</h2>
         {#if sel}
           <p class="ro-main">
             <span>Set {sel.set_index + 1} · {sel.exercise_name}</span>
@@ -201,7 +202,7 @@
             <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
           {/if}
         {:else}
-          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order.'}</p>
+          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order. Touch one to read it.'}</p>
         {/if}
       </div>
       <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
@@ -271,7 +272,7 @@
         {/each}
       </div>
       {#if summary.hr_status === 'ready'}
-        <p class="mono muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
+        <p class="muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
       {/if}
     </section>
   {/if}

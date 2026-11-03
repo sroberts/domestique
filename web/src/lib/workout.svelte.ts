@@ -3,7 +3,7 @@
 // reload, a crash or a dead battery resumes exactly where it stopped.
 import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSets } from './db';
 import { sync } from './sync.svelte';
-import type { Exercise, LocalSession, SetRecord, TargetSet, Template } from './types';
+import type { Exercise, LocalSession, Progress, SetRecord, TargetSet, Template } from './types';
 
 export interface Slot {
   index: number;
@@ -193,3 +193,25 @@ export class Workout {
     sync.kick();
   }
 }
+
+/** Mirrors strength.Real on the server: a set logged faster than 5 s, or
+ * 2 s a rep, was tapped through rather than lifted. */
+export function isReal(s: SetRecord): boolean {
+  return s.ended_at - s.started_at >= Math.max(5, 2 * s.reps) * 1000;
+}
+
+export function progressOf(plan: Exercise[], sets: SetRecord[]): Progress {
+  return { done: sets.filter(isReal).length, logged: sets.length, planned: plan.reduce((n, e) => n + e.sets.length, 0) };
+}
+
+/** "Ended early · 3 of 12 sets", noting any that were too quick to count. */
+export function earlyText(p: Progress): string {
+  const quick = p.logged - p.done;
+  return `Ended early · ${p.done} of ${p.planned} sets` + (quick > 0 ? ` (${quick} too quick to count)` : '');
+}
+
+/** True when the session lifted under the plan: shown as "Ended early". */
+export const endedEarly = (p: Progress | undefined) => !!p && p.planned > 0 && p.done < p.planned;
+
+/** Enough lifted to call it done: half the planned sets, as progression counts it. */
+export const complete = (p: Progress | undefined) => !p || p.planned === 0 || p.done * 2 >= p.planned;

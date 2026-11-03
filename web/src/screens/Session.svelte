@@ -197,7 +197,7 @@
         {:else if c.phase === 'last'}
           <div class="done">
             <h1 class="done-title">All sets in.</h1>
-            <p class="muted">Check the last set, then finish. Heart rate attaches once Whoop syncs.</p>
+            <p class="muted">Check the last set, then finish. Heart rate attaches when your watch syncs.</p>
           </div>
         {/if}
       </section>
@@ -221,7 +221,7 @@
           />
         </div>
         <!-- Space reserved so the note appearing never shifts the screen mid-glance. -->
-        <p class="mono muted adj" aria-live="polite">
+        <p class="muted adj" aria-live="polite">
           {#if ls.reps !== ls.target_reps || ls.weight_kg !== ls.target_weight_kg}Target was {setText(ls.target_reps, ls.target_weight_kg)}{ls.weight_kg !== ls.target_weight_kg ? '. New weight carries to the next sets.' : '.'}{/if}
         </p>
       </section>
@@ -240,13 +240,13 @@
     {/if}
   </main>
 
-  <ActionBar>
+  <ActionBar session>
     {#if c.phase === 'ready'}
       <button class="btn btn-primary" onclick={start} disabled={busy}>Start set</button>
     {:else if c.phase === 'active'}
       <button class="btn btn-primary" onclick={finishSet} disabled={busy}>Finish set</button>
     {:else if c.phase === 'rest' && slot}
-      <button class="btn btn-primary" class:inverse={restOver} onclick={start} disabled={busy}>
+      <button class="btn btn-primary" onclick={start} disabled={busy}>
         {newExercise ? `Start ${slot.exercise.name}` : `Start set ${slot.setIndex + 1}`}
       </button>
     {:else if c.phase === 'last'}
@@ -282,12 +282,27 @@
 
 <style>
   .session {
-    max-width: 35rem;
+    max-width: var(--page-narrow);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
     display: flex;
     flex-direction: column;
     min-height: calc(100dvh - var(--action-height) - var(--space-6) - env(safe-area-inset-bottom));
+  }
+  /* An iPad propped on the rack is read from two metres: scale the whole
+     screen up rather than leave a phone column in the middle. */
+  @media (min-width: 700px) and (min-height: 700px) {
+    .session {
+      max-width: 46rem;
+      --size-live: 8rem;
+      --size-target: 4rem;
+      --size-heading: 2rem;
+      --size-body: 1.1875rem;
+      --size-small: 1.1875rem;
+      --size-label: 1.0625rem;
+      font-size: var(--size-body);
+      min-height: calc(100dvh - var(--action-height) * 1.25 - var(--space-6) - env(safe-area-inset-bottom));
+    }
   }
   .gone {
     font-size: var(--size-heading);
@@ -452,26 +467,16 @@
     display: flex;
     gap: var(--space-2);
   }
-  .rest.over {
-    margin: 0 calc(var(--gutter) * -1);
-    padding: var(--space-5) var(--gutter);
-    background: var(--signal);
-    color: var(--on-signal);
-    transition: background-color var(--dur-state) var(--ease-out);
+  /* Rest over: the clock turns signal and counts up; the solid Start set
+     below stays the loudest thing on screen. */
+  .rest.over .num {
+    color: var(--signal);
   }
-  .rest.over .label,
-  .rest.over .signal,
-  .rest.over .muted {
-    color: var(--on-signal);
-  }
-  .rest.over .btn {
-    border-color: color-mix(in srgb, var(--on-signal) 45%, transparent);
-    color: var(--on-signal);
+  .rest.over .label {
+    color: var(--signal);
   }
   .drain.gone {
-    visibility: hidden;
-    height: 0;
-    margin: 0;
+    visibility: hidden; /* keeps its height: nothing jumps when rest ends */
   }
   .rest-adjust .btn {
     min-height: var(--tap-min);
@@ -525,11 +530,6 @@
   .discard-note {
     font-size: var(--size-label);
     text-align: center;
-  }
-  :global(.btn-primary.inverse) {
-    background: var(--on-signal);
-    color: var(--signal);
-    border: 2px solid var(--signal);
   }
   .adj {
     min-height: 2.4em;

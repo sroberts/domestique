@@ -147,15 +147,45 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 // is a start-and-finish tap, not a set.
 const MinSetSeconds = 5
 
+// SecondsPerRep is the fastest believable pace: a set logged faster than this
+// was tapped through, whatever the reps say.
+const SecondsPerRep = 2
+
+// Real reports whether a logged set was plausibly lifted.
+func Real(s store.Set) bool {
+	min := int64(max(MinSetSeconds, SecondsPerRep*s.Reps)) * 1000
+	return s.EndedAt-s.StartedAt >= min
+}
+
 // Counted drops sets too short to be real.
 func Counted(sets []store.Set) []store.Set {
 	out := sets[:0:0]
 	for _, s := range sets {
-		if s.EndedAt-s.StartedAt >= MinSetSeconds*1000 {
+		if Real(s) {
 			out = append(out, s)
 		}
 	}
 	return out
+}
+
+// Progress is how much of a session's plan was actually lifted.
+type Progress struct {
+	Done    int `json:"done"`    // sets that were really lifted
+	Logged  int `json:"logged"`  // every set logged, taps included
+	Planned int `json:"planned"`
+}
+
+// Complete is true when at least half the planned sets were lifted: enough
+// to call today's session done.
+func (p Progress) Complete() bool { return p.Planned == 0 || p.Done*2 >= p.Planned }
+
+// ProgressOf counts real sets against the plan.
+func ProgressOf(plan []store.Exercise, sets []store.Set) Progress {
+	p := Progress{Done: len(Counted(sets)), Logged: len(sets)}
+	for _, e := range plan {
+		p.Planned += len(e.Sets)
+	}
+	return p
 }
 
 func hitAll(sets []store.Set) bool {

@@ -43,9 +43,18 @@ class Router {
     if (!opts.replace) this.prev = location.pathname;
     if (opts.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);
-    this.route = parse(path.split('?')[0] ?? '/');
+    this.route = parse(path.split(/[?#]/)[0] ?? '/');
+    const hash = path.split('#')[1];
     window.scrollTo(0, 0);
+    if (hash) scrollToWhenReady(hash);
   }
+}
+
+/** The target screen may still be loading; look for the anchor for a second. */
+function scrollToWhenReady(id: string, tries = 60): void {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ block: 'start' });
+  else if (tries > 0) requestAnimationFrame(() => scrollToWhenReady(id, tries - 1));
 }
 
 export const router = new Router();

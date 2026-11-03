@@ -51,7 +51,7 @@ type Summary struct {
 	Session  store.Session    `json:"session"`
 	Sets     []store.Set      `json:"sets"`
 	HR       []store.HRSample `json:"hr"`
-	HRStatus string           `json:"hr_status"` // "ready" | "pending"
+	HRStatus string           `json:"hr_status"` // "ready" | "pending" | "none"
 	MaxHR    int              `json:"max_hr"`
 	Zones    Zones            `json:"zones"`
 
@@ -62,6 +62,7 @@ type Summary struct {
 	AvgBPM      int       `json:"avg_bpm"`
 	ZoneSeconds [6]int    `json:"zone_seconds"` // index 0 = below zone 1
 	SetStats    []SetStat `json:"set_stats"`
+	Progress    Progress  `json:"progress"`
 }
 
 // HRPadding is how much stream to include either side of the session.
@@ -74,6 +75,7 @@ func Build(sess store.Session, sets []store.Set, hr []store.HRSample, maxHR int)
 	sum := Summary{
 		Session: sess, Sets: sets, HR: hr, MaxHR: maxHR, Zones: zones,
 		HRStatus: "pending", SetStats: make([]SetStat, 0, len(sets)),
+		Progress: ProgressOf(sess.Plan, sets),
 	}
 	end := sess.StartedAt
 	if sess.FinishedAt != nil {

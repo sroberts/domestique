@@ -60,6 +60,8 @@ type ActivityRow struct {
 	store.Activity
 	Sources []Badge    `json:"sources"`
 	Summary rowMetrics `json:"summary"`
+	// Progress is set for sessions logged in the app.
+	Progress *strength.Progress `json:"progress,omitempty"`
 }
 
 type rowMetrics struct {
@@ -93,6 +95,19 @@ func (a *API) rows(r *http.Request, acts []store.Activity) ([]ActivityRow, error
 			row.Sources = append(row.Sources, Badge{s.Source, s.HasPower, s.HasHR, s.HasGPS})
 		}
 		row.Metrics = nil // lists don't need curves and histograms
+		if x.SessionID != nil {
+			sess, err := a.Store.GetSession(r.Context(), *x.SessionID)
+			if err == nil {
+				sets, err := a.Store.SessionSets(r.Context(), sess.ID)
+				if err != nil {
+					return nil, err
+				}
+				p := strength.ProgressOf(sess.Plan, sets)
+				row.Progress = &p
+			} else if !errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+		}
 		out[i] = row
 	}
 	return out, nil
@@ -435,7 +450,7 @@ func (a *API) getTrends(w http.ResponseWriter, r *http.Request) {
 	lifts := map[string]*liftPR{}
 	lastSession := map[string]string{}
 	for _, s := range sets {
-		if s.Reps <= 0 || s.Reps > 12 || s.WeightKg <= 0 || s.EndedAt-s.StartedAt < strength.MinSetSeconds*1000 {
+		if s.Reps <= 0 || s.Reps > 12 || s.WeightKg <= 0 || !strength.Real(s) {
 			continue // tapped-through sets aren't lifts, and mustn't become PRs
 		}
 		key := strings.ToLower(s.ExerciseName)

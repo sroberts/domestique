@@ -36,6 +36,8 @@
 
   let curveDurations = $derived(trends?.curve_all_time.map((c) => c.duration) ?? []);
   let hasPower = $derived(!!trends?.curve_all_time.some((c) => c.watts > 0));
+  // When every best is recent, two identical lines would be one line and a legend lie.
+  let sameCurve = $derived(!!trends && trends.curve_90d.every((c, i) => c.watts === (trends!.curve_all_time[i]?.watts ?? 0)));
   let ftpMax = $derived(Math.max(1, ...(trends?.ftp_history.map((f) => f.ftp) ?? [1])));
   let ftpMin = $derived(Math.min(...(trends?.ftp_history.map((f) => f.ftp) ?? [0])));
 
@@ -75,7 +77,7 @@
       </div>
       {#if load.length > 1}
         <LoadChart days={load} />
-        <p class="mono note">
+        <p class="note">
           Fitness is a 42-day average of daily load, fatigue a 7-day one, and form is yesterday's fitness minus yesterday's fatigue (how fresh you start the day), so it can differ from today's two numbers. Rides count
           by power, lifts by Whoop strain or heart rate.
         </p>
@@ -93,10 +95,12 @@
           <h2 id="pc-h" class="block-h">Power curve <span class="mono muted">FTP {trends.athlete.ftp} W ({trends.athlete.ftp_source})</span></h2>
           <CurveChart
             durations={curveDurations}
-            series={[
-              { label: 'Last 90 days', values: trends.curve_90d.map((c) => c.watts), style: 'primary' },
-              { label: 'All time', values: trends.curve_all_time.map((c) => c.watts), style: 'compare' },
-            ]}
+            series={sameCurve
+              ? [{ label: 'All time, same as the last 90 days', values: trends.curve_all_time.map((c) => c.watts), style: 'primary' }]
+              : [
+                  { label: 'Last 90 days', values: trends.curve_90d.map((c) => c.watts), style: 'primary' },
+                  { label: 'All time', values: trends.curve_all_time.map((c) => c.watts), style: 'compare' },
+                ]}
           />
           <ul class="bests">
             {#each trends.curve_all_time.filter((c) => [5, 60, 300, 1200, 3600].includes(c.duration) && c.watts > 0) as c (c.duration)}
@@ -112,7 +116,7 @@
 
       {#if trends.ftp_history.length > 1}
         <section class="block" aria-labelledby="ftp-h">
-          <h2 id="ftp-h" class="block-h">FTP by month <span class="mono muted">95% of best 20 minutes, rolling 120 days</span></h2>
+          <h2 id="ftp-h" class="block-h">FTP by month <span class="muted sub-h">95% of best 20 minutes, rolling 120 days</span></h2>
           <ol class="ftp">
             {#each trends.ftp_history.slice(-12) as f (f.month)}
               <li>
@@ -127,7 +131,7 @@
 
       {#if trends.lifts.length > 0}
         <section class="block" aria-labelledby="lift-h">
-          <h2 id="lift-h" class="block-h">Lifts <span class="mono muted">estimated one-rep max</span></h2>
+          <h2 id="lift-h" class="block-h">Lifts <span class="muted sub-h">estimated one-rep max</span></h2>
           <ul class="lifts">
             {#each trends.lifts as l (l.exercise)}
               {@const pr = Date.now() - l.best_at < 14 * 86400000}
@@ -204,7 +208,8 @@
     font-size: var(--size-body);
     margin-bottom: var(--space-3);
   }
-  .block-h .mono {
+  .block-h .mono,
+  .block-h .sub-h {
     font-size: var(--size-label);
     font-weight: 400;
   }

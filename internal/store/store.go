@@ -381,6 +381,13 @@ func (s *Store) HR(ctx context.Context, from, to int64) ([]HRSample, error) {
 	return out, rows.Err()
 }
 
+// LatestHR is the time of the newest heart rate sample from any source, or 0.
+func (s *Store) LatestHR(ctx context.Context) (int64, error) {
+	var t sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT MAX(ts) FROM hr_samples`).Scan(&t)
+	return t.Int64, err
+}
+
 // PutHR inserts samples from one source, ignoring duplicates.
 func (s *Store) PutHR(ctx context.Context, source string, samples []HRSample) error {
 	tx, err := s.db.BeginTx(ctx, nil)

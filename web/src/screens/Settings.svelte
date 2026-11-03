@@ -327,15 +327,17 @@
 
   <section class="block" aria-labelledby="app-h">
     <h2 id="app-h">Preferences</h2>
-    <div class="prefs">
-    <button class="btn" aria-pressed={soundOn} onclick={() => { soundOn = !soundOn; restSound.set(soundOn); }}>
-      {soundOn ? 'Rest timer chime: on' : 'Rest timer chime: off'}
-    </button>
-    <button class="btn" onclick={() => theme.toggle()}>
-      {#if theme.value === 'dark'}<Sun size={18} aria-hidden="true" /> Use light theme{:else}<Moon size={18} aria-hidden="true" /> Use dark theme{/if}
-    </button>
+    <div class="pref">
+      <button class="btn" role="switch" aria-checked={soundOn} aria-describedby="chime-note" onclick={() => { soundOn = !soundOn; restSound.set(soundOn); }}>
+        Rest timer chime <span class="sw-state" class:on={soundOn} aria-hidden="true">{soundOn ? 'On' : 'Off'}</span>
+      </button>
+      <p id="chime-note" class="muted small">Plays when rest is over. iPhones can't vibrate from a web app, so this is the cue that reaches a phone on the bench.</p>
     </div>
-    <p class="muted small">The chime plays when rest is over. iPhones can't vibrate from a web app, so this is the cue that reaches a phone on the bench.</p>
+    <div class="pref">
+      <button class="btn" onclick={() => theme.toggle()}>
+        {#if theme.value === 'dark'}<Sun size={18} aria-hidden="true" /> Use light theme{:else}<Moon size={18} aria-hidden="true" /> Use dark theme{/if}
+      </button>
+    </div>
   </section>
 </main>
 
@@ -415,6 +417,9 @@
     gap: var(--space-3);
     padding: var(--space-4) 0;
     border-bottom: 1px solid var(--line);
+  }
+  .conn:last-child {
+    border-bottom: 0; /* the next section's rule is the divider */
   }
   .conn-name {
     display: flex;
@@ -514,16 +519,30 @@
     font-size: var(--size-small);
   }
   .setup summary {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.75rem;
+    /* list-item keeps the disclosure triangle; padding keeps a 44px target */
+    display: list-item;
+    padding: 0.7rem 0;
     font-weight: 600;
     cursor: pointer;
   }
-  .prefs {
-    display: flex;
-    flex-wrap: wrap;
+  .pref {
+    display: grid;
+    justify-items: start;
     gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .sw-state {
+    margin-left: var(--space-2);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-s);
+    font-size: var(--size-label);
+    font-weight: 700;
+    background: var(--line);
+    color: var(--text-muted);
+  }
+  .sw-state.on {
+    background: var(--signal);
+    color: var(--on-signal);
   }
   .steps {
     padding-left: 1.25rem;
