@@ -82,6 +82,7 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 			Name:        get("Activity Name"),
 			Sport:       get("Activity Type"),
 			Description: get("Activity Description"),
+			Gear:        get("Activity Gear"),
 		}
 		p.Last = h.Name
 		var res ingest.Result
@@ -117,6 +118,12 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 			if err != nil {
 				p.Failed++
 				continue
+			}
+		}
+		if res.Duplicate && h.Gear != "" && res.SourceID != "" {
+			// Imported before gear was kept: learn it from this export.
+			if err := in.Store.SetSourceExtra(ctx, res.SourceID, "gear", h.Gear); err != nil {
+				in.Log.Warn("strava export: keep gear", "id", id, "err", err.Error())
 			}
 		}
 		switch {
