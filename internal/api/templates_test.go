@@ -157,8 +157,8 @@ func TestPrescribedTemplate(t *testing.T) {
 		}
 	}
 	type resp struct {
-		Plan      store.Template `json:"plan"`
-		Template  store.Template `json:"template"`
+		Plan      store.Template         `json:"plan"`
+		Template  store.Template         `json:"template"`
 		Readiness struct{ Level string } `json:"readiness"`
 	}
 	get := func() resp {
