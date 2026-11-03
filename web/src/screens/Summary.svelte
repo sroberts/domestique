@@ -3,11 +3,13 @@
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
   import HrAlignment from '../components/HrAlignment.svelte';
+  import ExportMenu from '../components/ExportMenu.svelte';
   import HrTrace from '../components/HrTrace.svelte';
   import Stepper from '../components/Stepper.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import ZoneBar from '../components/ZoneBar.svelte';
   import { AuthError, HTTPError, OfflineError, fetchSummary } from '../lib/api';
+  import { sessionExports } from '../lib/export';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link } from '../lib/router.svelte';
   import { Workout, earlyText, endedEarly, progressOf } from '../lib/workout.svelte';
@@ -148,7 +150,10 @@
 <main class="summary">
   <header class="top">
     <a class="btn btn-quiet back" href={back.href} use:link><ChevronLeft size={20} aria-hidden="true" /> {back.label}</a>
-    <SyncStatus />
+    <span class="top-end">
+      <SyncStatus />
+      {#if summary && source === 'server'}<ExportMenu items={sessionExports(summary.session.id, summary.hr_status === 'ready')} />{/if}
+    </span>
   </header>
 
   {#if !summary && problem === 'missing'}
@@ -307,6 +312,11 @@
   .back {
     margin-left: calc(var(--space-2) * -1);
     text-decoration: none;
+  }
+  .top-end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
   .gone {
     display: grid;

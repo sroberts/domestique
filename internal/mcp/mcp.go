@@ -159,6 +159,18 @@ var tools = []tool{
 		},
 	},
 	{
+		Name: "get_gear",
+		Description: "Bikes and their wearing parts (chain, tyres, cassette, brake pads): distance and hours on each, " +
+			"wear against the replace-at distance, and status ok/soon/due; sensors such as a chest strap with battery " +
+			"hours used against expected life; reminders for anything due; and Strava gear names that match no bike. " +
+			"Distances are metres, computed from the rides assigned to each bike.",
+		InputSchema: obj(map[string]any{}),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			return s.get(r, "/v1/gear", nil)
+		},
+	},
+	{
 		Name:        "list_templates",
 		Description: "Strength templates the athlete can be planned onto: exercises, sets, reps, weights and rest.",
 		InputSchema: obj(map[string]any{}),

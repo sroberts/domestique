@@ -80,6 +80,8 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
+	a.registerExport(mux)
+	a.registerGear(mux)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such endpoint")
 	})

@@ -49,6 +49,7 @@ type Hint struct {
 	Description string
 	Route       string
 	Strain      *float64
+	Gear        string // the bike the origin recorded (Strava's "Activity Gear")
 }
 
 // Result reports what an import did.
@@ -167,6 +168,9 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 	}
 	if h.Strain != nil {
 		extra["strain"] = *h.Strain
+	}
+	if g := strings.TrimSpace(h.Gear); g != "" {
+		extra["gear"] = g
 	}
 	extra["format"] = p.Format
 	src.Extra, _ = json.Marshal(extra)

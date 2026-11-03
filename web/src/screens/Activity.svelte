@@ -1,11 +1,14 @@
 <script lang="ts">
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+  import BikePicker from '../components/BikePicker.svelte';
   import CurveChart from '../components/CurveChart.svelte';
+  import ExportMenu from '../components/ExportMenu.svelte';
   import RouteMap from '../components/RouteMap.svelte';
   import Sources from '../components/Sources.svelte';
   import StreamPanels from '../components/StreamPanels.svelte';
   import ZoneRows from '../components/ZoneRows.svelte';
   import { fetchActivity } from '../lib/data';
+  import { activityExports } from '../lib/export';
   import { SOURCE_LABEL, SPORT_LABEL, day, duration, km, thousands, time } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
   import type { ActivityDetail } from '../lib/types';
@@ -70,6 +73,7 @@
 <main class="page">
   <header class="top">
     <a class="btn btn-quiet back" href={back.href} use:link><ChevronLeft size={20} aria-hidden="true" /> {back.label}</a>
+    {#if d && !stale}<ExportMenu items={activityExports(d)} />{/if}
   </header>
 
   {#if failed && !d}
@@ -118,6 +122,7 @@
       {/if}
     </dl>
     <p class="note">{loadNote()}</p>
+    {#if isRide && !stale}<BikePicker activityId={a.id} />{/if}
 
     {#if d.stream.t.length > 1}
       <section class="block" aria-labelledby="streams-h">
@@ -184,6 +189,8 @@
   }
   .top {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
     min-height: 2.75rem;
   }
   .back {

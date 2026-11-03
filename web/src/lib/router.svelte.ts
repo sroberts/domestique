@@ -6,6 +6,7 @@ export type Route =
   | { name: 'activity'; id: string }
   | { name: 'trends' }
   | { name: 'settings' }
+  | { name: 'gear' }
   | { name: 'session'; id: string }
   | { name: 'summary'; id: string }
   | { name: 'workouts' }
@@ -20,6 +21,7 @@ function parse(path: string): Route {
   if (path === '/workouts') return { name: 'workouts' };
   const wk = /^\/workouts\/([A-Za-z0-9_-]+)\/?$/.exec(path);
   if (wk?.[1]) return { name: 'workout', id: wk[1] };
+  if (path === '/gear') return { name: 'gear' };
   const a = /^\/activity\/([A-Za-z0-9_-]+)\/?$/.exec(path);
   if (a?.[1]) return { name: 'activity', id: a[1] };
   let m = /^\/session\/([A-Za-z0-9_-]+)\/?$/.exec(path);
