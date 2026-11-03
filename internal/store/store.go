@@ -111,6 +111,12 @@ type Session struct {
 	FinishedAt *int64     `json:"finished_at"`
 	Strain     *float64   `json:"strain"`
 	UpdatedAt  int64      `json:"updated_at"`
+	// ClockOffsetMs is the server clock minus the phone's, measured by the
+	// phone while it synced: add it to a set's timestamps for true time.
+	ClockOffsetMs int64 `json:"clock_offset_ms"`
+	// HRShiftMs, when set, is a manual alignment of heart rate against the
+	// sets, overriding the automatic estimate.
+	HRShiftMs *int64 `json:"hr_shift_ms"`
 }
 
 // Set is one performed set. Timestamps are epoch milliseconds from the device
@@ -255,15 +261,28 @@ func (s *Store) PutSession(ctx context.Context, x Session) error {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO sessions (id, template_id, name, plan, started_at, finished_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO sessions (id, template_id, name, plan, started_at, finished_at, updated_at, clock_offset_ms)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			template_id = excluded.template_id, name = excluded.name, plan = excluded.plan,
 			started_at = excluded.started_at, finished_at = excluded.finished_at,
-			updated_at = excluded.updated_at
+			updated_at = excluded.updated_at, clock_offset_ms = excluded.clock_offset_ms
 		WHERE excluded.updated_at >= sessions.updated_at`,
-		x.ID, x.TemplateID, x.Name, string(plan), x.StartedAt, x.FinishedAt, x.UpdatedAt)
+		x.ID, x.TemplateID, x.Name, string(plan), x.StartedAt, x.FinishedAt, x.UpdatedAt, x.ClockOffsetMs)
 	return err
+}
+
+// SetHRShift stores a manual heart rate alignment, or clears it (nil) to go
+// back to the automatic estimate.
+func (s *Store) SetHRShift(ctx context.Context, sessionID string, shiftMs *int64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE sessions SET hr_shift_ms = ? WHERE id = ?`, shiftMs, sessionID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *Store) SetStrain(ctx context.Context, sessionID string, strain float64) error {
@@ -271,18 +290,22 @@ func (s *Store) SetStrain(ctx context.Context, sessionID string, strain float64)
 	return err
 }
 
-const sessionCols = `id, template_id, name, plan, started_at, finished_at, strain, updated_at`
+const sessionCols = `id, template_id, name, plan, started_at, finished_at, strain, updated_at, clock_offset_ms, hr_shift_ms`
 
 func scanSession(r scanner) (Session, error) {
 	var x Session
 	var plan string
 	var fin sql.NullInt64
 	var strain sql.NullFloat64
-	if err := r.Scan(&x.ID, &x.TemplateID, &x.Name, &plan, &x.StartedAt, &fin, &strain, &x.UpdatedAt); err != nil {
+	var shift sql.NullInt64
+	if err := r.Scan(&x.ID, &x.TemplateID, &x.Name, &plan, &x.StartedAt, &fin, &strain, &x.UpdatedAt, &x.ClockOffsetMs, &shift); err != nil {
 		return Session{}, err
 	}
 	if fin.Valid {
 		x.FinishedAt = &fin.Int64
+	}
+	if shift.Valid {
+		x.HRShiftMs = &shift.Int64
 	}
 	if strain.Valid {
 		x.Strain = &strain.Float64

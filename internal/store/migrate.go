@@ -143,6 +143,11 @@ var migrations = []string{
 		scope         TEXT NOT NULL DEFAULT ''
 	);
 	`,
+	// 3: clock alignment between the phone's set timestamps and heart rate
+	`
+	ALTER TABLE sessions ADD COLUMN clock_offset_ms INTEGER NOT NULL DEFAULT 0; -- server minus device clock, measured on the phone
+	ALTER TABLE sessions ADD COLUMN hr_shift_ms INTEGER;                       -- manual HR alignment; NULL = automatic
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {
