@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"domestique/internal/auth"
@@ -159,6 +160,11 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Recent = recent
+	if resp.Plan == nil && resp.Readiness.Level == "normal" {
+		// Nothing planned: "train as planned" would answer a question nobody asked.
+		resp.Readiness.Title = "Good to train"
+		resp.Readiness.Detail = strings.Replace(resp.Readiness.Detail, "nothing in the way of today's plan.", "nothing in the way of a hard session.", 1)
+	}
 
 	// Load: form today, fitness ramp, and this week so far.
 	day, _ := time.ParseInLocation("2006-01-02", date, a.loc())
