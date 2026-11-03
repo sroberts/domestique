@@ -8,6 +8,8 @@
   import TrendsScreen from './screens/Trends.svelte';
   import SettingsScreen from './screens/Settings.svelte';
   import TabBar from './components/TabBar.svelte';
+  import Workouts from './screens/Workouts.svelte';
+  import WorkoutEdit from './screens/WorkoutEdit.svelte';
 </script>
 
 {#if router.route.name === 'today'}
@@ -29,6 +31,12 @@
 {:else if router.route.name === 'summary'}
   {#key router.route.id}
     <SummaryScreen id={router.route.id} />
+  {/key}
+{:else if router.route.name === 'workouts'}
+  <Workouts />
+{:else if router.route.name === 'workout'}
+  {#key router.route.id}
+    <WorkoutEdit id={router.route.id} />
   {/key}
 {:else}
   <main class="notfound">

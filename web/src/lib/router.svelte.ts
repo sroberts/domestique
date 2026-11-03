@@ -8,6 +8,8 @@ export type Route =
   | { name: 'settings' }
   | { name: 'session'; id: string }
   | { name: 'summary'; id: string }
+  | { name: 'workouts' }
+  | { name: 'workout'; id: string } // id 'new' for a new workout
   | { name: 'notfound' };
 
 function parse(path: string): Route {
@@ -15,6 +17,9 @@ function parse(path: string): Route {
   if (path === '/activities') return { name: 'activities' };
   if (path === '/trends') return { name: 'trends' };
   if (path === '/settings') return { name: 'settings' };
+  if (path === '/workouts') return { name: 'workouts' };
+  const wk = /^\/workouts\/([A-Za-z0-9_-]+)\/?$/.exec(path);
+  if (wk?.[1]) return { name: 'workout', id: wk[1] };
   const a = /^\/activity\/([A-Za-z0-9_-]+)\/?$/.exec(path);
   if (a?.[1]) return { name: 'activity', id: a[1] };
   let m = /^\/session\/([A-Za-z0-9_-]+)\/?$/.exec(path);
@@ -33,13 +38,25 @@ class Router {
     return this.route.name !== 'session';
   }
 
+  /** A screen with unsaved work can hold navigation: return false to stay. */
+  leaveGuard: ((to: string) => boolean) | null = null;
+  #here = location.pathname + location.search;
+
   constructor() {
     window.addEventListener('popstate', () => {
+      const to = location.pathname + location.search;
+      if (this.leaveGuard && !this.leaveGuard(to)) {
+        history.pushState(null, '', this.#here);
+        return;
+      }
+      this.#here = to;
       this.route = parse(location.pathname);
     });
   }
 
   go(path: string, opts: { replace?: boolean } = {}): void {
+    if (this.leaveGuard && !this.leaveGuard(path)) return;
+    this.#here = path;
     if (!opts.replace) this.prev = location.pathname;
     if (opts.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);

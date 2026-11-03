@@ -170,7 +170,8 @@ var tools = []tool{
 	{
 		Name: "save_template",
 		Description: "Create or replace a strength template. Weights are the starting point; the app adds load " +
-			"automatically when every set hits its reps.",
+			"automatically when every set hits its reps. Limits: 1-30 exercises, 1-20 sets each, reps 1-100, " +
+			"weight_kg 0-1000 in 0.25 kg steps (0 is bodyweight), rest_seconds 0-900.",
 		InputSchema: obj(map[string]any{
 			"id":   str("Stable ID: letters, digits, dashes"),
 			"name": str("Display name, e.g. 'Lower B'"),
@@ -186,6 +187,27 @@ var tools = []tool{
 		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
 			id, _ := a["id"].(string)
 			return s.send(r, http.MethodPut, "/v1/templates/"+url.PathEscape(id), a)
+		},
+	},
+	{
+		Name: "delete_template",
+		Description: "Delete a strength template. Past sessions keep their own copy, so history is unaffected. " +
+			"Refused if the template is planned for today or later, unless clear_plans is true (then those plans are cleared).",
+		InputSchema: obj(map[string]any{
+			"id":          str("Template ID"),
+			"clear_plans": map[string]any{"type": "boolean", "description": "Also clear today's and future plans of this template"},
+		}, "id"),
+		Annotations: map[string]any{"destructiveHint": true},
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			id, _ := a["id"].(string)
+			q := url.Values{}
+			if c, _ := a["clear_plans"].(bool); c {
+				q.Set("clear_plans", "1")
+			}
+			if _, err := s.do(r, http.MethodDelete, "/v1/templates/"+url.PathEscape(id), q, nil); err != nil {
+				return nil, err
+			}
+			return map[string]any{"deleted": id}, nil
 		},
 	},
 	{
