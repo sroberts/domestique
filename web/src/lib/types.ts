@@ -39,6 +39,18 @@ export interface Session {
   updated_at: number;
   /** How much of the plan was lifted. Server-side lists only. */
   progress?: Progress;
+  /** Server clock minus the phone's, sent with each upload. */
+  clock_offset_ms?: number;
+  /** Manual heart rate alignment; null means automatic. */
+  hr_shift_ms?: number | null;
+}
+
+export interface Alignment {
+  clock_offset_ms: number;
+  /** How far heart rate was moved earlier to meet the sets, in ms. */
+  hr_shift_ms: number;
+  source: 'auto' | 'manual' | 'none';
+  confidence: number;
 }
 
 export interface Progress {
@@ -117,6 +129,7 @@ export interface Summary {
   zone_seconds: [number, number, number, number, number, number];
   set_stats: SetStat[];
   progress: Progress;
+  alignment?: Alignment;
 }
 
 export interface Today {

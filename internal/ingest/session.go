@@ -30,7 +30,10 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 		return err
 	}
 	srcID := "app:" + sessionID
-	elapsed := int((*sess.FinishedAt - sess.StartedAt) / 1000)
+	// The phone's clock can be off; the offset it measured against ours
+	// puts the session on true time, where Whoop and ride files live.
+	start, end := sess.StartedAt+sess.ClockOffsetMs, *sess.FinishedAt+sess.ClockOffsetMs
+	elapsed := int((end - start) / 1000)
 
 	extra := map[string]any{"sets": len(sets)}
 	var volume float64
@@ -44,13 +47,13 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	extraJSON, _ := json.Marshal(extra)
 
 	// Slice heart rate for the session window into a stream.
-	hr, err := in.Store.HR(ctx, sess.StartedAt, *sess.FinishedAt)
+	hr, err := in.Store.HR(ctx, start, end)
 	if err != nil {
 		return err
 	}
 	var st activity.Stream
 	for _, h := range hr {
-		t := int32((h.T - sess.StartedAt) / 1000)
+		t := int32((h.T - start) / 1000)
 		if n := len(st.T); n > 0 && t <= st.T[n-1] {
 			continue // sub-second samples, or two sources at once: one per second
 		}
@@ -66,7 +69,7 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	} else if a, err := in.Store.ActivityBySession(ctx, sessionID); err == nil {
 		actID = a.ID
 	} else {
-		src := store.Source{ID: srcID, Sport: activity.SportStrength, StartAt: sess.StartedAt, ElapsedS: elapsed}
+		src := store.Source{ID: srcID, Sport: activity.SportStrength, StartAt: start, ElapsedS: elapsed}
 		if id, _, err := in.match(ctx, src, &st); err != nil {
 			return err
 		} else {
@@ -76,13 +79,13 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	if actID == "" {
 		actID = "s_" + sessionID
 		if err := in.Store.PutActivity(ctx, store.Activity{ID: actID, Sport: activity.SportStrength, Name: sess.Name,
-			StartAt: sess.StartedAt, ElapsedS: elapsed, MovingS: elapsed, SessionID: &sessionID}); err != nil {
+			StartAt: start, ElapsedS: elapsed, MovingS: elapsed, SessionID: &sessionID}); err != nil {
 			return err
 		}
 	}
 	src := store.Source{
 		ID: srcID, ActivityID: actID, Source: "app", ExternalID: sessionID,
-		Sport: activity.SportStrength, Name: sess.Name, StartAt: sess.StartedAt,
+		Sport: activity.SportStrength, Name: sess.Name, StartAt: start,
 		ElapsedS: elapsed, MovingS: elapsed, HasHR: st.HasHR(), Extra: extraJSON,
 		ImportedAt: time.Now().UnixMilli(),
 	}

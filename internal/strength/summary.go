@@ -63,6 +63,7 @@ type Summary struct {
 	ZoneSeconds [6]int    `json:"zone_seconds"` // index 0 = below zone 1
 	SetStats    []SetStat `json:"set_stats"`
 	Progress    Progress  `json:"progress"`
+	Alignment   Alignment `json:"alignment"`
 }
 
 // HRPadding is how much stream to include either side of the session.

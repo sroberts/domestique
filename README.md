@@ -42,3 +42,21 @@ Import does the same from a browser.
 Whoop's API has no heart-rate time series. Post samples to `POST /v1/hr`
 (`{"source":"health","samples":[{"t":<ms or ISO time>,"bpm":123}]}`), e.g. from
 an iOS Shortcut reading Apple Health, and sessions in that window are re-analysed.
+
+### Clock alignment
+
+Sets are timestamped by the phone; heart rate carries the strap's or watch's
+clock. Two corrections line them up before a session is analysed:
+
+1. **Phone clock.** Every `/v1` response carries `X-Server-Time` (ms). The PWA
+   brackets it with the request's round trip, keeps the median of recent quick
+   readings, and sends it as `clock_offset_ms` (server minus phone) with each
+   session upload. The session's activity is placed on true time with it.
+2. **Heart rate source.** The summary predicts the heart rate curve the logged
+   sets should produce and finds the shift (within ±2 minutes) where the recorded
+   curve fits it best. It applies the shift only when the fit is strong and
+   clearly beats any other shift; shifts under 5 s are left alone. The result is
+   in the summary's `alignment` field (`source`: `auto`, `manual` or `none`).
+   Override it with `PUT /v1/sessions/{id}/hr-shift` and `{"shift_ms": 12000}`
+   (positive moves heart rate earlier), or `{"shift_ms": null}` to go back to
+   automatic. The Summary screen's "Adjust" control does the same.

@@ -3,6 +3,7 @@
 // sign-in, network failures wait for the network, and server rejections are
 // kept and reported.
 import { AuthError, HTTPError, OfflineError, deleteJSON, putJSON } from './api';
+import { clockOffset } from './clock';
 import { db, type OutboxEntry } from './db';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'auth' | 'error';
@@ -112,7 +113,9 @@ class Sync {
       if (entry.kind === 'session') {
         // The cursor is device state; the server gets the session itself.
         const { cursor: _cursor, ...session } = record as typeof record & { cursor?: unknown };
-        await putJSON(`/v1/sessions/${encodeURIComponent(entry.id)}`, session);
+        // The latest clock reading goes with it, so the Mac Mini can put the
+        // phone's set times on true time when it lines up heart rate.
+        await putJSON(`/v1/sessions/${encodeURIComponent(entry.id)}`, { ...session, clock_offset_ms: clockOffset() });
       } else {
         await putJSON(`/v1/sets/${encodeURIComponent(entry.id)}`, record);
       }

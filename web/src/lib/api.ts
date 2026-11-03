@@ -1,3 +1,4 @@
+import { observe } from './clock';
 import type { Summary, Today } from './types';
 
 /** Thrown when the Outpost gateway wants the athlete to sign in again. */
@@ -25,6 +26,7 @@ export class HTTPError extends Error {
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
   let res: Response;
+  const sent = Date.now();
   try {
     // Manual redirects: an expired gateway session answers a GET with a redirect
     // to sign-in, which must not be mistaken for data.
@@ -32,6 +34,7 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   } catch {
     throw new OfflineError();
   }
+  observe(sent, Date.now(), res.headers.get('X-Server-Time'));
   if (res.type === 'opaqueredirect' || res.status === 401) throw new AuthError();
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;

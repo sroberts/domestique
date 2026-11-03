@@ -80,6 +80,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/sessions/{id}", a.putSession)
 	mux.HandleFunc("DELETE /v1/sessions/{id}", a.deleteSession)
 	mux.HandleFunc("GET /v1/sessions/{id}/summary", a.summary)
+	mux.HandleFunc("PUT /v1/sessions/{id}/hr-shift", a.putHRShift)
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
@@ -397,8 +398,12 @@ func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
 	case s.FinishedAt != nil && *s.FinishedAt < s.StartedAt:
 		writeErr(w, http.StatusBadRequest, "finished_at is before started_at")
 		return
+	case s.ClockOffsetMs < -maxClockOffset || s.ClockOffsetMs > maxClockOffset:
+		writeErr(w, http.StatusBadRequest, "clock_offset_ms is out of range")
+		return
 	}
-	s.Strain = nil // strain is Whoop's to set
+	s.Strain = nil    // strain is Whoop's to set
+	s.HRShiftMs = nil // set through /hr-shift, never by a replayed upload
 	if err := a.Store.PutSession(r.Context(), s); err != nil {
 		a.fail(w, r, err)
 		return
@@ -410,6 +415,40 @@ func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
 		a.kickRecalc()
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": s.ID})
+}
+
+// maxClockOffset bounds the phone's measured clock error. A phone more than
+// six hours out is misconfigured, not drifting.
+const maxClockOffset = 6 * 60 * 60 * 1000
+
+// putHRShift sets a manual heart rate alignment for a session, in ms
+// (positive moves heart rate earlier), or clears it with null to go back to
+// the automatic estimate.
+func (a *API) putHRShift(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idRe.MatchString(id) {
+		writeErr(w, http.StatusBadRequest, "bad session id")
+		return
+	}
+	var body struct {
+		ShiftMs *int64 `json:"shift_ms"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.ShiftMs != nil && (*body.ShiftMs < -5*strength.MaxShift || *body.ShiftMs > 5*strength.MaxShift) {
+		writeErr(w, http.StatusBadRequest, "shift_ms is out of range (±10 minutes)")
+		return
+	}
+	err := a.Store.SetHRShift(r.Context(), id, body.ShiftMs)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "no such session")
+		return
+	} else if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "shift_ms": body.ShiftMs})
 }
 
 // deleteSession discards a session started by mistake: the session, its sets,
@@ -511,12 +550,26 @@ func (a *API) strengthSummary(r *http.Request, id string) (*strength.Summary, er
 	} else if n := len(sets); n > 0 {
 		end = sets[n-1].EndedAt
 	}
-	hr, err := a.Store.HR(ctx, sess.StartedAt-strength.HRPadding, end+strength.HRPadding)
+	// Heart rate lives on true time; fetch wide enough for the clock offset
+	// and any shift, line it up with the phone's set times, then trim.
+	off, margin := sess.ClockOffsetMs, int64(strength.MaxShift)
+	if m := sess.HRShiftMs; m != nil {
+		margin = max(margin, *m, -*m)
+	}
+	raw, err := a.Store.HR(ctx, sess.StartedAt+off-strength.HRPadding-margin, end+off+strength.HRPadding+margin)
 	if err != nil {
 		return nil, err
 	}
+	aligned, al := strength.Align(sess, sets, raw)
+	hr := aligned[:0:0]
+	for _, h := range aligned {
+		if h.T >= sess.StartedAt-strength.HRPadding && h.T <= end+strength.HRPadding {
+			hr = append(hr, h)
+		}
+	}
 	maxHR := load.Current(ctx, a.Store, a.MaxHR).MaxHR
 	sum := strength.Build(sess, sets, hr, maxHR)
+	sum.Alignment = al
 	if sum.HRStatus == "pending" && !a.demoOn(r) {
 		// Only promise heart rate when something is sending it: a source that
 		// has posted samples lately, and a session recent enough to still sync.
@@ -547,6 +600,9 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	// The phone measures its clock against this to line sets up with heart
+	// rate (Session.ClockOffsetMs). The Mac Mini keeps NTP time.
+	w.Header().Set("X-Server-Time", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }

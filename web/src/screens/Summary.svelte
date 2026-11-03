@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
+  import HrAlignment from '../components/HrAlignment.svelte';
   import HrTrace from '../components/HrTrace.svelte';
   import Stepper from '../components/Stepper.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
@@ -206,6 +207,9 @@
         {/if}
       </div>
       <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
+      {#if summary.hr_status === 'ready' && source === 'server' && summary.alignment}
+        <HrAlignment sessionId={id} alignment={summary.alignment} onchange={load} />
+      {/if}
     </section>
 
     {#if summary.hr_status === 'ready'}
