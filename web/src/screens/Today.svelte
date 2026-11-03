@@ -7,6 +7,7 @@
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
   import { day, duration, recoveryBand, time, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
+  import { fetchTemplates } from '../lib/templates';
   import { beginSession, complete, estimateMinutes } from '../lib/workout.svelte';
   import type { LocalSession, Today } from '../lib/types';
 
@@ -35,6 +36,7 @@
       today = await fetchToday(date);
       load = 'fresh';
       await cacheToday($state.snapshot(today) as Today);
+      void fetchTemplates(); // keep the workout list on the phone for offline starts
     } catch (err) {
       const cached = await cachedToday(date);
       if (cached) {
@@ -160,7 +162,10 @@
     </section>
     {#if plan}
       <section class="plan" aria-labelledby="plan-h">
-        <h2 id="plan-h" class="plan-name">{plan.name}</h2>
+        <div class="plan-head">
+          <h2 id="plan-h" class="plan-name">{plan.name}</h2>
+          <a class="more" href="/workouts" use:link aria-label="Change today's workout">Change</a>
+        </div>
         <p class="mono plan-meta">{plan.exercises.length} lifts · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
         <ol class="sheet">
           {#each plan.exercises as ex, i (i)}
@@ -181,9 +186,8 @@
     {:else}
       <section class="plan empty-plan" aria-labelledby="plan-h">
         <h2 id="plan-h" class="plan-name">No lift planned today</h2>
-        <p class="muted small">Ask Claude to plan one, or send a template for the date:</p>
-        <pre class="mono code">PUT /v1/plans/{date}
-{`{"template_id": "lower-a"}`}</pre>
+        <p class="muted small">Rest, or pick a workout to do today.</p>
+        <a class="btn pick" href="/workouts" use:link>Choose a workout</a>
       </section>
     {/if}
 
@@ -577,14 +581,14 @@
     color: var(--signal);
     font-size: 0.7em;
   }
-  .code {
-    margin: var(--space-3) 0 0;
-    padding: var(--space-3) var(--space-4);
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    font-size: var(--size-small);
-    overflow-x: auto;
+  .plan-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .pick {
+    margin-top: var(--space-3);
   }
   .empty-plan .small {
     margin-top: var(--space-2);
