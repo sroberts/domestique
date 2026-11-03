@@ -1,7 +1,7 @@
 // The live session: where the athlete is, and what one tap does next.
 // Every transition is persisted to IndexedDB before the UI moves on, so a
 // reload, a crash or a dead battery resumes exactly where it stopped.
-import { getSession, saveCursor, saveSession, saveSet, sessionSets } from './db';
+import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSets } from './db';
 import { sync } from './sync.svelte';
 import type { Exercise, LocalSession, SetRecord, TargetSet, Template } from './types';
 
@@ -155,7 +155,7 @@ export class Workout {
   async addRest(seconds: number): Promise<void> {
     const c = this.session.cursor;
     if (c.phase !== 'rest') return;
-    c.rest_s = Math.max(0, c.rest_s + seconds);
+    c.rest_s = Math.max(15, c.rest_s + seconds);
     await saveCursor($state.snapshot(this.session) as LocalSession);
   }
 
@@ -176,6 +176,12 @@ export class Workout {
     }
     c.phase_started_at = Date.now();
     await saveCursor($state.snapshot(this.session) as LocalSession);
+  }
+
+  /** Throw the session away entirely: it was started by mistake. */
+  async discard(): Promise<void> {
+    await discardSession(this.session.id);
+    sync.kick();
   }
 
   /** End the session. An unfinished active set is discarded, not logged. */

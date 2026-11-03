@@ -26,6 +26,8 @@ function parse(path: string): Route {
 
 class Router {
   route = $state<Route>(parse(location.pathname));
+  /** The in-app path before the current one, for context-aware Back links. */
+  prev = $state<string | null>(null);
   /** Live-session screens hide the tab bar: one action per state. */
   get chrome(): boolean {
     return this.route.name !== 'session';
@@ -38,6 +40,7 @@ class Router {
   }
 
   go(path: string, opts: { replace?: boolean } = {}): void {
+    if (!opts.replace) this.prev = location.pathname;
     if (opts.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);
     this.route = parse(path.split('?')[0] ?? '/');
@@ -46,6 +49,15 @@ class Router {
 }
 
 export const router = new Router();
+
+/** Where a Back link should go: the previous list screen, else a default. */
+export function backTarget(fallback: { href: string; label: string }): { href: string; label: string } {
+  const p = router.prev;
+  if (p === '/activities') return { href: p, label: 'Activities' };
+  if (p === '/trends') return { href: p, label: 'Trends' };
+  if (p === '/') return { href: p, label: 'Today' };
+  return fallback;
+}
 
 /** Svelte action: make an <a href> navigate in-app. */
 export function link(node: HTMLAnchorElement) {

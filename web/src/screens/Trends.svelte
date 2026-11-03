@@ -76,7 +76,7 @@
       {#if load.length > 1}
         <LoadChart days={load} />
         <p class="mono note">
-          Fitness is a 42-day average of daily load, fatigue a 7-day one, and form is fitness minus fatigue. Rides count
+          Fitness is a 42-day average of daily load, fatigue a 7-day one, and form is yesterday's fitness minus yesterday's fatigue (how fresh you start the day), so it can differ from today's two numbers. Rides count
           by power, lifts by Whoop strain or heart rate.
         </p>
       {/if}
@@ -85,7 +85,7 @@
     {#if trends}
       <section class="block" aria-labelledby="wk-h">
         <h2 id="wk-h" class="block-h">Weekly load</h2>
-        <WeekBars weeks={trends.weeks} />
+        <WeekBars weeks={trends.weeks.slice(Math.max(0, Math.min(trends.weeks.findIndex((w) => w.count > 0), trends.weeks.length - 8)))} />
       </section>
 
       {#if hasPower}
@@ -150,13 +150,13 @@
 
 <style>
   .page {
-    max-width: 40rem;
+    max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
   @media (min-width: 900px) {
     .page {
-      max-width: 56rem;
+      max-width: var(--page-wide);
     }
   }
   .top {
@@ -215,7 +215,7 @@
     overflow: hidden;
   }
   .seg button {
-    min-height: 2.25rem;
+    min-height: 2.75rem;
     padding: 0 var(--space-3);
     border: 0;
     background: transparent;
@@ -267,6 +267,10 @@
   }
   .bests .when {
     grid-column: 1 / -1;
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    margin-top: -0.5rem;
     font-size: var(--size-label);
     color: var(--text-muted);
   }
@@ -307,13 +311,16 @@
   .ftp .m {
     position: absolute;
     bottom: -1.4rem;
-    font-size: 0.6875rem;
+    font-size: var(--size-label);
     color: var(--text-muted);
   }
   .lifts {
     list-style: none;
     margin: var(--space-6) 0 0;
     padding: 0;
+  }
+  .block:has(.ftp) {
+    padding-bottom: var(--space-5);
   }
   .block:has(.ftp) + .block .lifts,
   .lifts {
@@ -356,11 +363,11 @@
     background: var(--signal);
     color: var(--on-signal);
     border-radius: 2px;
-    font-size: 0.625rem;
+    font-size: var(--size-label);
     font-weight: 700;
   }
   .sub {
     grid-column: 1 / -1;
-    font-size: 0.6875rem;
+    font-size: var(--size-label);
   }
 </style>

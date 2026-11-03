@@ -40,7 +40,10 @@
       radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), var(--bg) 2px, transparent 2.5px);
     transition: box-shadow var(--dur-state) var(--ease-out);
   }
+  /* In a set the plate is painted signal: readable from the bench. */
   .plate.active {
+    background-color: var(--signal);
+    color: var(--on-signal);
     box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--signal);
   }
   .total {

@@ -7,10 +7,11 @@
   import ZoneRows from '../components/ZoneRows.svelte';
   import { fetchActivity } from '../lib/data';
   import { SOURCE_LABEL, SPORT_LABEL, day, duration, km, thousands, time } from '../lib/format';
-  import { link, router } from '../lib/router.svelte';
+  import { backTarget, link, router } from '../lib/router.svelte';
   import type { ActivityDetail } from '../lib/types';
 
   let { id }: { id: string } = $props();
+  const back = backTarget({ href: '/activities', label: 'Activities' });
   let d = $state<ActivityDetail | null>(null);
   let stale = $state<number | null>(null);
   let failed = $state(false);
@@ -36,8 +37,13 @@
     return d.stream.route[Math.round(frac * (d.stream.route.length - 1))] ?? null;
   });
 
-  const powerZoneNames = ['Recovery', 'Endurance', 'Tempo', 'Threshold', 'VO2 max', 'Anaerobic', 'Neuromuscular'];
-  const powerZoneShades = ['var(--zone-1)', 'var(--zone-2)', 'var(--zone-3)', 'var(--zone-4)', 'var(--zone-4)', 'var(--zone-5)', 'var(--zone-5)'];
+  const powerZoneNames = ['Recovery', 'Endurance', 'Tempo', 'Threshold', 'VO2 max', 'Anaerobic', 'Sprint'];
+  // Seven power zones on five zone hues: the top three step through red so
+  // neighbours never share a colour (the label carries identity anyway).
+  const powerZoneShades = [
+    'var(--zone-1)', 'var(--zone-2)', 'var(--zone-3)', 'var(--zone-4)', 'var(--zone-5)',
+    'color-mix(in srgb, var(--zone-5) 70%, var(--text))', 'color-mix(in srgb, var(--zone-5) 45%, var(--text))',
+  ];
 
   let channelNote = $derived.by(() => {
     if (!d) return [];
@@ -63,7 +69,7 @@
 
 <main class="page">
   <header class="top">
-    <a class="btn btn-quiet back" href="/activities" use:link><ChevronLeft size={20} aria-hidden="true" /> Activities</a>
+    <a class="btn btn-quiet back" href={back.href} use:link><ChevronLeft size={20} aria-hidden="true" /> {back.label}</a>
   </header>
 
   {#if failed && !d}
@@ -153,7 +159,7 @@
       <ul class="sources">
         {#each d.sources as s (s.id)}
           <li>
-            <span class="s-name">{SOURCE_LABEL[s.source] ?? s.source}{#if s.device}<span class="muted">{' · '}{s.device}</span>{/if}</span>
+            <span class="s-name">{SOURCE_LABEL[s.source] ?? s.source}{#if s.device && s.device.toLowerCase() !== (SOURCE_LABEL[s.source] ?? s.source).toLowerCase()}<span class="muted">{' · '}{s.device}</span>{/if}</span>
             <span class="mono muted">{time(s.start_at)} · {duration(s.elapsed_s)}{s.has_power ? ' · power' : ''}{s.has_hr ? ' · HR' : ''}{s.has_gps ? ' · GPS' : ''}</span>
           </li>
         {/each}
@@ -167,13 +173,13 @@
 
 <style>
   .page {
-    max-width: 40rem;
+    max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
   @media (min-width: 900px) {
     .page {
-      max-width: 56rem;
+      max-width: var(--page-wide);
     }
   }
   .top {

@@ -62,6 +62,15 @@ export async function putJSON(path: string, body: unknown): Promise<void> {
   });
 }
 
+export async function deleteJSON(path: string): Promise<void> {
+  try {
+    await request(path, { method: 'DELETE' });
+  } catch (err) {
+    if (err instanceof HTTPError && err.status === 404) return; // already gone
+    throw err;
+  }
+}
+
 export function localDate(d = new Date()): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');

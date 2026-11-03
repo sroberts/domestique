@@ -18,7 +18,7 @@
     padding: 0 0.375rem;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-s);
-    font-size: 0.6875rem;
+    font-size: var(--size-label);
     line-height: 1.25rem;
     color: var(--text-muted);
   }

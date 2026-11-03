@@ -13,7 +13,7 @@
 
   let width = $state(0);
   let height = $derived(width >= 640 ? 280 : 220);
-  const PAD = { top: 22, right: 30, bottom: 30, left: 0 };
+  const PAD = { top: 22, right: 28, bottom: 30, left: 0 };
 
   let sets = $derived(summary.sets);
   let start = $derived(summary.session.started_at);
@@ -73,7 +73,7 @@
     }
     return groups.map((g, i) => {
       const left = x(g.from);
-      const right = i + 1 < groups.length ? x(groups[i + 1]!.from) : PAD.left + plotW + PAD.right;
+      const right = i + 1 < groups.length ? x(groups[i + 1]!.from) : PAD.left + plotW;
       const room = Math.max(0, right - left - 8);
       const maxChars = Math.floor(room / 6.6);
       const label = g.name.length <= maxChars ? g.name : maxChars >= 4 ? g.name.slice(0, maxChars - 1).trimEnd() + '…' : '';
@@ -146,7 +146,7 @@
     <div class="pending">
       <div class="pending-card">
         <p>Heart rate arrives after Whoop syncs.</p>
-        <p class="muted">Checking every 10 seconds. Your sets are already saved.</p>
+        <p class="muted">Checking every 10 seconds.</p>
       </div>
     </div>
   {/if}
@@ -155,8 +155,6 @@
 <style>
   .trace {
     position: relative;
-    margin: 0 calc(var(--gutter) * -1);
-    padding: 0 var(--gutter);
     touch-action: pan-y;
   }
   svg {
@@ -210,7 +208,7 @@
   }
   .pending {
     position: absolute;
-    inset: 0 var(--gutter) 30px;
+    inset: 0 0 30px;
     display: grid;
     place-content: center;
     gap: var(--space-1);

@@ -490,3 +490,24 @@ func (s *Store) MoveSources(ctx context.Context, from, to string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE activity_sources SET activity_id = ? WHERE activity_id = ?`, to, from)
 	return err
 }
+
+// DeleteSource removes one source record and its stream. Raw files stay.
+func (s *Store) DeleteSource(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`DELETE FROM streams WHERE source_id = ?`, `DELETE FROM activity_sources WHERE id = ?`} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ClearSession detaches an activity from a deleted session.
+func (s *Store) ClearSession(ctx context.Context, activityID string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE activities SET session_id = NULL WHERE id = ?`, activityID)
+	return err
+}

@@ -80,6 +80,8 @@
         });
         m.touchZoomRotate.disableRotation();
         m.on('load', () => {
+          // Start the attribution folded to its "i" button; it opens on tap.
+          el?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
           addLayers(m);
           fit(m);
           ready = true;

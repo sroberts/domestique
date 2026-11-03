@@ -90,6 +90,10 @@
   --space-7: 3rem;
   --space-8: 4rem;
   --gutter: 1rem;
+  /* Page widths: phone column, list screens, analysis screens on iPad/Mac */
+  --page-narrow: 35rem;
+  --page-list: 40rem;
+  --page-wide: 60rem;
 
   /* Shape: tape and painted plates, barely rounded */
   --radius-s: 3px;

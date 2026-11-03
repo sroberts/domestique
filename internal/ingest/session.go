@@ -96,3 +96,24 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	}
 	return in.Rebuild(ctx, actID)
 }
+
+// RemoveSession drops a discarded session from the activity store. If Whoop
+// also recorded the workout, that activity stays, without the app's sets.
+func (in *Ingester) RemoveSession(ctx context.Context, sessionID string) error {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	srcID := "app:" + sessionID
+	src, err := in.Store.GetSource(ctx, srcID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := in.Store.DeleteSource(ctx, srcID); err != nil {
+		return err
+	}
+	if err := in.Store.ClearSession(ctx, src.ActivityID); err != nil {
+		return err
+	}
+	return in.Rebuild(ctx, src.ActivityID)
+}

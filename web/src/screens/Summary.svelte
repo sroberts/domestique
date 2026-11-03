@@ -8,13 +8,29 @@
   import ZoneBar from '../components/ZoneBar.svelte';
   import { AuthError, HTTPError, OfflineError, fetchSummary } from '../lib/api';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
-  import { link } from '../lib/router.svelte';
+  import { backTarget, link } from '../lib/router.svelte';
   import { Workout } from '../lib/workout.svelte';
   import type { SetRecord, SetStat, Summary } from '../lib/types';
 
   let { id }: { id: string } = $props();
+  // Back goes where you came from; on a direct load, to this tab's list.
+  const back = backTarget({ href: '/activities', label: 'Activities' });
 
   let summary = $state<Summary | null>(null);
+  let planned = $derived(summary ? summary.session.plan.reduce((n, e) => n + e.sets.length, 0) : 0);
+  // "Done" ends a session just finished; elsewhere it would be a second Back.
+  // (The screen is keyed by id, so reading it once is correct.)
+  // svelte-ignore state_referenced_locally
+  const justFinished = consumeJustFinished(id);
+  function consumeJustFinished(sid: string): boolean {
+    try {
+      if (sessionStorage.getItem('domestique:just-finished') !== sid) return false;
+      sessionStorage.removeItem('domestique:just-finished');
+      return true;
+    } catch {
+      return false;
+    }
+  }
   let source = $state<'server' | 'local' | null>(null);
   let problem = $state<'offline' | 'auth' | 'unsynced' | 'missing' | null>(null);
   let workout = $state<Workout | null>(null);
@@ -129,7 +145,7 @@
 
 <main class="summary">
   <header class="top">
-    <a class="btn btn-quiet back" href="/" use:link><ChevronLeft size={20} aria-hidden="true" /> Today</a>
+    <a class="btn btn-quiet back" href={back.href} use:link><ChevronLeft size={20} aria-hidden="true" /> {back.label}</a>
     <SyncStatus />
   </header>
 
@@ -149,6 +165,9 @@
     <p class="mono meta">
       {day(summary.session.started_at)} · {time(summary.session.started_at)}–{time(end)} · {duration(summary.duration_s)}
     </p>
+    {#if planned > 0 && summary.sets.length < planned}
+      <p class="early">Ended early · {summary.sets.length} of {planned} sets</p>
+    {/if}
 
     {#if source === 'local'}
       <p class="notice">
@@ -228,7 +247,7 @@
                 </span>
                 <span role="cell" class="r">
                   {#if st?.has_hr}
-                    <span class="zone-tag"><span class="sw" style:background={`var(--zone-${Math.max(1, st.zone)})`} aria-hidden="true"></span><span class="num">{st.peak_bpm}</span><span class="visually-hidden"> bpm, zone {st.zone}</span></span>
+                    <span class="zone-tag"><span class="num">{st.peak_bpm}</span><span class="sw" style:background={`var(--zone-${Math.max(1, st.zone)})`} aria-hidden="true"></span><span class="zl">Z{st.zone}</span><span class="visually-hidden"> bpm</span></span>
                   {:else}<span class="dim">–</span>{/if}
                 </span>
                 <span role="cell" class="r">{#if st?.has_hr}<span class="num">−{st.recovery_drop}</span>{:else}<span class="dim">–</span>{/if}</span>
@@ -258,19 +277,21 @@
   {/if}
 </main>
 
-<ActionBar>
-  <a class="btn btn-primary" href="/" use:link>Back to today</a>
-</ActionBar>
+{#if justFinished}
+  <ActionBar>
+    <a class="btn btn-primary" href="/" use:link>Done</a>
+  </ActionBar>
+{/if}
 
 <style>
   .summary {
-    max-width: 35rem;
+    max-width: var(--page-narrow);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
   @media (min-width: 900px) {
     .summary {
-      max-width: 60rem;
+      max-width: var(--page-wide);
     }
   }
   .top {
@@ -368,6 +389,23 @@
     font-weight: 600;
     font-size: var(--size-small);
   }
+  .zl {
+    font-size: var(--size-label);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .early {
+    display: inline-block;
+    margin-top: var(--space-2);
+    padding: 0.125rem var(--space-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+    font-size: var(--size-small);
+    font-weight: 600;
+  }
+  .summary {
+    overflow-x: clip;
+  }
   .zone-tag .num {
     font-size: var(--size-lead);
   }
@@ -414,6 +452,9 @@
     padding-bottom: var(--space-1);
     border-bottom: 1px solid var(--line-strong);
     border-radius: 0;
+      margin: 0;
+    padding-left: 0;
+    padding-right: 0;
   }
   .tr:not(.th):hover {
     background: var(--band);

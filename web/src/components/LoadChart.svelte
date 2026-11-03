@@ -58,7 +58,7 @@
   {#if width > 0 && days.length > 1}
     <svg {width} height={H1 + H2 + 22} onpointermove={move} onpointerdown={move} onpointerleave={() => (hover = null)}
       role="img" aria-label={`Fitness ${Math.round(days.at(-1)!.ctl)}, fatigue ${Math.round(days.at(-1)!.atl)}, form ${Math.round(days.at(-1)!.tsb)} today, over ${days.length} days.`}>
-      {#each ticks(0, top, 4) as v (v)}
+      {#each ticks(0, top, 4).filter((v) => v > 0) as v (v)}
         <line class="grid" x1={PAD.left} x2={PAD.left + plotW} y1={y1(v)} y2={y1(v)} />
         <text class="tick" x={PAD.left - 6} y={y1(v) + 4} text-anchor="end">{v}</text>
       {/each}

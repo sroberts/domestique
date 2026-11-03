@@ -457,3 +457,18 @@ func (s *Store) AllSets(ctx context.Context) ([]Set, error) {
 	}
 	return out, rows.Err()
 }
+
+// DeleteSession removes a session and its sets (a session started by mistake).
+func (s *Store) DeleteSession(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{`DELETE FROM sets WHERE session_id = ?`, `DELETE FROM sessions WHERE id = ?`} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}

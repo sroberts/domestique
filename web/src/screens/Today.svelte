@@ -49,6 +49,12 @@
   let plan = $derived(today?.plan ?? null);
   let totalSets = $derived(plan ? plan.exercises.reduce((n, e) => n + e.sets.length, 0) : 0);
   let ld = $derived(today?.load ?? null);
+  // Today's planned session, already done.
+  let doneToday = $derived(
+    plan && today
+      ? (today.recent.find((r) => r.template_id === plan.id && r.finished_at && localDate(new Date(r.started_at)) === date) ?? null)
+      : null,
+  );
   let hasLoad = $derived(!!ld && ld.ctl > 1);
 
   // Monday to Sunday, today marked; days still to come drawn empty.
@@ -125,6 +131,8 @@
       <button class="btn" onclick={() => refresh()}>Try again</button>
     </section>
   {:else if today}
+    <div class="cols">
+      <div class="col-main">
     <!-- The call for the day: recovery and form in one sentence -->
     <section class="call call-{today.readiness.level}" aria-labelledby="call-h">
       <h1 id="call-h" class="call-title">{today.readiness.title}</h1>
@@ -150,6 +158,37 @@
         {/if}
       </dl>
     </section>
+    {#if plan}
+      <section class="plan" aria-labelledby="plan-h">
+        <h2 id="plan-h" class="plan-name">{plan.name}</h2>
+        <p class="mono plan-meta">{plan.exercises.length} lifts · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
+        <ol class="sheet">
+          {#each plan.exercises as ex, i (i)}
+            {@const s = summarizeSets(ex.sets)}
+            <li>
+              <span class="ex-name">{ex.name}</span>
+              <span class="num ex-reps">{s.reps}</span>
+              <span class="ex-kg"><span class="num">{s.kg}</span>{#if s.kg !== 'BW'}<span class="unit">kg</span>{/if}</span>
+              {#if ex.change}
+                <span class="ex-change" class:up={ex.change.startsWith('Up')}>{ex.change}</span>
+              {:else if ex.notes}
+                <span class="ex-notes muted">{ex.notes}</span>
+              {/if}
+            </li>
+          {/each}
+        </ol>
+      </section>
+    {:else}
+      <section class="plan empty-plan" aria-labelledby="plan-h">
+        <h2 id="plan-h" class="plan-name">No lift planned today</h2>
+        <p class="muted small">Ask Claude to plan one, or send a template for the date:</p>
+        <pre class="mono code">PUT /v1/plans/{date}
+{`{"template_id": "lower-a"}`}</pre>
+      </section>
+    {/if}
+
+      </div>
+      <div class="col-side">
 
     {#if hasLoad && ld}
       <section class="form" aria-labelledby="form-h">
@@ -182,35 +221,6 @@
       </section>
     {/if}
 
-    {#if plan}
-      <section class="plan" aria-labelledby="plan-h">
-        <h2 id="plan-h" class="plan-name">{plan.name}</h2>
-        <p class="mono plan-meta">{plan.exercises.length} lifts · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
-        <ol class="sheet">
-          {#each plan.exercises as ex, i (i)}
-            {@const s = summarizeSets(ex.sets)}
-            <li>
-              <span class="ex-name">{ex.name}</span>
-              <span class="num ex-reps">{s.reps}</span>
-              <span class="ex-kg"><span class="num">{s.kg}</span>{#if s.kg !== 'BW'}<span class="unit">kg</span>{/if}</span>
-              {#if ex.change}
-                <span class="ex-change" class:up={ex.change.startsWith('Up')}>{ex.change}</span>
-              {:else if ex.notes}
-                <span class="ex-notes muted">{ex.notes}</span>
-              {/if}
-            </li>
-          {/each}
-        </ol>
-      </section>
-    {:else}
-      <section class="plan empty-plan" aria-labelledby="plan-h">
-        <h2 id="plan-h" class="plan-name">No lift planned today</h2>
-        <p class="muted small">Ask Claude to plan one, or send a template for the date:</p>
-        <pre class="mono code">PUT /v1/plans/{date}
-{`{"template_id": "lower-a"}`}</pre>
-      </section>
-    {/if}
-
     {#if today.latest.length > 0}
       <section class="recent" aria-labelledby="recent-h">
         <h2 id="recent-h" class="sec-h">Latest <a class="more" href="/activities" use:link>All activities <ChevronRight size={16} aria-hidden="true" /></a></h2>
@@ -219,6 +229,8 @@
         {/each}
       </section>
     {/if}
+      </div>
+    </div>
   {/if}
 </main>
 
@@ -228,6 +240,11 @@
       Resume {active.name} · set {Math.min(activeDone + 1, totalOf(active))} of {totalOf(active)}
     </a>
   </ActionBar>
+{:else if plan && doneToday}
+  <ActionBar>
+    <a class="btn btn-primary" href={`/session/${doneToday.id}/summary`} use:link>{plan.name} done · View summary</a>
+    <button class="btn btn-quiet again" onclick={start} disabled={starting}>Start {plan.name} again</button>
+  </ActionBar>
 {:else if plan}
   <ActionBar>
     <button class="btn btn-primary" onclick={start} disabled={starting}>Start {plan.name}</button>
@@ -236,7 +253,7 @@
 
 <style>
   .today {
-    max-width: 35rem;
+    max-width: var(--page-narrow);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
@@ -284,6 +301,22 @@
     color: var(--text-muted);
   }
 
+  /* Phone: one column, plan first. iPad/Mac: verdict and plan beside the body. */
+  @media (min-width: 900px) {
+    .today {
+      max-width: var(--page-wide);
+    }
+    .cols {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: var(--space-7);
+      align-items: start;
+    }
+    .col-side > :first-child {
+      margin-top: var(--space-5);
+    }
+  }
+
   /* The call */
   .call {
     margin-top: var(--space-4);
@@ -318,13 +351,16 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: var(--space-4);
-    margin-top: var(--space-5);
+    margin-top: var(--space-4);
+  }
+  .again {
+    min-height: 2.75rem;
   }
   .rec-score {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    font-size: 4.5rem;
+    font-size: var(--size-target);
     font-weight: 700;
     margin-top: var(--space-1);
   }
@@ -384,7 +420,8 @@
     font-weight: 600;
     color: var(--text-muted);
     text-decoration: none;
-    min-height: 2rem;
+    min-height: 2.75rem;
+    margin: -0.5rem 0;
   }
   .figs {
     display: grid;
@@ -488,7 +525,7 @@
 
   /* Plan */
   .plan {
-    margin-top: var(--space-6);
+    margin-top: var(--space-5);
   }
   .plan-name {
     font-size: var(--size-heading);

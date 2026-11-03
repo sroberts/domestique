@@ -23,7 +23,8 @@
   <span class="main">
     <span class="name">{a.name}</span>
     <span class="meta mono">{meta}</span>
-    <Sources sources={a.sources} />
+    <!-- Logged in this app with nothing else attached: no chip, it's the default. -->
+    {#if !(a.sources.length === 1 && a.sources[0]?.source === 'app')}<Sources sources={a.sources} />{/if}
   </span>
   <span class="figs">
     {#if a.tss > 0}
@@ -89,6 +90,7 @@
     font-size: var(--size-heading);
   }
   .fig .label {
-    font-size: 0.625rem;
+    font-size: var(--size-label);
+    letter-spacing: 0.04em;
   }
 </style>

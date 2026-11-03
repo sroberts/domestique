@@ -52,7 +52,7 @@
     height: var(--tabbar-h);
     color: var(--text-muted);
     text-decoration: none;
-    font-size: 0.6875rem;
+    font-size: var(--size-label);
     font-weight: 600;
     letter-spacing: 0.02em;
   }

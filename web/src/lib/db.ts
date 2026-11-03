@@ -3,7 +3,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { LocalSession, SetRecord, Today } from './types';
 
-export type OutboxKind = 'session' | 'set';
+export type OutboxKind = 'session' | 'set' | 'session-delete';
 
 export interface OutboxEntry {
   key: string; // `${kind}:${id}`, so repeated edits coalesce into one upload
@@ -67,6 +67,22 @@ export async function saveSet(x: SetRecord): Promise<void> {
   const tx = d.transaction(['sets', 'outbox'], 'readwrite');
   await tx.objectStore('sets').put(x);
   await tx.objectStore('outbox').put({ key: `set:${x.id}`, kind: 'set', id: x.id, rev: x.updated_at, seq: ++seqCounter });
+  await tx.done;
+}
+
+/** Discard a session started by mistake: gone from this phone now, and from
+ * the Mac Mini when the queue next drains. */
+export async function discardSession(id: string): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(['sessions', 'sets', 'outbox'], 'readwrite');
+  const sets = await tx.objectStore('sets').index('session_id').getAllKeys(id);
+  for (const k of sets) {
+    await tx.objectStore('sets').delete(k);
+    await tx.objectStore('outbox').delete(`set:${k}`);
+  }
+  await tx.objectStore('sessions').delete(id);
+  await tx.objectStore('outbox').delete(`session:${id}`);
+  await tx.objectStore('outbox').put({ key: `session-delete:${id}`, kind: 'session-delete', id, rev: Date.now(), seq: ++seqCounter });
   await tx.done;
 }
 

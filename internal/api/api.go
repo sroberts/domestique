@@ -78,6 +78,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/recovery/{date}", a.putRecovery)
 	mux.HandleFunc("GET /v1/sessions", a.listSessions)
 	mux.HandleFunc("PUT /v1/sessions/{id}", a.putSession)
+	mux.HandleFunc("DELETE /v1/sessions/{id}", a.deleteSession)
 	mux.HandleFunc("GET /v1/sessions/{id}/summary", a.summary)
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerActivities(mux)
@@ -387,6 +388,28 @@ func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
 		a.kickRecalc()
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": s.ID})
+}
+
+// deleteSession discards a session started by mistake: the session, its sets,
+// and its place in the activity store and training load.
+func (a *API) deleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idRe.MatchString(id) {
+		writeErr(w, http.StatusBadRequest, "bad session id")
+		return
+	}
+	if a.Ingest != nil {
+		if err := a.Ingest.RemoveSession(r.Context(), id); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
+	if err := a.Store.DeleteSession(r.Context(), id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.kickRecalc()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) putSet(w http.ResponseWriter, r *http.Request) {

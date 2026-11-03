@@ -7,7 +7,7 @@
   import Stepper from '../components/Stepper.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { sync } from '../lib/sync.svelte';
-  import { buzz, clock, keepAwake } from '../lib/device.svelte';
+  import { buzz, chime, clock, keepAwake, primeAudio } from '../lib/device.svelte';
   import { clock as fmtClock, setText, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
   import { Workout, type Slot } from '../lib/workout.svelte';
@@ -55,6 +55,7 @@
     if (restOver && c && alerted !== c.phase_started_at) {
       alerted = c.phase_started_at;
       buzz();
+      chime();
       announce = slot ? `Rest over. ${slot.exercise.name}, set ${slot.setIndex + 1} of ${exerciseSlots.length}.` : 'Rest over.';
     }
   });
@@ -70,12 +71,29 @@
   }
 
   const start = () => act(() => w!.startSet());
-  const finishSet = () => act(() => w!.finishSet());
+  const finishSet = () => {
+    primeAudio(); // a tap: lets the rest-over chime play later
+    return act(() => w!.finishSet());
+  };
   const finishSession = () =>
     act(async () => {
       await w!.finish();
+      try {
+        sessionStorage.setItem('domestique:just-finished', id);
+      } catch {
+        /* ignore */
+      }
       router.go(`/session/${id}/summary`, { replace: true });
     });
+  const discard = () =>
+    act(async () => {
+      dialog?.close();
+      await w!.discard();
+      router.go('/', { replace: true });
+    });
+  // A session with nothing (or almost nothing) in it can be thrown away
+  // rather than kept as training.
+  let discardable = $derived(!!w && (w.sets.length <= 1 || sessionElapsed < 120));
   const skipExercise = () =>
     act(async () => {
       dialog?.close();
@@ -151,23 +169,27 @@
         {:else if c.phase === 'active' && slot && target}
           <Plate n={slot.setIndex + 1} of={exerciseSlots.length} active />
           <div class="in-set">
-            <p class="label signal-label"><span class="live-dot" aria-hidden="true"></span>In set</p>
-            <p class="num live signal" aria-label={`${Math.floor(phaseElapsed)} seconds`}>{fmtClock(phaseElapsed)}</p>
-            <p class="num target-mid">{setText(target.reps, target.weight_kg)}</p>
+            <p class="in-set-clock"><span class="label signal-label"><span class="live-dot" aria-hidden="true"></span>In set</span>
+              <span class="num set-clock" aria-label={`${Math.floor(phaseElapsed)} seconds`}>{fmtClock(phaseElapsed)}</span></p>
+            <div class="target-big" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
+              <div class="tb"><span class="num live">{target.reps}</span><span class="label">Reps</span></div>
+              <span class="times num" aria-hidden="true">×</span>
+              <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
+            </div>
           </div>
         {:else if c.phase === 'rest'}
-          <div class="rest">
+          <div class="rest" class:over={restOver}>
             <p class="label" class:signal-label={restOver}>{restOver ? 'Rest over' : 'Rest'}</p>
             <p class="num live" class:signal={restOver} aria-label={restOver ? `${Math.floor(-restLeft)} seconds over` : `${Math.ceil(restLeft)} seconds left`}>
               {restOver ? `+${fmtClock(-restLeft)}` : fmtClock(Math.ceil(restLeft))}
             </p>
-            <div class="drain" role="progressbar" aria-label="Rest remaining" aria-valuemin={0} aria-valuemax={c.rest_s} aria-valuenow={Math.max(0, Math.ceil(restLeft))}>
+            <div class="drain" class:gone={restOver} role="progressbar" aria-label="Rest remaining" aria-valuemin={0} aria-valuemax={c.rest_s} aria-valuenow={Math.max(0, Math.ceil(restLeft))}>
               <div class="drain-fill" style:transform={`scaleX(${restFraction})`}></div>
             </div>
             <div class="rest-tools">
               <span class="mono muted">of {fmtClock(c.rest_s)}</span>
               <span class="rest-adjust">
-                <button class="btn" onclick={() => w!.addRest(-15)} disabled={c.rest_s < 15} aria-label="15 seconds less rest">−15 s</button>
+                <button class="btn" onclick={() => w!.addRest(-15)} disabled={c.rest_s <= 15} aria-label="15 seconds less rest">−15 s</button>
                 <button class="btn" onclick={() => w!.addRest(15)} aria-label="15 seconds more rest">+15 s</button>
               </span>
             </div>
@@ -198,9 +220,10 @@
             onstep={(d) => w!.adjustLast('weight_kg', d * weightStep(ls.weight_kg + (d < 0 ? -0.01 : 0)))}
           />
         </div>
-        {#if ls.reps !== ls.target_reps || ls.weight_kg !== ls.target_weight_kg}
-          <p class="mono muted adj">Target was {setText(ls.target_reps, ls.target_weight_kg)}{ls.weight_kg !== ls.target_weight_kg ? '. New weight carries to the next sets.' : '.'}</p>
-        {/if}
+        <!-- Space reserved so the note appearing never shifts the screen mid-glance. -->
+        <p class="mono muted adj" aria-live="polite">
+          {#if ls.reps !== ls.target_reps || ls.weight_kg !== ls.target_weight_kg}Target was {setText(ls.target_reps, ls.target_weight_kg)}{ls.weight_kg !== ls.target_weight_kg ? '. New weight carries to the next sets.' : '.'}{/if}
+        </p>
       </section>
     {/if}
 
@@ -223,7 +246,7 @@
     {:else if c.phase === 'active'}
       <button class="btn btn-primary" onclick={finishSet} disabled={busy}>Finish set</button>
     {:else if c.phase === 'rest' && slot}
-      <button class="btn btn-primary" onclick={start} disabled={busy}>
+      <button class="btn btn-primary" class:inverse={restOver} onclick={start} disabled={busy}>
         {newExercise ? `Start ${slot.exercise.name}` : `Start set ${slot.setIndex + 1}`}
       </button>
     {:else if c.phase === 'last'}
@@ -241,11 +264,17 @@
         {#if slot && c.phase !== 'active' && c.phase !== 'last'}
           <button class="btn sheet-btn" onclick={skipExercise}>Skip the rest of {slot.exercise.name}</button>
         {/if}
-        <button class="btn btn-danger sheet-btn" onclick={() => { dialog?.close(); finishSession(); }}>
+        <button class="btn sheet-btn" class:btn-danger={!discardable} onclick={() => { dialog?.close(); finishSession(); }}>
           Finish session now
         </button>
+        {#if discardable}
+          <button class="btn btn-danger sheet-btn" onclick={discard}>
+            Discard session{w.sets.length ? ` (${w.sets.length} set)` : ''}
+          </button>
+          <p class="muted discard-note">Discarding removes it from history and training load.</p>
+        {/if}
         <!-- svelte-ignore a11y_autofocus -->
-        <button class="btn btn-quiet sheet-btn" autofocus onclick={() => dialog?.close()}>Keep going</button>
+        <button class="btn sheet-btn" autofocus onclick={() => dialog?.close()}>Keep going</button>
       </div>
     </div>
   </dialog>
@@ -311,6 +340,7 @@
   }
   .rung {
     display: grid;
+    align-content: start;
     gap: 0.125rem;
     min-width: 0;
     padding: var(--space-1) var(--space-2) var(--space-2);
@@ -346,7 +376,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    /* Anchor the numbers just above the action, in the eye line of the thumb. */
+    justify-content: flex-end;
     gap: var(--space-5);
     padding: var(--space-6) 0;
   }
@@ -421,7 +452,29 @@
     display: flex;
     gap: var(--space-2);
   }
+  .rest.over {
+    margin: 0 calc(var(--gutter) * -1);
+    padding: var(--space-5) var(--gutter);
+    background: var(--signal);
+    color: var(--on-signal);
+    transition: background-color var(--dur-state) var(--ease-out);
+  }
+  .rest.over .label,
+  .rest.over .signal,
+  .rest.over .muted {
+    color: var(--on-signal);
+  }
+  .rest.over .btn {
+    border-color: color-mix(in srgb, var(--on-signal) 45%, transparent);
+    color: var(--on-signal);
+  }
+  .drain.gone {
+    visibility: hidden;
+    height: 0;
+    margin: 0;
+  }
   .rest-adjust .btn {
+    min-height: var(--tap-min);
     min-width: 4rem;
     font-size: var(--size-small);
   }
@@ -460,7 +513,26 @@
     gap: var(--space-3);
     margin-top: var(--space-3);
   }
+  .in-set-clock {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .set-clock {
+    font-size: var(--size-target);
+    color: var(--signal);
+  }
+  .discard-note {
+    font-size: var(--size-label);
+    text-align: center;
+  }
+  :global(.btn-primary.inverse) {
+    background: var(--on-signal);
+    color: var(--signal);
+    border: 2px solid var(--signal);
+  }
   .adj {
+    min-height: 2.4em;
     margin-top: var(--space-2);
     font-size: var(--size-label);
   }

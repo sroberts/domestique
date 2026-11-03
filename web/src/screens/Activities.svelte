@@ -146,9 +146,14 @@
 
 <style>
   .page {
-    max-width: 40rem;
+    max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
+  }
+  @media (min-width: 900px) {
+    .page {
+      max-width: var(--page-wide);
+    }
   }
   .top {
     display: flex;
@@ -169,7 +174,7 @@
   }
   .chip {
     flex: none;
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     padding: 0 var(--space-4);
     border: 1px solid var(--line-strong);
     border-radius: 999px;

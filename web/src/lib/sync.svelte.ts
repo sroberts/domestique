@@ -2,7 +2,7 @@
 // whenever a connection exists. Nothing is ever dropped: auth failures wait for
 // sign-in, network failures wait for the network, and server rejections are
 // kept and reported.
-import { AuthError, HTTPError, OfflineError, putJSON } from './api';
+import { AuthError, HTTPError, OfflineError, deleteJSON, putJSON } from './api';
 import { db, type OutboxEntry } from './db';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'auth' | 'error';
@@ -102,6 +102,11 @@ class Sync {
 
   async #upload(entry: OutboxEntry): Promise<void> {
     const d = await db();
+    if (entry.kind === 'session-delete') {
+      await deleteJSON(`/v1/sessions/${encodeURIComponent(entry.id)}`);
+      await d.delete('outbox', entry.key);
+      return;
+    }
     const record = entry.kind === 'session' ? await d.get('sessions', entry.id) : await d.get('sets', entry.id);
     if (record) {
       if (entry.kind === 'session') {
