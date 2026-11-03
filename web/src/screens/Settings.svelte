@@ -1,6 +1,7 @@
 <script lang="ts">
   import Sun from '@lucide/svelte/icons/sun';
   import Moon from '@lucide/svelte/icons/moon';
+  import ExportRange from '../components/ExportRange.svelte';
   import { AuthError, getJSON, putJSON } from '../lib/api';
   import { fetchConnections } from '../lib/data';
   import { restSound, theme } from '../lib/device.svelte';
@@ -303,6 +304,12 @@
       <code class="mono">domestique import ~/Downloads/export_*.zip</code>. Folders of FIT files (Wahoo's Dropbox folder,
       Zwift's Activities folder) are watched when listed in <code class="mono">DOMESTIQUE_WATCH_DIRS</code>.
     </p>
+  </section>
+
+  <section class="block" aria-labelledby="exp-h">
+    <h2 id="exp-h">Export</h2>
+    <p class="muted small">Everything in standard formats, for Strava, Garmin Connect, intervals.icu or a spreadsheet.</p>
+    <ExportRange />
   </section>
 
   <section class="block" aria-labelledby="hr-h2">

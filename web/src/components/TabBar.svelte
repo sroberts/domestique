@@ -2,6 +2,7 @@
   import CalendarDays from '@lucide/svelte/icons/calendar-days';
   import List from '@lucide/svelte/icons/list';
   import TrendingUp from '@lucide/svelte/icons/trending-up';
+  import Bike from '@lucide/svelte/icons/bike';
   import Settings from '@lucide/svelte/icons/settings-2';
   import { link, router } from '../lib/router.svelte';
 
@@ -9,6 +10,7 @@
     { href: '/', label: 'Today', icon: CalendarDays, match: ['today'] },
     { href: '/activities', label: 'Activities', icon: List, match: ['activities', 'activity', 'summary'] },
     { href: '/trends', label: 'Trends', icon: TrendingUp, match: ['trends'] },
+    { href: '/gear', label: 'Gear', icon: Bike, match: ['gear'] },
     { href: '/settings', label: 'Settings', icon: Settings, match: ['settings'] },
   ];
 </script>
@@ -38,7 +40,8 @@
   }
   ul {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     max-width: 35rem;
     margin: 0 auto;
     padding: 0;

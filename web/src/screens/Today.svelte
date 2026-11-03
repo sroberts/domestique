@@ -2,6 +2,7 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import ActionBar from '../components/ActionBar.svelte';
   import ActivityRow from '../components/ActivityRow.svelte';
+  import GearReminder from '../components/GearReminder.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, fetchToday, localDate } from '../lib/api';
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
@@ -229,6 +230,7 @@
         {/each}
       </section>
     {/if}
+    <GearReminder />
       </div>
     </div>
   {/if}

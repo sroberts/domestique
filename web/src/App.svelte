@@ -7,6 +7,7 @@
   import ActivityScreen from './screens/Activity.svelte';
   import TrendsScreen from './screens/Trends.svelte';
   import SettingsScreen from './screens/Settings.svelte';
+  import GearScreen from './screens/Gear.svelte';
   import TabBar from './components/TabBar.svelte';
 </script>
 
@@ -26,6 +27,8 @@
   <TrendsScreen />
 {:else if router.route.name === 'settings'}
   <SettingsScreen />
+{:else if router.route.name === 'gear'}
+  <GearScreen />
 {:else if router.route.name === 'summary'}
   {#key router.route.id}
     <SummaryScreen id={router.route.id} />
