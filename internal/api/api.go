@@ -70,11 +70,7 @@ func (a *API) kickRecalc() {
 func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/today", a.today)
 	mux.HandleFunc("GET /v1/me", a.me)
-	mux.HandleFunc("GET /v1/templates", a.listTemplates)
-	mux.HandleFunc("GET /v1/templates/{id}", a.getTemplate)
-	mux.HandleFunc("PUT /v1/templates/{id}", a.putTemplate)
-	mux.HandleFunc("PUT /v1/plans/{date}", a.putPlan)
-	mux.HandleFunc("DELETE /v1/plans/{date}", a.deletePlan)
+	a.registerTemplates(mux)
 	mux.HandleFunc("PUT /v1/recovery/{date}", a.putRecovery)
 	mux.HandleFunc("GET /v1/sessions", a.listSessions)
 	mux.HandleFunc("PUT /v1/sessions/{id}", a.putSession)
@@ -135,19 +131,12 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
 		return
 	}
-	if a.demoOn(r) {
-		if err := a.Demo.EnsureDay(ctx, date); err != nil {
-			a.fail(w, r, err)
-			return
-		}
-	}
-	resp := todayResp{Date: date}
-	if rec, err := a.Store.GetRecovery(ctx, date); err == nil {
-		resp.Recovery = &rec
-	} else if !errors.Is(err, store.ErrNotFound) {
+	rec, series, readiness, err := a.dayReadiness(r, date)
+	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	resp := todayResp{Date: date, Recovery: rec, Readiness: readiness}
 	if id, err := a.Store.GetPlan(ctx, date); err == nil {
 		t, err := a.Store.GetTemplate(ctx, id)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -170,16 +159,9 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 
 	// Load: form today, fitness ramp, and this week so far.
 	day, _ := time.ParseInLocation("2006-01-02", date, a.loc())
-	series, err := load.Daily(ctx, a.Store, day.AddDate(0, 0, -13), day, a.loc())
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	hasLoad := false
 	if n := len(series); n > 0 {
 		d := series[n-1]
 		resp.Load = &d
-		hasLoad = d.CTL > 5
 		if n >= 8 {
 			resp.RampCTL = math.Round((d.CTL-series[n-8].CTL)*10) / 10
 		}
@@ -188,11 +170,6 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 			resp.Week = series[n-1-wd:]
 		}
 	}
-	tsb := 0.0
-	if resp.Load != nil {
-		tsb = resp.Load.TSB
-	}
-	resp.Readiness = strength.AssessReadiness(resp.Recovery, tsb, hasLoad)
 	if resp.Plan != nil {
 		tpl := *resp.Plan
 		resp.Template = &tpl
@@ -217,111 +194,6 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Athlete = load.Current(ctx, a.Store, a.MaxHR)
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// ---- Templates and plans ------------------------------------------------------------
-
-func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
-	ts, err := a.Store.ListTemplates(r.Context())
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, ts)
-}
-
-func (a *API) getTemplate(w http.ResponseWriter, r *http.Request) {
-	t, err := a.Store.GetTemplate(r.Context(), r.PathValue("id"))
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "no such template")
-		return
-	} else if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func (a *API) putTemplate(w http.ResponseWriter, r *http.Request) {
-	var t store.Template
-	if !readJSON(w, r, &t) {
-		return
-	}
-	t.ID = r.PathValue("id")
-	if msg := validateTemplate(t); msg != "" {
-		writeErr(w, http.StatusBadRequest, msg)
-		return
-	}
-	t.UpdatedAt = time.Now().UnixMilli()
-	if err := a.Store.PutTemplate(r.Context(), t); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func validateTemplate(t store.Template) string {
-	switch {
-	case !idRe.MatchString(t.ID):
-		return "id must be 1-64 letters, digits, dashes or underscores"
-	case t.Name == "" || len(t.Name) > 80:
-		return "name is required (max 80 characters)"
-	case len(t.Exercises) == 0:
-		return "a template needs at least one exercise"
-	}
-	for _, e := range t.Exercises {
-		if e.Name == "" || len(e.Sets) == 0 {
-			return "every exercise needs a name and at least one set"
-		}
-		if e.RestSeconds < 0 || e.RestSeconds > 900 {
-			return "rest_seconds must be 0-900"
-		}
-		for _, s := range e.Sets {
-			if s.Reps < 1 || s.Reps > 100 || s.WeightKg < 0 || s.WeightKg > 1000 {
-				return "set reps must be 1-100 and weight_kg 0-1000"
-			}
-		}
-	}
-	return ""
-}
-
-func (a *API) putPlan(w http.ResponseWriter, r *http.Request) {
-	date := r.PathValue("date")
-	if !validDate(date) {
-		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
-		return
-	}
-	var body struct {
-		TemplateID string `json:"template_id"`
-	}
-	if !readJSON(w, r, &body) {
-		return
-	}
-	if _, err := a.Store.GetTemplate(r.Context(), body.TemplateID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusBadRequest, "no such template")
-		return
-	} else if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.Store.PutPlan(r.Context(), date, body.TemplateID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"date": date, "template_id": body.TemplateID})
-}
-
-func (a *API) deletePlan(w http.ResponseWriter, r *http.Request) {
-	date := r.PathValue("date")
-	if !validDate(date) {
-		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
-		return
-	}
-	if err := a.Store.DeletePlan(r.Context(), date); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) putRecovery(w http.ResponseWriter, r *http.Request) {
