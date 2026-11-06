@@ -1,0 +1,668 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T20:12:44+00:00",
+  "title": "Design System: Domestique",
+  "extensions": {
+    "colorMeta": {
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "oklch(20.5% 0.006 271)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232426",
+          "#3f4043",
+          "#5c5d61",
+          "#7c7d81",
+          "#9d9ea2",
+          "#c3c4c8",
+          "#edeef2"
+        ]
+      },
+      "graphite-surface": {
+        "role": "neutral",
+        "displayName": "Graphite Surface",
+        "canonical": "oklch(24.8% 0.010 268)",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#222428",
+          "#3e4044",
+          "#5b5d63",
+          "#7b7d83",
+          "#9c9ea4",
+          "#c2c4ca",
+          "#eceef4"
+        ]
+      },
+      "graphite-raised": {
+        "role": "neutral",
+        "displayName": "Graphite Raised",
+        "canonical": "oklch(28.4% 0.012 264)",
+        "tonalRamp": [
+          "#090b0f",
+          "#222429",
+          "#3d4045",
+          "#5a5e64",
+          "#7a7d84",
+          "#9b9ea6",
+          "#c1c4cb",
+          "#ebeef5"
+        ]
+      },
+      "tape-line": {
+        "role": "neutral",
+        "displayName": "Tape Line",
+        "canonical": "oklch(31.3% 0.013 267)",
+        "tonalRamp": [
+          "#090b0f",
+          "#222429",
+          "#3d4046",
+          "#5a5e65",
+          "#7a7d85",
+          "#9b9ea6",
+          "#c1c4cc",
+          "#ebeef6"
+        ]
+      },
+      "tape-line-strong": {
+        "role": "neutral",
+        "displayName": "Tape Line Strong",
+        "canonical": "oklch(40.2% 0.018 268)",
+        "tonalRamp": [
+          "#090b11",
+          "#21242b",
+          "#3c4048",
+          "#5a5d67",
+          "#797d88",
+          "#9a9ea9",
+          "#c0c4ce",
+          "#eaeef8"
+        ]
+      },
+      "bone": {
+        "role": "neutral",
+        "displayName": "Bone",
+        "canonical": "oklch(93.2% 0.013 87)",
+        "tonalRamp": [
+          "#0d0b07",
+          "#26241f",
+          "#423f39",
+          "#605d56",
+          "#807d75",
+          "#a29e96",
+          "#c7c4bc",
+          "#f1eee7"
+        ]
+      },
+      "dust": {
+        "role": "neutral",
+        "displayName": "Dust",
+        "canonical": "oklch(64.9% 0.015 262)",
+        "tonalRamp": [
+          "#090b10",
+          "#21242a",
+          "#3c4047",
+          "#595e66",
+          "#797d86",
+          "#9a9fa7",
+          "#c0c4cd",
+          "#eaeff6"
+        ]
+      },
+      "signal-yellow": {
+        "role": "primary",
+        "displayName": "Signal Yellow",
+        "canonical": "oklch(83.4% 0.158 89)",
+        "tonalRamp": [
+          "#1d0200",
+          "#3c1b00",
+          "#5c3800",
+          "#7f5600",
+          "#a37500",
+          "#c49800",
+          "#e8bf4d",
+          "#ffea88"
+        ]
+      },
+      "signal-yellow-press": {
+        "role": "primary",
+        "displayName": "Signal Yellow Pressed",
+        "canonical": "oklch(76.2% 0.149 88)",
+        "tonalRamp": [
+          "#1d0300",
+          "#3b1c00",
+          "#5b3800",
+          "#7e5600",
+          "#a27600",
+          "#c29810",
+          "#e7bf57",
+          "#ffea8f"
+        ]
+      },
+      "danger-red": {
+        "role": "tertiary",
+        "displayName": "Danger Red",
+        "canonical": "oklch(62.6% 0.193 23)",
+        "tonalRamp": [
+          "#320000",
+          "#590000",
+          "#82000d",
+          "#ac1928",
+          "#d83c43",
+          "#fb6767",
+          "#ff9490",
+          "#ffc4be"
+        ]
+      },
+      "zone-1-slate": {
+        "role": "secondary",
+        "displayName": "Zone 1 Slate",
+        "canonical": "oklch(61.4% 0.019 256)",
+        "tonalRamp": [
+          "#080b11",
+          "#1f242b",
+          "#3a4049",
+          "#575e68",
+          "#767e89",
+          "#979faa",
+          "#bdc5cf",
+          "#e8eff9"
+        ]
+      },
+      "zone-2-blue": {
+        "role": "secondary",
+        "displayName": "Zone 2 Blue",
+        "canonical": "oklch(64.1% 0.130 253)",
+        "tonalRamp": [
+          "#000531",
+          "#002254",
+          "#043f79",
+          "#245f9f",
+          "#407fc8",
+          "#65a2e8",
+          "#8fc8ff",
+          "#bef3ff"
+        ]
+      },
+      "zone-3-green": {
+        "role": "secondary",
+        "displayName": "Zone 3 Green",
+        "canonical": "oklch(68.1% 0.128 158)",
+        "tonalRamp": [
+          "#001400",
+          "#00310e",
+          "#005028",
+          "#007143",
+          "#219360",
+          "#53b582",
+          "#82daa9",
+          "#b4ffd5"
+        ]
+      },
+      "zone-4-amber": {
+        "role": "secondary",
+        "displayName": "Zone 4 Amber",
+        "canonical": "oklch(77.6% 0.148 69)",
+        "tonalRamp": [
+          "#240000",
+          "#451000",
+          "#682d00",
+          "#8d4b00",
+          "#b46900",
+          "#d58d28",
+          "#fab461",
+          "#ffe196"
+        ]
+      },
+      "zone-5-red": {
+        "role": "secondary",
+        "displayName": "Zone 5 Red",
+        "canonical": "oklch(62.6% 0.193 23)",
+        "tonalRamp": [
+          "#320000",
+          "#590000",
+          "#82000d",
+          "#ac1928",
+          "#d83c43",
+          "#fb6767",
+          "#ff9490",
+          "#ffc4be"
+        ]
+      },
+      "sport-ride": {
+        "role": "tertiary",
+        "displayName": "Sport: Ride",
+        "canonical": "oklch(64.1% 0.130 253)",
+        "tonalRamp": [
+          "#000531",
+          "#002254",
+          "#043f79",
+          "#245f9f",
+          "#407fc8",
+          "#65a2e8",
+          "#8fc8ff",
+          "#bef3ff"
+        ]
+      },
+      "sport-strength": {
+        "role": "tertiary",
+        "displayName": "Sport: Strength",
+        "canonical": "oklch(65.9% 0.140 60)",
+        "tonalRamp": [
+          "#250000",
+          "#470c00",
+          "#6b2a00",
+          "#914700",
+          "#b86500",
+          "#d98940",
+          "#feb170",
+          "#ffdda2"
+        ]
+      },
+      "sport-other": {
+        "role": "tertiary",
+        "displayName": "Sport: Other",
+        "canonical": "oklch(66.3% 0.107 171)",
+        "tonalRamp": [
+          "#001407",
+          "#00301e",
+          "#004f39",
+          "#006f56",
+          "#229175",
+          "#54b396",
+          "#83d8bc",
+          "#b4ffe7"
+        ]
+      },
+      "light-bg": {
+        "role": "neutral",
+        "displayName": "Light Background",
+        "canonical": "oklch(95.9% 0.010 87)",
+        "tonalRamp": [
+          "#0c0b08",
+          "#262420",
+          "#42403b",
+          "#605d58",
+          "#807d77",
+          "#a19e98",
+          "#c6c4be",
+          "#f1eee9"
+        ]
+      },
+      "light-surface": {
+        "role": "neutral",
+        "displayName": "Light Surface",
+        "canonical": "oklch(100.0% 0.000 90)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#242424",
+          "#404040",
+          "#5d5d5d",
+          "#7d7d7d",
+          "#9e9e9e",
+          "#c4c4c4",
+          "#eeeeee"
+        ]
+      },
+      "light-line": {
+        "role": "neutral",
+        "displayName": "Light Line",
+        "canonical": "oklch(88.3% 0.017 88)",
+        "tonalRamp": [
+          "#0d0b06",
+          "#27241d",
+          "#433f37",
+          "#615d54",
+          "#817d72",
+          "#a29e93",
+          "#c8c4ba",
+          "#f2eee5"
+        ]
+      },
+      "light-ink": {
+        "role": "neutral",
+        "displayName": "Light Ink",
+        "canonical": "oklch(22.7% 0.006 271)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232426",
+          "#3f4043",
+          "#5c5d61",
+          "#7c7d81",
+          "#9d9ea2",
+          "#c3c4c7",
+          "#edeef2"
+        ]
+      },
+      "light-muted": {
+        "role": "neutral",
+        "displayName": "Light Muted",
+        "canonical": "oklch(54.1% 0.012 262)",
+        "tonalRamp": [
+          "#090b0f",
+          "#212429",
+          "#3d4045",
+          "#5a5e64",
+          "#797d85",
+          "#9b9fa6",
+          "#c0c4cb",
+          "#ebeff5"
+        ]
+      },
+      "light-signal": {
+        "role": "primary",
+        "displayName": "Light Signal",
+        "canonical": "oklch(61.5% 0.126 84)",
+        "tonalRamp": [
+          "#1c0300",
+          "#3a1c00",
+          "#5a3800",
+          "#7c5600",
+          "#a07500",
+          "#c1983c",
+          "#e5be6d",
+          "#ffeaa0"
+        ]
+      },
+      "recovery-green": {
+        "role": "tertiary",
+        "displayName": "Recovery Green",
+        "canonical": "oklch(73.2% 0.140 156)",
+        "tonalRamp": [
+          "#001500",
+          "#003208",
+          "#005122",
+          "#00723d",
+          "#0f9559",
+          "#4cb67c",
+          "#7ddca3",
+          "#b0ffd0"
+        ]
+      },
+      "recovery-amber": {
+        "role": "tertiary",
+        "displayName": "Recovery Amber",
+        "canonical": "oklch(80.8% 0.147 80)",
+        "tonalRamp": [
+          "#200000",
+          "#401700",
+          "#623300",
+          "#855100",
+          "#aa7000",
+          "#cb931c",
+          "#f0ba5b",
+          "#ffe692"
+        ]
+      },
+      "recovery-red": {
+        "role": "tertiary",
+        "displayName": "Recovery Red",
+        "canonical": "oklch(68.2% 0.172 21)",
+        "tonalRamp": [
+          "#2e0000",
+          "#540002",
+          "#7b011b",
+          "#a42934",
+          "#cf4850",
+          "#f26f72",
+          "#ff9a9a",
+          "#ffc9c7"
+        ]
+      },
+      "fitness-violet": {
+        "role": "tertiary",
+        "displayName": "Fitness Violet",
+        "canonical": "oklch(64.5% 0.168 289)",
+        "tonalRamp": [
+          "#11003a",
+          "#27095f",
+          "#412a86",
+          "#5d48ae",
+          "#7c67d9",
+          "#9c8bfa",
+          "#c1b3ff",
+          "#ebe0ff"
+        ]
+      },
+      "fatigue-rose": {
+        "role": "tertiary",
+        "displayName": "Fatigue Rose",
+        "canonical": "oklch(64.4% 0.166 9)",
+        "tonalRamp": [
+          "#2c0003",
+          "#510016",
+          "#78062f",
+          "#a12b4b",
+          "#cb4968",
+          "#ed708a",
+          "#ff9ab0",
+          "#ffc9dc"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "live": {
+        "displayName": "Live",
+        "purpose": "The one number read from across the gym: rest countdown, weight on the bar."
+      },
+      "target": {
+        "displayName": "Target",
+        "purpose": "The prescription beside the live number; 'of 4' by the plate."
+      },
+      "stat": {
+        "displayName": "Stat",
+        "purpose": "Summary numbers in stat grids."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Screen titles and activity names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Prose and controls; notes cap at 62ch."
+      },
+      "small": {
+        "displayName": "Small",
+        "purpose": "Secondary copy and table cells."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase data labels naming a measurement. Never a section kicker."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Times, dates, durations, source metadata, chart axes."
+      }
+    },
+    "shadows": [
+      {
+        "name": "plate-ring",
+        "value": "0 0 0 3px var(--bg), 0 0 0 5px var(--signal)",
+        "purpose": "State ring on the race-number plate while a set is in progress."
+      },
+      {
+        "name": "popover",
+        "value": "0 8px 24px rgb(0 0 0 / 0.25)",
+        "purpose": "The export menu, floating over content. Nothing else."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "All state transitions."
+      },
+      {
+        "name": "dur-state",
+        "value": "150ms",
+        "purpose": "Duration of every state change; instant under prefers-reduced-motion."
+      },
+      {
+        "name": "press",
+        "value": "transform: scale(0.98)",
+        "purpose": "Button press feedback."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow-phone",
+        "value": "374px",
+        "purpose": "Below this, tab labels drop a size and lose tracking."
+      },
+      {
+        "name": "stats-5col",
+        "value": "640px",
+        "purpose": "Stat grid goes from three to five columns."
+      },
+      {
+        "name": "wide",
+        "value": "900px",
+        "purpose": "Analysis pages widen from 40rem to 60rem."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default outlined button for secondary actions.",
+      "html": "<button class=\"ds-btn\">Open the session</button>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-btn{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid var(--line-strong);border-radius:6px;background:transparent;color:var(--text);font-weight:600;font-size:16px;cursor:pointer;transition:border-color 150ms cubic-bezier(0.22,1,0.36,1),transform 150ms cubic-bezier(0.22,1,0.36,1);}.ds-btn:hover{border-color:var(--text-muted);}.ds-btn:active{transform:scale(0.98);}.ds-btn:focus-visible{outline:2px solid var(--signal);outline-offset:2px;}"
+    },
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one thing to do now: full width, 64px, at the bottom. One per screen.",
+      "html": "<button class=\"ds-btn-primary\">Done · set 3</button>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-btn-primary{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;align-items:center;justify-content:center;width:100%;min-height:64px;border:0;border-radius:6px;background:var(--signal);color:var(--on-signal);font-size:20px;font-weight:700;cursor:pointer;transition:background-color 150ms cubic-bezier(0.22,1,0.36,1),transform 150ms cubic-bezier(0.22,1,0.36,1);}.ds-btn-primary:active{background:var(--signal-press);transform:scale(0.98);}.ds-btn-primary:focus-visible{outline:2px solid var(--signal);outline-offset:2px;}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Back links and secondary actions: no outline, dust text.",
+      "html": "<button class=\"ds-btn-quiet\">‹ Activities</button>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-btn-quiet{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;min-height:44px;padding:0 8px;border:0;background:transparent;color:var(--text-muted);font-weight:600;font-size:16px;cursor:pointer;transition:color 150ms;}.ds-btn-quiet:hover{color:var(--text);}.ds-btn-quiet:focus-visible{outline:2px solid var(--signal);outline-offset:2px;}"
+    },
+    {
+      "name": "Race-Number Plate",
+      "kind": "custom",
+      "refersTo": "plate",
+      "description": "The current set number, painted like a pinned race number; yellow and ringed while the set is in progress.",
+      "html": "<div class=\"ds-plate-row\"><span class=\"ds-plate\">3</span><span class=\"ds-plate ds-plate-active\">4</span><span class=\"ds-of\">of 4</span></div>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-plate-row{display:flex;align-items:center;gap:12px;}.ds-plate{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-variant-numeric:tabular-nums lining-nums;display:grid;place-items:center;min-width:72px;height:72px;padding:0 12px;box-sizing:border-box;background-color:var(--plate);color:var(--on-plate);font-size:56px;font-weight:700;line-height:.9;border-radius:3px;background-image:radial-gradient(circle at 7px 7px,var(--bg) 2px,transparent 2.5px),radial-gradient(circle at calc(100% - 7px) 7px,var(--bg) 2px,transparent 2.5px),radial-gradient(circle at 7px calc(100% - 7px),var(--bg) 2px,transparent 2.5px),radial-gradient(circle at calc(100% - 7px) calc(100% - 7px),var(--bg) 2px,transparent 2.5px);transition:box-shadow 150ms;}.ds-plate-active{background-color:var(--signal);color:var(--on-signal);box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--signal);}.ds-of{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-variant-numeric:tabular-nums lining-nums;font-size:48px;font-weight:600;color:var(--text-muted);}"
+    },
+    {
+      "name": "Segment Switch",
+      "kind": "chip",
+      "refersTo": "segment",
+      "description": "Choose a view, e.g. Combined or one recording; wraps rather than scrolls.",
+      "html": "<div class=\"ds-seg\"><button class=\"ds-seg-b\" aria-pressed=\"true\">Combined</button><button class=\"ds-seg-b\" aria-pressed=\"false\">Wahoo</button><button class=\"ds-seg-b\" aria-pressed=\"false\">Whoop</button></div>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-seg{display:flex;flex-wrap:wrap;gap:4px;}.ds-seg-b{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;min-height:56px;padding:0 12px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px;cursor:pointer;}.ds-seg-b[aria-pressed='true']{background:var(--text);border-color:var(--text);color:var(--bg);font-weight:600;}.ds-seg-b:focus-visible{outline:2px solid var(--signal);outline-offset:2px;}"
+    },
+    {
+      "name": "Stat Grid",
+      "kind": "card",
+      "refersTo": "stat",
+      "description": "Ruled grid of label-over-numeral stats; no boxes.",
+      "html": "<dl class=\"ds-stats\"><div><dt>Moving</dt><dd><b>1 h 39</b></dd></div><div><dt>TSS</dt><dd><b>129</b></dd></div><div><dt>Avg HR</dt><dd><b>156</b><i>max 182</i></dd></div></dl>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:0;border-top:1px solid var(--line-strong);}.ds-stats div{display:grid;gap:4px;padding:12px 0;border-bottom:1px solid var(--line);}.ds-stats dt{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted);}.ds-stats dd{margin:0;display:flex;align-items:baseline;gap:4px;}.ds-stats b{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-variant-numeric:tabular-nums lining-nums;font-size:28px;font-weight:600;line-height:.9;color:var(--text);}.ds-stats i{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;font-style:normal;font-size:12px;color:var(--text-muted);}"
+    },
+    {
+      "name": "Zone Row",
+      "kind": "custom",
+      "refersTo": "zone-row",
+      "description": "Time in one heart-rate zone; colour always beside the zone label.",
+      "html": "<ul class=\"ds-zones\"><li><span><b>Z3</b> 150+</span><span class=\"ds-bar\" style=\"--w:48%;--c:var(--zone-3)\"></span><span class=\"ds-t\">26:14</span><span class=\"ds-t\">48%</span></li><li><span><b>Z4</b> 163+</span><span class=\"ds-bar\" style=\"--w:15%;--c:var(--zone-4)\"></span><span class=\"ds-t\">8:18</span><span class=\"ds-t\">15%</span></li></ul>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-zones{list-style:none;margin:0;padding:0;display:grid;gap:8px;}.ds-zones li{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;display:grid;grid-template-columns:7.5rem minmax(0,1fr) 3.75rem 2.5rem;align-items:center;gap:8px;font-size:14px;color:var(--text);}.ds-bar{height:10px;width:var(--w);background:var(--c);border-radius:3px;}.ds-t{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace;text-align:right;color:var(--text-muted);font-size:12px;}"
+    },
+    {
+      "name": "Bottom Tab Bar",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Fixed bottom navigation; current tab in bone, the rest in dust.",
+      "html": "<nav class=\"ds-tabs\"><a class=\"ds-tab\">Today</a><a class=\"ds-tab\">Workouts</a><a class=\"ds-tab ds-cur\" aria-current=\"page\">Activities</a><a class=\"ds-tab\">Trends</a></nav>",
+      "css": ":host{--bg:#16171a;--surface:#1f2126;--line:#2e3138;--line-strong:#444852;--text:#ece8df;--text-muted:#8a8f98;--signal:#f2c230;--signal-press:#d9ab1f;--on-signal:#16171a;--plate:#ece8df;--on-plate:#16171a;--danger:#e5484d;--zone-1:#7d8590;--zone-2:#4f8fd9;--zone-3:#45b07a;--zone-4:#f2a33a;--zone-5:#e5484d;}.ds-tabs{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);background:var(--bg);border-top:1px solid var(--line);}.ds-tab{font-family:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;display:grid;place-items:center;height:56px;color:var(--text-muted);font-size:12px;font-weight:600;letter-spacing:.02em;text-decoration:none;cursor:pointer;}.ds-tab:active{background:rgb(236 232 223 / .06);}.ds-cur{color:var(--text);}.ds-tab:focus-visible{outline:2px solid var(--signal);outline-offset:-2px;}"
+    },
+    {
+      "name": "Recovery Slab",
+      "kind": "custom",
+      "refersTo": "recovery-slab",
+      "description": "Today's verdict on a solid recovery-coloured slab with dark ink.",
+      "html": "<section class=\"ds-slab\"><p class=\"ds-slab-top\"><span class=\"ds-slab-k\">Recovery</span><span class=\"ds-slab-n\">61<small>%</small></span></p><h3>Train, but hold the weights</h3><p>Train as planned, but hold the weights rather than adding load.</p></section>",
+      "css": ":host{--rec-amber:#f2b43d;--on-color:#16171a;}.ds-slab{font-family:'Public Sans',system-ui,sans-serif;padding:16px 16px 24px;border-radius:6px;background:var(--rec-amber);color:var(--on-color);max-width:360px;}.ds-slab-top{display:flex;align-items:baseline;justify-content:space-between;margin:0;}.ds-slab-k{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}.ds-slab-n{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:96px;font-weight:700;line-height:.82;font-variant-numeric:tabular-nums;}.ds-slab-n small{font-size:48px;font-weight:600;}.ds-slab h3{margin:12px 0 4px;font-size:24px;}.ds-slab p{margin:0;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Team Car",
+    "overview": "Domestique looks like the inside of a pro team car during a stage: graphite dash, a clipboard of splits, a race number pinned to a jersey, yellow tape where something needs attention, race radio in your ear. Everything earns its place by being read in a hurry. The athlete is mid-set with sweaty hands, glancing at a phone on a bench from arm's length, or sitting down after a ride to go through the numbers unhurried. The first moment sets the density: one huge number, one action. The second allows a dense, analytical page of charts and tables.\n\nThe system is flat and numeral-led, on graphite. Chrome stays graphite and bone; signal yellow marks the one thing to do now. Meaning gets colour at full strength, in solid blocks like race-broadcast captions and team kit: the day's recovery paints Today's verdict slab, every activity leads with a block in its sport's colour, heart-rate zones, form and fitness/fatigue each have their own hues. A good day and a bad day, a ride and a lift, look different before you read a word. Type is a three-voice instrument: condensed numerals for the numbers that matter, a plain humanist sans for words, and a monospace for timings and metadata. Shapes are barely rounded, like tape and painted plates, not pills. Motion only marks a change of state, in 150ms, and disappears under reduced motion.\n\nIt explicitly rejects Strava's orange, social feeds, kudos and leaderboards; neon-gradient fitness apps and purple-blue gradients; glassmorphism; identical icon card grids; and badges, streak flames, confetti or gamification of any kind.",
+    "keyCharacteristics": [
+      "Dark by default (graphite `#16171a`), with a complete light theme for daylight review.",
+      "Numbers are the hero: Barlow Condensed tabular numerals, 6rem live, 3rem target, 2rem stat.",
+      "One action colour, signal yellow, reserved for the current action and the active state.",
+      "Meaning carries colour at full strength: recovery slabs, sport blocks and tags, zones, form, chart roles. Chrome never does.",
+      "Flat surfaces separated by 1px rules, not cards and shadows.",
+      "Workout actions are at least 56px tall, and the primary action is 64px tall and full width at the bottom.",
+      "Content sits in a single column: 35rem in the gym, 40rem for lists, 60rem for analysis on iPad or Mac."
+    ],
+    "rules": [
+      {
+        "name": "The Tape Rule",
+        "body": "Signal yellow is only for \"do this now\" or \"this one is active\": the single primary action on screen, the plate of the set in progress, focus and selection. It never fills a card, a header, a chart series or decoration. If two things on one screen are yellow, one of them is wrong.",
+        "section": "colors"
+      },
+      {
+        "name": "The Meaning-Paints Rule",
+        "body": "Colour belongs to things that mean something: a recovery, a sport, a zone, a form state, a chart role. Those get colour at full strength, as solid blocks with dark ink. Chrome (tabs, buttons, headers, borders) never wears a data colour, and a colour never appears without its word, number or icon beside it.",
+        "section": "colors"
+      },
+      {
+        "name": "The Slab Rule",
+        "body": "Data colour fills a block; it doesn't tint one. Today's verdict is a solid recovery-coloured slab, not an 8% wash with a coloured border. If a colour is so faint you have to look for it, it isn't doing its job.",
+        "section": "colors"
+      },
+      {
+        "name": "The Numbers-Are-the-Hero Rule",
+        "body": "Any number the athlete acts on is set in Barlow Condensed with tabular figures, and is the largest thing near it. Its label is small, quiet and uppercase. A large label above a small number is backwards.",
+        "section": "typography"
+      },
+      {
+        "name": "The Label-Means-Data Rule",
+        "body": "The uppercase, tracked label style is only for naming a measurement. It is never used as a decorative kicker above a section heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Dash Rule",
+        "body": "Surfaces are flat at rest. A shadow appears only on something that floats over content (a menu) or as a state ring. If a list row or stat block has a shadow, remove it and use a 1px tape line instead.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** keep exactly one signal-yellow primary action per state, full width, 64px tall, at the bottom of the screen.",
+      "**Do** set every number the athlete acts on in Barlow Condensed with tabular figures, as the largest element near it.",
+      "**Do** pair every zone colour with its zone number or label (\"Z3 150+\"), in both the bar and the legend.",
+      "**Do** paint meaning at full strength: recovery as a solid slab, sports as solid blocks, with dark ink at 4.5:1 or better.",
+      "**Do** run any new chart colours through the dataviz palette validator in both themes before using them.",
+      "**Do** separate sections with 1px tape lines (`#2e3138`) and spacing from the 4/8px scale.",
+      "**Do** make workout actions at least 56px tall (`--tap-min`), and every other control at least 44px.",
+      "**Do** check both themes: every text colour must meet WCAG 2.2 AA on graphite and on `#f4f1ea`.",
+      "**Do** keep motion to 150ms state changes using `cubic-bezier(0.22, 1, 0.36, 1)`, with instant changes under `prefers-reduced-motion`."
+    ],
+    "donts": [
+      "**Don't** use Strava's orange, social feeds, kudos or segment leaderboards.",
+      "**Don't** use neon-gradient fitness-app styling or purple-blue gradients, and don't use gradient text anywhere.",
+      "**Don't** use glassmorphism: no blurred translucent panels.",
+      "**Don't** build identical icon card grids; lists are ruled rows.",
+      "**Don't** add badges, streak flames, confetti, or gamification of any kind. Nothing celebrates for its own sake.",
+      "**Don't** use signal yellow for decoration, headers, chart series or more than one element on a screen.",
+      "**Don't** put a data colour (recovery, sport, zone, chart role) on chrome: tabs, buttons, headers, borders.",
+      "**Don't** tint meaning faintly (an 8% wash, a coloured hairline) when it should be a solid block.",
+      "**Don't** add a coloured stripe border (border-left or border-right over 1px) to rows, callouts or cards.",
+      "**Don't** round anything past 6px or make pill buttons; the shape language is tape and plates.",
+      "**Don't** use the uppercase label style as a section kicker.",
+      "**Don't** add shadows to rows, cards or stat blocks. If it looks lifted off the dash, it's wrong."
+    ]
+  }
+}
