@@ -190,6 +190,10 @@ func TestReimportSameSourceKeepsActivity(t *testing.T) {
 	if r1.ActivityID != r2.ActivityID || len(acts) != 1 {
 		t.Fatalf("re-import split the activity: %s vs %s, %d activities", r1.ActivityID, r2.ActivityID, len(acts))
 	}
+	// Reported as already there, not as a new activity.
+	if r1.Refreshed || !r2.Refreshed || r2.Merged {
+		t.Fatalf("first import refreshed=%v; re-import refreshed=%v merged=%v", r1.Refreshed, r2.Refreshed, r2.Merged)
+	}
 }
 
 // A small gzip that inflates past the file limit is refused, not decoded.

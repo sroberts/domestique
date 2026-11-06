@@ -57,7 +57,10 @@ type Result struct {
 	SourceID   string `json:"source_id"`
 	ActivityID string `json:"activity_id"`
 	Duplicate  bool   `json:"duplicate"` // the exact file was already imported
-	Merged     bool   `json:"merged"`    // joined an existing activity
+	// Refreshed: a source already known (the same Strava activity from a
+	// newer export, whose bytes differ) was updated in place, not added.
+	Refreshed bool `json:"refreshed,omitempty"`
+	Merged    bool `json:"merged"` // joined an existing activity
 }
 
 // MaxFileBytes bounds one activity file, compressed or not. A day-long 1 Hz
@@ -189,9 +192,9 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 	// with its activity; matching afresh would skip its own old record and
 	// strand the old activity with no sources.
 	var actID string
-	var merged bool
+	var merged, refreshed bool
 	if prev, err := in.Store.GetSource(ctx, src.ID); err == nil {
-		actID = prev.ActivityID
+		actID, refreshed = prev.ActivityID, true
 	} else if !errors.Is(err, store.ErrNotFound) {
 		return Result{}, err
 	} else if actID, merged, err = in.match(ctx, src, &p.Stream); err != nil {
@@ -219,7 +222,7 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 	}
 	in.Log.Info("imported", "source", src.ID, "kind", src.Source, "sport", src.Sport,
 		"start", p.Start.Format(time.RFC3339), "activity", actID, "merged", merged)
-	return Result{SourceID: src.ID, ActivityID: actID, Merged: merged}, nil
+	return Result{SourceID: src.ID, ActivityID: actID, Merged: merged, Refreshed: refreshed}, nil
 }
 
 func (in *Ingester) saveRaw(ctx context.Context, sha, name string, data []byte, format, origin string) error {

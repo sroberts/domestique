@@ -124,14 +124,14 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 				continue
 			}
 		}
-		if res.Duplicate && h.Gear != "" && res.SourceID != "" {
+		if (res.Duplicate || res.Refreshed) && h.Gear != "" && res.SourceID != "" {
 			// Imported before gear was kept: learn it from this export.
 			if err := in.Store.SetSourceExtra(ctx, res.SourceID, "gear", h.Gear); err != nil {
 				in.Log.Warn("strava export: keep gear", "id", id, "err", err.Error())
 			}
 		}
 		switch {
-		case res.Duplicate:
+		case res.Duplicate, res.Refreshed:
 			p.Duplicates++
 		case res.Merged:
 			p.Merged++

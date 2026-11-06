@@ -97,7 +97,7 @@ func (w *Watcher) Scan(ctx context.Context) int {
 			res, err := w.In.Ingest(ctx, p, data, "watch:"+dir, ingest.Hint{Source: "watch"})
 			if err != nil {
 				w.In.Log.Warn("watch: import failed", "file", p, "err", err.Error())
-			} else if !res.Duplicate {
+			} else if !res.Duplicate && !res.Refreshed {
 				added++
 			}
 			// Remember the file even if it failed, so a bad file isn't retried every minute.

@@ -597,3 +597,31 @@ func WhoopZones(srcs []Source) ([6]int, bool) {
 	}
 	return [6]int{}, false
 }
+
+// SourceIDsSince returns the ids of sources with this id prefix (say
+// "whoop:") starting at or after since (epoch ms).
+func (s *Store) SourceIDsSince(ctx context.Context, prefix string, since int64) ([]string, error) {
+	return s.ids(ctx, `SELECT id FROM activity_sources WHERE id LIKE ? || '%' AND start_at >= ?`, prefix, since)
+}
+
+// SleepIDsSince is SourceIDsSince for sleeps.
+func (s *Store) SleepIDsSince(ctx context.Context, prefix string, since int64) ([]string, error) {
+	return s.ids(ctx, `SELECT id FROM sleep WHERE id LIKE ? || '%' AND start_at >= ?`, prefix, since)
+}
+
+func (s *Store) ids(ctx context.Context, q string, args ...any) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
