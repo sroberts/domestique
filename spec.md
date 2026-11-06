@@ -2,7 +2,7 @@
 
 ## Bottom Line
 
-Domestique is a self-hosted Outpost service and progressive web app on Scott's Mac Mini that automatically imports workouts from Whoop, Wahoo, and Zwift, stores them locally, and exposes them over REST and MCP. No manual logging. Long-term goal: replace Strava entirely.
+Domestique is a self-hosted Outpost service and progressive web app on a user's computer that automatically imports workouts from Whoop, Wahoo, and Zwift, stores them locally, and exposes them over REST and MCP. No manual logging. Long-term goal: replace Strava entirely.
 
 ## Goals
 
@@ -96,7 +96,7 @@ These features turn the store into a training tool, not just an archive.
 
 ## Name
 
-**Domestique.** In pro cycling, the domestique rides for the leader: fetches bottles, blocks the wind, does the unglamorous work. This app does the same with data. It fetches every ride and lift so Scott only has to train. Repo and service name: `domestique`. Home screen label: Domestique (10 characters, fits iOS without truncation).
+**Domestique.** In pro cycling, the domestique rides for the leader: fetches bottles, blocks the wind, does the unglamorous work. This app does the same with data. It fetches every ride and lift so the athlete only has to train. Repo and service name: `domestique`. Home screen label: Domestique (10 characters, fits iOS without truncation).
 
 ## Visual Style
 
