@@ -314,4 +314,7 @@ export interface ProviderStatus {
   last_sync: number;
   last_error?: string;
   syncing: boolean;
+  /** Where the app credentials came from; the secret itself is never sent. */
+  credentials_from: '' | 'manifest' | 'settings';
+  client_id?: string;
 }

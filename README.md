@@ -29,7 +29,15 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 
 ### Secrets
 
-Client secrets are read only from files; the manifest is plaintext and its
+The easy way: Settings → Connections → **Set up Whoop** (or Wahoo), paste the
+app's client ID and secret, Save. Domestique writes them to
+`OUTPOST_STORAGE_DIR/secrets/` (directory `700`, files `600`), applies them
+without a restart, and never sends the secret back to the browser. Replace or
+Remove from the same place; removing also disconnects. They travel with
+backups of the storage directory, like the OAuth tokens.
+
+Or name the files in the manifest, which takes precedence and locks the
+Settings form. Client secrets are read only from files; the manifest is plaintext and its
 `env` is visible in the process table, so a `DOMESTIQUE_*_CLIENT_SECRET` set
 directly in the environment stops Domestique at start. On the Mac Mini:
 

@@ -7,6 +7,7 @@
   import { restSound, theme } from '../lib/device.svelte';
   import { relDay, time } from '../lib/format';
   import type { ProviderStatus } from '../lib/types';
+  import ProviderCredentials from '../components/ProviderCredentials.svelte';
 
   const params = new URLSearchParams(location.search);
   let flash = $state<{ ok: boolean; text: string } | null>(
@@ -170,7 +171,6 @@
     whoop: 'Recovery, HRV, resting heart rate, sleep, workout strain and max heart rate. Checked every 30 minutes.',
     wahoo: 'The original FIT file of every ride from your ELEMNT: power, heart rate, cadence, GPS. Checked every 15 minutes.',
   };
-  const envName: Record<string, string> = { whoop: 'DOMESTIQUE_WHOOP', wahoo: 'DOMESTIQUE_WAHOO' };
   let hrURL = $derived(`${base || location.origin}/v1/hr`);
 </script>
 
@@ -249,17 +249,8 @@
               </p>
             {/if}
             {#if p.last_error}<p class="mono small err">{p.last_error}</p>{/if}
-            {#if !p.configured}
-              <details class="setup">
-                <summary>How to set up {cap(p.provider)}</summary>
-              <p class="small">
-                Register an app with {cap(p.provider)}, then give Domestique <code class="mono">{envName[p.provider]}_CLIENT_ID</code>
-                and <code class="mono">{envName[p.provider]}_CLIENT_SECRET_FILE</code> (a path to a file holding the secret).
-                Redirect URI: <code class="mono">{base}/v1/oauth/{p.provider}/callback</code>
-              </p>
-              </details>
-            {/if}
           </div>
+          {#if p.connected || p.configured}
           <div class="conn-act">
             {#if p.connected}
               <button class="btn" onclick={() => syncNow(p.provider)} disabled={p.syncing}>Sync now</button>
@@ -269,6 +260,8 @@
               <a class="btn btn-connect" href={`/v1/oauth/${p.provider}/start`}>Connect {cap(p.provider)}</a>
             {/if}
           </div>
+          {/if}
+          <ProviderCredentials {p} {base} onchange={loadConnections} />
         </li>
       {/each}
     </ul>

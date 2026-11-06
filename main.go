@@ -190,8 +190,25 @@ func run() error {
 		}()
 		after := func(context.Context) { app.Recalc() }
 
-		whoop := provider.NewClient(whoopCfg, s, log)
-		wahoo := provider.NewClient(wahooCfg, s, log)
+		// Credentials from the manifest win; otherwise any saved in Settings.
+		// A saved pair that can't be read is logged rather than fatal, so it
+		// can be re-entered from Settings.
+		saved := func(cfg provider.Config) (provider.Config, string) {
+			if cfg.Configured() {
+				return cfg, provider.FromManifest
+			}
+			id, secret, err := provider.LoadSaved(provider.SecretsDir(storage), cfg.Name)
+			if err != nil {
+				log.Error("saved credentials unreadable; enter them again in Settings", "provider", cfg.Name, "err", err.Error())
+				return cfg, provider.FromNone
+			}
+			cfg.ClientID, cfg.ClientSecret = id, secret
+			return cfg, provider.FromSettings
+		}
+		whoopCfg, whoopFrom := saved(whoopCfg)
+		wahooCfg, wahooFrom := saved(wahooCfg)
+		whoop := provider.NewClient(whoopCfg, whoopFrom, s, log)
+		wahoo := provider.NewClient(wahooCfg, wahooFrom, s, log)
 		app.Providers["whoop"], app.Providers["wahoo"] = whoop, wahoo
 		w1 := &provider.Whoop{C: whoop, In: ing, Loc: loc}
 		w2 := &provider.Wahoo{C: wahoo, In: ing}

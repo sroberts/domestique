@@ -111,13 +111,40 @@ func readSecretFile(key, p string) (string, error) {
 
 // Client performs authenticated requests, refreshing tokens as needed.
 type Client struct {
-	Cfg   Config
 	Store *store.Store
 	HTTP  *http.Client
 	Log   *slog.Logger
 
 	mu     sync.Mutex
 	status Status
+	cfg    Config
+	from   string // FromManifest | FromSettings | FromNone
+}
+
+// Config returns the provider's current OAuth application.
+func (c *Client) Config() Config {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg
+}
+
+// CredentialsFrom says where the client credentials came from.
+func (c *Client) CredentialsFrom() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.from
+}
+
+// SetCredentials replaces the client ID and secret (empty clears them) and
+// wakes the sync loop so a newly set-up provider starts without a restart.
+func (c *Client) SetCredentials(id, secret, from string) {
+	c.mu.Lock()
+	c.cfg.ClientID, c.cfg.ClientSecret, c.from = id, secret, from
+	if id == "" {
+		c.from = FromNone
+	}
+	c.mu.Unlock()
+	c.SyncNow()
 }
 
 // Status is what the Settings screen shows for a provider.
@@ -128,10 +155,19 @@ type Status struct {
 	LastSync   int64  `json:"last_sync"`
 	LastError  string `json:"last_error,omitempty"`
 	Syncing    bool   `json:"syncing"`
+	// Where the client ID and secret came from: "manifest", "settings" or ""
+	// (none). The secret itself is never returned.
+	CredentialsFrom string `json:"credentials_from"`
+	ClientID        string `json:"client_id,omitempty"`
 }
 
-func NewClient(cfg Config, st *store.Store, log *slog.Logger) *Client {
-	return &Client{Cfg: cfg, Store: st, HTTP: &http.Client{Timeout: 60 * time.Second}, Log: log,
+// NewClient makes a provider client; from says where cfg's credentials came
+// from (FromManifest, FromSettings, or FromNone when there are none).
+func NewClient(cfg Config, from string, st *store.Store, log *slog.Logger) *Client {
+	if !cfg.Configured() {
+		from = FromNone
+	}
+	return &Client{cfg: cfg, from: from, Store: st, HTTP: &http.Client{Timeout: 60 * time.Second}, Log: log,
 		status: Status{Provider: cfg.Name}}
 }
 
@@ -139,10 +175,13 @@ func (c *Client) Status(ctx context.Context) Status {
 	c.mu.Lock()
 	s := c.status
 	c.mu.Unlock()
-	s.Configured = c.Cfg.Configured()
-	_, err := c.Store.GetToken(ctx, c.Cfg.Name)
+	cfg := c.Config()
+	s.Configured = cfg.Configured()
+	s.CredentialsFrom = c.CredentialsFrom()
+	s.ClientID = cfg.ClientID
+	_, err := c.Store.GetToken(ctx, c.cfg.Name)
 	s.Connected = err == nil
-	if v, err := c.Store.SyncState(ctx, c.Cfg.Name+":last_sync"); err == nil {
+	if v, err := c.Store.SyncState(ctx, c.cfg.Name+":last_sync"); err == nil {
 		s.LastSync, _ = strconv.ParseInt(v, 10, 64)
 	}
 	return s
@@ -159,23 +198,23 @@ func (c *Client) AuthorizeURL(ctx context.Context, redirectURI string) (string, 
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
 	state := hex.EncodeToString(b) // 24 chars; Whoop needs at least 8
-	if err := c.Store.SetSyncState(ctx, c.Cfg.Name+":oauth_state",
+	if err := c.Store.SetSyncState(ctx, c.cfg.Name+":oauth_state",
 		state+" "+strconv.FormatInt(time.Now().Unix(), 10)+" "+redirectURI); err != nil {
 		return "", err
 	}
 	q := url.Values{
 		"response_type": {"code"},
-		"client_id":     {c.Cfg.ClientID},
+		"client_id":     {c.Config().ClientID},
 		"redirect_uri":  {redirectURI},
-		"scope":         {strings.Join(c.Cfg.Scopes, " ")},
+		"scope":         {strings.Join(c.Config().Scopes, " ")},
 		"state":         {state},
 	}
-	return c.Cfg.AuthURL + "?" + q.Encode(), nil
+	return c.Config().AuthURL + "?" + q.Encode(), nil
 }
 
 // Exchange completes the flow with the authorization code.
 func (c *Client) Exchange(ctx context.Context, code, state string) error {
-	saved, err := c.Store.SyncState(ctx, c.Cfg.Name+":oauth_state")
+	saved, err := c.Store.SyncState(ctx, c.cfg.Name+":oauth_state")
 	if err != nil {
 		return errors.New("no sign-in in progress; start again from Settings")
 	}
@@ -194,14 +233,14 @@ func (c *Client) Exchange(ctx context.Context, code, state string) error {
 	if err != nil {
 		return err
 	}
-	_ = c.Store.SetSyncState(ctx, c.Cfg.Name+":oauth_state", "used")
+	_ = c.Store.SetSyncState(ctx, c.cfg.Name+":oauth_state", "used")
 	return c.Store.PutToken(ctx, tok)
 }
 
 func (c *Client) tokenRequest(ctx context.Context, form url.Values) (store.Token, error) {
-	form.Set("client_id", c.Cfg.ClientID)
-	form.Set("client_secret", c.Cfg.ClientSecret)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Cfg.TokenURL, strings.NewReader(form.Encode()))
+	form.Set("client_id", c.Config().ClientID)
+	form.Set("client_secret", c.Config().ClientSecret)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Config().TokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return store.Token{}, err
 	}
@@ -214,7 +253,7 @@ func (c *Client) tokenRequest(ctx context.Context, form url.Values) (store.Token
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
-		return store.Token{}, fmt.Errorf("%s token endpoint: %d %s", c.Cfg.Name, resp.StatusCode, truncate(string(body), 200))
+		return store.Token{}, fmt.Errorf("%s token endpoint: %d %s", c.cfg.Name, resp.StatusCode, truncate(string(body), 200))
 	}
 	var t struct {
 		AccessToken  string `json:"access_token"`
@@ -223,12 +262,12 @@ func (c *Client) tokenRequest(ctx context.Context, form url.Values) (store.Token
 		Scope        string `json:"scope"`
 	}
 	if err := json.Unmarshal(body, &t); err != nil || t.AccessToken == "" {
-		return store.Token{}, fmt.Errorf("%s token endpoint: unreadable response", c.Cfg.Name)
+		return store.Token{}, fmt.Errorf("%s token endpoint: unreadable response", c.cfg.Name)
 	}
 	if t.ExpiresIn == 0 {
 		t.ExpiresIn = 3600
 	}
-	return store.Token{Provider: c.Cfg.Name, AccessToken: t.AccessToken, RefreshToken: t.RefreshToken,
+	return store.Token{Provider: c.cfg.Name, AccessToken: t.AccessToken, RefreshToken: t.RefreshToken,
 		ExpiresAt: time.Now().Add(time.Duration(t.ExpiresIn) * time.Second).UnixMilli(), Scope: t.Scope}, nil
 }
 
@@ -238,7 +277,7 @@ var ErrNotConnected = errors.New("not connected")
 // token returns a valid access token, refreshing just before use. Refresh
 // tokens may be single-use (Wahoo), so the new one is saved immediately.
 func (c *Client) token(ctx context.Context) (string, error) {
-	t, err := c.Store.GetToken(ctx, c.Cfg.Name)
+	t, err := c.Store.GetToken(ctx, c.cfg.Name)
 	if errors.Is(err, store.ErrNotFound) {
 		return "", ErrNotConnected
 	} else if err != nil {
@@ -248,10 +287,10 @@ func (c *Client) token(ctx context.Context) (string, error) {
 		return t.AccessToken, nil
 	}
 	if t.RefreshToken == "" {
-		return "", fmt.Errorf("%s session expired; reconnect in Settings", c.Cfg.Name)
+		return "", fmt.Errorf("%s session expired; reconnect in Settings", c.cfg.Name)
 	}
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {t.RefreshToken}}
-	if c.Cfg.Name == "whoop" {
+	if c.cfg.Name == "whoop" {
 		form.Set("scope", "offline")
 	}
 	nt, err := c.tokenRequest(ctx, form)
@@ -289,15 +328,15 @@ func (c *Client) GetJSON(ctx context.Context, u string, v any) error {
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		// Force a refresh next time.
-		if t, err := c.Store.GetToken(ctx, c.Cfg.Name); err == nil {
+		if t, err := c.Store.GetToken(ctx, c.cfg.Name); err == nil {
 			t.ExpiresAt = 0
 			_ = c.Store.PutToken(ctx, t)
 		}
-		return fmt.Errorf("%s: unauthorized", c.Cfg.Name)
+		return fmt.Errorf("%s: unauthorized", c.cfg.Name)
 	}
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("%s %s: %d %s", c.Cfg.Name, u, resp.StatusCode, truncate(string(b), 200))
+		return fmt.Errorf("%s %s: %d %s", c.cfg.Name, u, resp.StatusCode, truncate(string(b), 200))
 	}
 	return json.NewDecoder(io.LimitReader(resp.Body, 32<<20)).Decode(v)
 }
@@ -313,11 +352,17 @@ func truncate(s string, n int) string {
 
 // Loop runs sync every interval until ctx ends, recording status.
 func (c *Client) Loop(ctx context.Context, interval time.Duration, sync func(context.Context) error, after func(context.Context)) {
-	if !c.Cfg.Configured() {
-		return
-	}
 	backoff := interval
 	for {
+		// Not set up yet: wait for credentials from Settings.
+		if !c.Config().Configured() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-c.kick():
+			}
+			continue
+		}
 		c.setStatus(func(s *Status) { s.Syncing = true })
 		err := sync(ctx)
 		c.setStatus(func(s *Status) {
@@ -331,7 +376,7 @@ func (c *Client) Loop(ctx context.Context, interval time.Duration, sync func(con
 		wait := interval
 		switch {
 		case err == nil:
-			_ = c.Store.SetSyncState(ctx, c.Cfg.Name+":last_sync", strconv.FormatInt(time.Now().UnixMilli(), 10))
+			_ = c.Store.SetSyncState(ctx, c.cfg.Name+":last_sync", strconv.FormatInt(time.Now().UnixMilli(), 10))
 			backoff = interval
 			if after != nil {
 				after(ctx)
@@ -339,7 +384,7 @@ func (c *Client) Loop(ctx context.Context, interval time.Duration, sync func(con
 		case errors.Is(err, ErrNotConnected):
 			wait = time.Minute // pick up a new connection quickly
 		case ctx.Err() == nil:
-			c.Log.Warn("sync failed", "provider", c.Cfg.Name, "err", err.Error())
+			c.Log.Warn("sync failed", "provider", c.cfg.Name, "err", err.Error())
 			backoff = min(backoff*2, 6*time.Hour)
 			wait = backoff
 		}
@@ -355,7 +400,7 @@ func (c *Client) Loop(ctx context.Context, interval time.Duration, sync func(con
 var kicks sync.Map // provider name -> chan struct{}
 
 func (c *Client) kick() chan struct{} {
-	ch, _ := kicks.LoadOrStore(c.Cfg.Name, make(chan struct{}, 1))
+	ch, _ := kicks.LoadOrStore(c.cfg.Name, make(chan struct{}, 1))
 	return ch.(chan struct{})
 }
 
