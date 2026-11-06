@@ -43,6 +43,14 @@
     });
     return out;
   });
+
+  // Form bars take the colour of their band, the same as Today's form tag.
+  function formState(tsb: number): string {
+    if (tsb > 5) return 'fresh';
+    if (tsb >= -10) return 'neutral';
+    if (tsb >= -30) return 'building';
+    return 'overreaching';
+  }
 </script>
 
 <div class="load" bind:clientWidth={width}>
@@ -58,7 +66,7 @@
   {#if width > 0 && days.length > 1}
     <svg {width} height={H1 + H2 + 22} onpointermove={move} onpointerdown={move} onpointerleave={() => (hover = null)}
       role="img" aria-label={`Fitness ${Math.round(days.at(-1)!.ctl)}, fatigue ${Math.round(days.at(-1)!.atl)}, form ${Math.round(days.at(-1)!.tsb)} today, over ${days.length} days.`}>
-      {#each ticks(0, top, 4) as v (v)}
+      {#each ticks(0, top, 4).filter((v) => v > 0) as v (v)}
         <line class="grid" x1={PAD.left} x2={PAD.left + plotW} y1={y1(v)} y2={y1(v)} />
         <text class="tick" x={PAD.left - 6} y={y1(v) + 4} text-anchor="end">{v}</text>
       {/each}
@@ -87,7 +95,7 @@
         <text class="tick" x={PAD.left - 6} y={y2(0) + 4} text-anchor="end">0</text>
         {#each days as d, i (d.date)}
           {@const yy = y2(d.tsb)}
-          <rect class="tsb" class:on={i === sel} x={xs[i]! - barW / 2} width={barW} y={Math.min(yy, y2(0))} height={Math.max(1, Math.abs(yy - y2(0)))} />
+          <rect class="tsb {formState(d.tsb)}" class:on={i === sel} x={xs[i]! - barW / 2} width={barW} y={Math.min(yy, y2(0))} height={Math.max(1, Math.abs(yy - y2(0)))} />
         {/each}
       </g>
       {#each monthTicks as m (m.x)}
@@ -127,17 +135,19 @@
     align-self: center;
     width: 1rem;
     height: 0;
-    border-top: 2px solid var(--text);
+    border-top: 2px solid var(--fitness);
   }
   .sw.fat {
     border-top-style: dashed;
-    border-top-color: var(--text-muted);
+    border-top-color: var(--fatigue);
   }
   .sw.frm {
     height: 0.625rem;
-    width: 0.375rem;
+    width: 0.625rem;
     border: 0;
-    background: var(--text-muted);
+    /* the four form bands, as one swatch */
+    background: linear-gradient(to bottom, var(--rec-green) 0 50%, var(--rec-amber) 50% 100%);
+    border-radius: 1px;
   }
   svg {
     display: block;
@@ -170,14 +180,15 @@
     stroke-linejoin: round;
   }
   .line.fit {
-    stroke: var(--text);
+    stroke: var(--fitness);
+    stroke-width: 2.25;
   }
   .line.fat {
-    stroke: var(--text-muted);
+    stroke: var(--fatigue);
     stroke-dasharray: 4 3;
   }
   .end {
-    fill: var(--text);
+    fill: var(--fitness);
     stroke: var(--bg);
     stroke-width: 2;
   }
@@ -191,7 +202,16 @@
     stroke: var(--line-strong);
   }
   .tsb {
-    fill: var(--text-muted);
+    fill: var(--zone-1);
+  }
+  .tsb.fresh {
+    fill: var(--rec-green);
+  }
+  .tsb.building {
+    fill: var(--rec-amber);
+  }
+  .tsb.overreaching {
+    fill: var(--rec-red);
   }
   .tsb.on {
     fill: var(--text);

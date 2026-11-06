@@ -67,9 +67,18 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 	out.Exercises = make([]store.Exercise, len(t.Exercises))
 	for i, ex := range t.Exercises {
 		ex.Sets = append([]store.TargetSet(nil), ex.Sets...)
-		hist, err := st.ExerciseHistory(ctx, ex.Name, 2)
+		raw, err := st.ExerciseHistory(ctx, ex.Name, 6)
 		if err != nil {
 			return t, err
+		}
+		// Only sessions that really trained this lift count: a session ended
+		// after one set, or sets tapped through in seconds, say nothing about
+		// whether the weight should go up.
+		var hist [][]store.Set
+		for _, h := range raw {
+			if c := Counted(h); len(c)*2 >= len(ex.Sets) && len(c) > 0 {
+				hist = append(hist, c)
+			}
 		}
 		change := ""
 		if len(hist) > 0 && len(hist[0]) > 0 {
@@ -79,15 +88,25 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 				lastW = math.Max(lastW, s.WeightKg)
 			}
 			when := time.UnixMilli(last[0].StartedAt).Format("Mon 2 Jan")
-			hit := hitAll(last)
-			missedTwice := !hit && len(hist) > 1 && !hitAll(hist[1])
+			hit := hitAll(last) && len(last) >= len(ex.Sets)
+			short := hitAll(last) && len(last) < len(ex.Sets)
+			missedTwice := !hit && !short && len(hist) > 1 && !hitAll(hist[1])
 			bodyweight := lastW == 0
+			// Bodyweight progression adds reps, so build on last session's
+			// target, not the template's, or it never gets past template+1.
 			targetReps := ex.Sets[0].Reps
+			if bodyweight {
+				for _, s := range last {
+					targetReps = max(targetReps, s.TargetReps)
+				}
+			}
 			w := lastW
 			switch {
 			case missedTwice && !bodyweight:
 				w = roundTo(lastW*0.9, 2.5)
 				change = fmt.Sprintf("Back off to %s kg: missed reps two sessions running", fmtKg(w))
+			case short:
+				change = fmt.Sprintf("Hold %s: %d of %d sets done on %s", fmtLoad(lastW), len(last), len(ex.Sets), when)
 			case !hit:
 				change = fmt.Sprintf("Hold %s: some sets fell short on %s", fmtLoad(lastW), when)
 			case r.Level == "hold" || r.Level == "easy":
@@ -122,6 +141,51 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 		out.Exercises[i] = ex
 	}
 	return out, nil
+}
+
+// MinSetSeconds is the shortest set that counts as lifting. Anything quicker
+// is a start-and-finish tap, not a set.
+const MinSetSeconds = 5
+
+// SecondsPerRep is the fastest believable pace: a set logged faster than this
+// was tapped through, whatever the reps say.
+const SecondsPerRep = 2
+
+// Real reports whether a logged set was plausibly lifted.
+func Real(s store.Set) bool {
+	min := int64(max(MinSetSeconds, SecondsPerRep*s.Reps)) * 1000
+	return s.EndedAt-s.StartedAt >= min
+}
+
+// Counted drops sets too short to be real.
+func Counted(sets []store.Set) []store.Set {
+	out := sets[:0:0]
+	for _, s := range sets {
+		if Real(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Progress is how much of a session's plan was actually lifted.
+type Progress struct {
+	Done    int `json:"done"`    // sets that were really lifted
+	Logged  int `json:"logged"`  // every set logged, taps included
+	Planned int `json:"planned"`
+}
+
+// Complete is true when at least half the planned sets were lifted: enough
+// to call today's session done.
+func (p Progress) Complete() bool { return p.Planned == 0 || p.Done*2 >= p.Planned }
+
+// ProgressOf counts real sets against the plan.
+func ProgressOf(plan []store.Exercise, sets []store.Set) Progress {
+	p := Progress{Done: len(Counted(sets)), Logged: len(sets)}
+	for _, e := range plan {
+		p.Planned += len(e.Sets)
+	}
+	return p
 }
 
 func hitAll(sets []store.Set) bool {

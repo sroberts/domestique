@@ -73,6 +73,14 @@ func ParseGPX(data []byte) (*Parsed, error) {
 
 // extInt finds <…:name>123</…:name> in an extensions blob, namespace-agnostic.
 func extInt(ext, name string) int32 {
+	if v, ok := extFloat(ext, name); ok {
+		return int32(v)
+	}
+	return Missing
+}
+
+// extFloat is extInt without truncation, for fractional values such as speed.
+func extFloat(ext, name string) (float64, bool) {
 	for _, open := range []string{":" + name + ">", "<" + name + ">"} {
 		i := strings.Index(ext, open)
 		if i < 0 {
@@ -84,10 +92,10 @@ func extInt(ext, name string) int32 {
 			continue
 		}
 		if v, err := strconv.ParseFloat(strings.TrimSpace(rest[:j]), 64); err == nil && v >= 0 {
-			return int32(v)
+			return v, true
 		}
 	}
-	return Missing
+	return 0, false
 }
 
 // ParseTCX reads a Garmin Training Center file.
@@ -147,8 +155,8 @@ func ParseTCX(data []byte) (*Parsed, error) {
 			if len(pt.Ext.Inner) > 0 {
 				ext := string(pt.Ext.Inner)
 				x.power = extInt(ext, "Watts")
-				if v := extInt(ext, "Speed"); v != Missing {
-					x.speed = float64(v)
+				if v, ok := extFloat(ext, "Speed"); ok {
+					x.speed = v // m/s, fractional
 				}
 			}
 			b.add(x)

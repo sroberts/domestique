@@ -152,7 +152,7 @@ func run() error {
 		app.Store = s
 		// Upload spools from a run that was stopped mid-import.
 		_ = os.RemoveAll(filepath.Join(storage, "tmp"))
-		ing := &ingest.Ingester{Store: s, StorageDir: storage, Log: log}
+		ing := &ingest.Ingester{Store: s, StorageDir: storage, Log: log, Loc: loc}
 		app.Ingest = ing
 		app.SetBackground(ctx)
 		if os.Getenv("DOMESTIQUE_DEMO") == "1" {
@@ -172,6 +172,7 @@ func run() error {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
+			remerge(ctx, s, ing, log)
 			for {
 				if _, err := load.Recalc(ctx, s, maxHR); err != nil && ctx.Err() == nil {
 					log.Warn("load recalc", "err", err.Error())
@@ -190,10 +191,32 @@ func run() error {
 		}()
 		after := func(context.Context) { app.Recalc() }
 
-		whoop := provider.NewClient(whoopCfg, s, log)
-		wahoo := provider.NewClient(wahooCfg, s, log)
+		// Credentials from the manifest win; otherwise any saved in Settings.
+		// A saved pair that can't be read is logged rather than fatal, so it
+		// can be re-entered from Settings.
+		saved := func(cfg provider.Config) (provider.Config, string) {
+			if cfg.Configured() {
+				return cfg, provider.FromManifest
+			}
+			id, secret, err := provider.LoadSaved(provider.SecretsDir(storage), cfg.Name)
+			if err != nil {
+				log.Error("saved credentials unreadable; enter them again in Settings", "provider", cfg.Name, "err", err.Error())
+				return cfg, provider.FromNone
+			}
+			cfg.ClientID, cfg.ClientSecret = id, secret
+			return cfg, provider.FromSettings
+		}
+		whoopCfg, whoopFrom := saved(whoopCfg)
+		wahooCfg, wahooFrom := saved(wahooCfg)
+		whoop := provider.NewClient(whoopCfg, whoopFrom, s, log)
+		wahoo := provider.NewClient(wahooCfg, wahooFrom, s, log)
 		app.Providers["whoop"], app.Providers["wahoo"] = whoop, wahoo
-		w1 := &provider.Whoop{C: whoop, In: ing, Loc: loc}
+		// Wahoo webhooks carry a shared token; make one on first run.
+		if err := wahoo.LoadWebhookToken(provider.SecretsDir(storage), false); err != nil {
+			log.Error("wahoo webhook token", "err", err.Error())
+		}
+		w1 := &provider.Whoop{C: whoop, In: ing, Loc: loc, After: after}
+		app.Whoop = w1
 		w2 := &provider.Wahoo{C: wahoo, In: ing}
 		workers.Add(2)
 		go func() { defer workers.Done(); whoop.Loop(ctx, 30*time.Minute, w1.Sync, after) }()
@@ -270,6 +293,13 @@ func runImport(args []string) error {
 	}
 	defer st.Close()
 	ing := &ingest.Ingester{Store: st, StorageDir: storage, Log: log}
+	if tz := os.Getenv("DOMESTIQUE_TZ"); tz != "" {
+		l, err := time.LoadLocation(tz)
+		if err != nil {
+			return fmt.Errorf("DOMESTIQUE_TZ: %w", err)
+		}
+		ing.Loc = l
+	}
 	for _, p := range args {
 		info, err := os.Stat(p)
 		if err != nil {
@@ -301,6 +331,7 @@ func runImport(args []string) error {
 			fmt.Printf("%s: activity %s (merged=%v duplicate=%v)\n", p, res.ActivityID, res.Merged, res.Duplicate)
 		}
 	}
+	remerge(ctx, st, ing, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	ath, err := load.Recalc(ctx, st, envInt("DOMESTIQUE_MAX_HR", 190))
 	if err != nil {
 		return err
@@ -340,4 +371,23 @@ func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 				"ms", time.Since(start).Milliseconds())
 		}
 	})
+}
+
+// remerge folds together recordings of one workout that an older, stricter
+// matching rule left apart. It runs once per rule.
+func remerge(ctx context.Context, s *store.Store, ing *ingest.Ingester, log *slog.Logger) {
+	if v, err := s.SyncState(ctx, "merge:rule"); err == nil && v == ingest.MergeRule {
+		return
+	}
+	changed, err := ing.Remerge(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Warn("re-merge", "err", err.Error())
+		}
+		return
+	}
+	if err := s.SetSyncState(ctx, "merge:rule", ingest.MergeRule); err != nil {
+		log.Warn("re-merge", "err", err.Error())
+	}
+	log.Info("re-merged recordings", "rule", ingest.MergeRule, "activities", len(changed))
 }

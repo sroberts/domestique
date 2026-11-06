@@ -1,13 +1,16 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import { router } from '../lib/router.svelte';
-  let { children }: { children: Snippet } = $props();
+  /** column: on wide screens, sit under the main column of a two-column page
+   * (Today) instead of straddling the gap between them. */
+  /** session: match the live session's tablet scale. */
+  let { children, column = false, session = false }: { children: Snippet; column?: boolean; session?: boolean } = $props();
 </script>
 
 <!-- The one action for this state, in the bottom thumb zone. -->
-<div class="spacer" class:tabs={router.chrome} aria-hidden="true"></div>
+<div class="spacer" class:tabs={router.chrome} class:session aria-hidden="true"></div>
 <div class="bar" class:tabs={router.chrome}>
-  <div class="inner">{@render children()}</div>
+  <div class="inner" class:column class:session><div class="stack">{@render children()}</div></div>
 </div>
 
 <style>
@@ -29,9 +32,31 @@
     background: linear-gradient(to top, var(--bg) 70%, transparent);
   }
   .inner {
-    max-width: 35rem;
+    max-width: var(--page-narrow);
     margin: 0 auto;
+  }
+  .stack {
     display: grid;
     gap: var(--space-2);
+  }
+  @media (min-width: 700px) and (min-height: 700px) {
+    .inner.session {
+      max-width: 46rem;
+    }
+    .spacer.session {
+      height: calc(var(--action-height) * 1.25 + var(--space-6) + env(safe-area-inset-bottom));
+    }
+    .inner.session :global(.btn-primary) {
+      min-height: calc(var(--action-height) * 1.25);
+      font-size: 1.5rem;
+    }
+  }
+  @media (min-width: 900px) {
+    .inner.column {
+      max-width: var(--page-wide);
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      column-gap: var(--space-7);
+    }
   }
 </style>

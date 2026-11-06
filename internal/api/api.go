@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"domestique/internal/auth"
@@ -30,6 +31,8 @@ type API struct {
 	Log       *slog.Logger
 	Loc       *time.Location
 	Providers map[string]*provider.Client
+	// Whoop handles Whoop webhooks; nil until the store is open.
+	Whoop *provider.Whoop
 	// Recalc asks for training load to be recomputed soon (debounced).
 	Recalc  func()
 	Uploads *Uploads
@@ -70,18 +73,19 @@ func (a *API) kickRecalc() {
 func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/today", a.today)
 	mux.HandleFunc("GET /v1/me", a.me)
-	mux.HandleFunc("GET /v1/templates", a.listTemplates)
-	mux.HandleFunc("GET /v1/templates/{id}", a.getTemplate)
-	mux.HandleFunc("PUT /v1/templates/{id}", a.putTemplate)
-	mux.HandleFunc("PUT /v1/plans/{date}", a.putPlan)
-	mux.HandleFunc("DELETE /v1/plans/{date}", a.deletePlan)
+	a.registerTemplates(mux)
 	mux.HandleFunc("PUT /v1/recovery/{date}", a.putRecovery)
 	mux.HandleFunc("GET /v1/sessions", a.listSessions)
 	mux.HandleFunc("PUT /v1/sessions/{id}", a.putSession)
+	mux.HandleFunc("DELETE /v1/sessions/{id}", a.deleteSession)
 	mux.HandleFunc("GET /v1/sessions/{id}/summary", a.summary)
+	mux.HandleFunc("PUT /v1/sessions/{id}/hr-shift", a.putHRShift)
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
+	a.registerWebhooks(mux)
+	a.registerExport(mux)
+	a.registerGear(mux)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such endpoint")
 	})
@@ -118,7 +122,7 @@ type todayResp struct {
 	Load      *load.Day          `json:"load"`
 	RampCTL   float64            `json:"ramp_ctl"` // fitness change over 7 days
 	Week      []load.Day         `json:"week"`     // Monday to today
-	Recent    []store.Session    `json:"recent"`
+	Recent    []sessionRow       `json:"recent"`
 	Latest    []ActivityRow      `json:"latest"`
 	Athlete   load.Athlete       `json:"athlete"`
 }
@@ -128,25 +132,18 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	// The athlete's local date comes from the device; the Mini's zone may differ.
 	date := r.URL.Query().Get("date")
 	if date == "" {
-		date = time.Now().Format("2006-01-02")
+		date = time.Now().In(a.loc()).Format("2006-01-02")
 	}
 	if !validDate(date) {
 		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
 		return
 	}
-	if a.demoOn(r) {
-		if err := a.Demo.EnsureDay(ctx, date); err != nil {
-			a.fail(w, r, err)
-			return
-		}
-	}
-	resp := todayResp{Date: date}
-	if rec, err := a.Store.GetRecovery(ctx, date); err == nil {
-		resp.Recovery = &rec
-	} else if !errors.Is(err, store.ErrNotFound) {
+	rec, series, readiness, err := a.dayReadiness(r, date)
+	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	resp := todayResp{Date: date, Recovery: rec, Readiness: readiness}
 	if id, err := a.Store.GetPlan(ctx, date); err == nil {
 		t, err := a.Store.GetTemplate(ctx, id)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -160,25 +157,23 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	recent, err := a.Store.RecentSessions(ctx, 5)
+	recent, err := a.sessionRows(ctx, 5)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	resp.Recent = recent
+	if resp.Plan == nil && resp.Readiness.Level == "normal" {
+		// Nothing planned: "train as planned" would answer a question nobody asked.
+		resp.Readiness.Title = "Good to train"
+		resp.Readiness.Detail = strings.Replace(resp.Readiness.Detail, "nothing in the way of today's plan.", "nothing in the way of a hard session.", 1)
+	}
 
 	// Load: form today, fitness ramp, and this week so far.
 	day, _ := time.ParseInLocation("2006-01-02", date, a.loc())
-	series, err := load.Daily(ctx, a.Store, day.AddDate(0, 0, -13), day, a.loc())
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	hasLoad := false
 	if n := len(series); n > 0 {
 		d := series[n-1]
 		resp.Load = &d
-		hasLoad = d.CTL > 5
 		if n >= 8 {
 			resp.RampCTL = math.Round((d.CTL-series[n-8].CTL)*10) / 10
 		}
@@ -187,11 +182,6 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 			resp.Week = series[n-1-wd:]
 		}
 	}
-	tsb := 0.0
-	if resp.Load != nil {
-		tsb = resp.Load.TSB
-	}
-	resp.Readiness = strength.AssessReadiness(resp.Recovery, tsb, hasLoad)
 	if resp.Plan != nil {
 		tpl := *resp.Plan
 		resp.Template = &tpl
@@ -216,111 +206,6 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Athlete = load.Current(ctx, a.Store, a.MaxHR)
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// ---- Templates and plans ------------------------------------------------------------
-
-func (a *API) listTemplates(w http.ResponseWriter, r *http.Request) {
-	ts, err := a.Store.ListTemplates(r.Context())
-	if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, ts)
-}
-
-func (a *API) getTemplate(w http.ResponseWriter, r *http.Request) {
-	t, err := a.Store.GetTemplate(r.Context(), r.PathValue("id"))
-	if errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusNotFound, "no such template")
-		return
-	} else if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func (a *API) putTemplate(w http.ResponseWriter, r *http.Request) {
-	var t store.Template
-	if !readJSON(w, r, &t) {
-		return
-	}
-	t.ID = r.PathValue("id")
-	if msg := validateTemplate(t); msg != "" {
-		writeErr(w, http.StatusBadRequest, msg)
-		return
-	}
-	t.UpdatedAt = time.Now().UnixMilli()
-	if err := a.Store.PutTemplate(r.Context(), t); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, t)
-}
-
-func validateTemplate(t store.Template) string {
-	switch {
-	case !idRe.MatchString(t.ID):
-		return "id must be 1-64 letters, digits, dashes or underscores"
-	case t.Name == "" || len(t.Name) > 80:
-		return "name is required (max 80 characters)"
-	case len(t.Exercises) == 0:
-		return "a template needs at least one exercise"
-	}
-	for _, e := range t.Exercises {
-		if e.Name == "" || len(e.Sets) == 0 {
-			return "every exercise needs a name and at least one set"
-		}
-		if e.RestSeconds < 0 || e.RestSeconds > 900 {
-			return "rest_seconds must be 0-900"
-		}
-		for _, s := range e.Sets {
-			if s.Reps < 1 || s.Reps > 100 || s.WeightKg < 0 || s.WeightKg > 1000 {
-				return "set reps must be 1-100 and weight_kg 0-1000"
-			}
-		}
-	}
-	return ""
-}
-
-func (a *API) putPlan(w http.ResponseWriter, r *http.Request) {
-	date := r.PathValue("date")
-	if !validDate(date) {
-		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
-		return
-	}
-	var body struct {
-		TemplateID string `json:"template_id"`
-	}
-	if !readJSON(w, r, &body) {
-		return
-	}
-	if _, err := a.Store.GetTemplate(r.Context(), body.TemplateID); errors.Is(err, store.ErrNotFound) {
-		writeErr(w, http.StatusBadRequest, "no such template")
-		return
-	} else if err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	if err := a.Store.PutPlan(r.Context(), date, body.TemplateID); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"date": date, "template_id": body.TemplateID})
-}
-
-func (a *API) deletePlan(w http.ResponseWriter, r *http.Request) {
-	date := r.PathValue("date")
-	if !validDate(date) {
-		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
-		return
-	}
-	if err := a.Store.DeletePlan(r.Context(), date); err != nil {
-		a.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) putRecovery(w http.ResponseWriter, r *http.Request) {
@@ -350,12 +235,34 @@ func (a *API) listSessions(w http.ResponseWriter, r *http.Request) {
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
 		limit = v
 	}
-	ss, err := a.Store.RecentSessions(r.Context(), limit)
+	ss, err := a.sessionRows(r.Context(), limit)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, ss)
+}
+
+// sessionRow is a finished session with how much of its plan was lifted.
+type sessionRow struct {
+	store.Session
+	Progress strength.Progress `json:"progress"`
+}
+
+func (a *API) sessionRows(ctx context.Context, limit int) ([]sessionRow, error) {
+	ss, err := a.Store.RecentSessions(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]sessionRow, len(ss))
+	for i, s := range ss {
+		sets, err := a.Store.SessionSets(ctx, s.ID)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = sessionRow{s, strength.ProgressOf(s.Plan, sets)}
+	}
+	return out, nil
 }
 
 func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
@@ -374,8 +281,12 @@ func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
 	case s.FinishedAt != nil && *s.FinishedAt < s.StartedAt:
 		writeErr(w, http.StatusBadRequest, "finished_at is before started_at")
 		return
+	case s.ClockOffsetMs < -maxClockOffset || s.ClockOffsetMs > maxClockOffset:
+		writeErr(w, http.StatusBadRequest, "clock_offset_ms is out of range")
+		return
 	}
-	s.Strain = nil // strain is Whoop's to set
+	s.Strain = nil    // strain is Whoop's to set
+	s.HRShiftMs = nil // set through /hr-shift, never by a replayed upload
 	if err := a.Store.PutSession(r.Context(), s); err != nil {
 		a.fail(w, r, err)
 		return
@@ -387,6 +298,62 @@ func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
 		a.kickRecalc()
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": s.ID})
+}
+
+// maxClockOffset bounds the phone's measured clock error. A phone more than
+// six hours out is misconfigured, not drifting.
+const maxClockOffset = 6 * 60 * 60 * 1000
+
+// putHRShift sets a manual heart rate alignment for a session, in ms
+// (positive moves heart rate earlier), or clears it with null to go back to
+// the automatic estimate.
+func (a *API) putHRShift(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idRe.MatchString(id) {
+		writeErr(w, http.StatusBadRequest, "bad session id")
+		return
+	}
+	var body struct {
+		ShiftMs *int64 `json:"shift_ms"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.ShiftMs != nil && (*body.ShiftMs < -5*strength.MaxShift || *body.ShiftMs > 5*strength.MaxShift) {
+		writeErr(w, http.StatusBadRequest, "shift_ms is out of range (±10 minutes)")
+		return
+	}
+	err := a.Store.SetHRShift(r.Context(), id, body.ShiftMs)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "no such session")
+		return
+	} else if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "shift_ms": body.ShiftMs})
+}
+
+// deleteSession discards a session started by mistake: the session, its sets,
+// and its place in the activity store and training load.
+func (a *API) deleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !idRe.MatchString(id) {
+		writeErr(w, http.StatusBadRequest, "bad session id")
+		return
+	}
+	if a.Ingest != nil {
+		if err := a.Ingest.RemoveSession(r.Context(), id); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
+	if err := a.Store.DeleteSession(r.Context(), id); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.kickRecalc()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (a *API) putSet(w http.ResponseWriter, r *http.Request) {
@@ -409,6 +376,16 @@ func (a *API) putSet(w http.ResponseWriter, r *http.Request) {
 	if err := a.Store.PutSet(r.Context(), s); err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	// A set edited (or synced late) after its session finished must reach the
+	// activity too, or its volume and set count go stale.
+	if a.Ingest != nil {
+		if sess, err := a.Store.GetSession(r.Context(), s.SessionID); err == nil && sess.FinishedAt != nil {
+			if err := a.Ingest.UpsertSession(r.Context(), sess.ID); err != nil {
+				a.Log.Warn("session to activity", "session", sess.ID, "err", err.Error())
+			}
+			a.kickRecalc()
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": s.ID})
 }
@@ -456,12 +433,38 @@ func (a *API) strengthSummary(r *http.Request, id string) (*strength.Summary, er
 	} else if n := len(sets); n > 0 {
 		end = sets[n-1].EndedAt
 	}
-	hr, err := a.Store.HR(ctx, sess.StartedAt-strength.HRPadding, end+strength.HRPadding)
+	// Heart rate lives on true time; fetch wide enough for the clock offset
+	// and any shift, line it up with the phone's set times, then trim.
+	off, margin := sess.ClockOffsetMs, int64(strength.MaxShift)
+	if m := sess.HRShiftMs; m != nil {
+		margin = max(margin, *m, -*m)
+	}
+	raw, err := a.Store.HR(ctx, sess.StartedAt+off-strength.HRPadding-margin, end+off+strength.HRPadding+margin)
 	if err != nil {
 		return nil, err
 	}
+	aligned, al := strength.Align(sess, sets, raw)
+	hr := aligned[:0:0]
+	for _, h := range aligned {
+		if h.T >= sess.StartedAt-strength.HRPadding && h.T <= end+strength.HRPadding {
+			hr = append(hr, h)
+		}
+	}
 	maxHR := load.Current(ctx, a.Store, a.MaxHR).MaxHR
 	sum := strength.Build(sess, sets, hr, maxHR)
+	sum.Alignment = al
+	if sum.HRStatus == "pending" && !a.demoOn(r) {
+		// Only promise heart rate when something is sending it: a source that
+		// has posted samples lately, and a session recent enough to still sync.
+		latest, err := a.Store.LatestHR(ctx)
+		if err != nil {
+			return nil, err
+		}
+		const window = 14 * 24 * time.Hour
+		if latest == 0 || time.Since(time.UnixMilli(latest)) > window || time.Since(time.UnixMilli(end)) > 24*time.Hour {
+			sum.HRStatus = "none"
+		}
+	}
 	return &sum, nil
 }
 
@@ -480,6 +483,9 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	// The phone measures its clock against this to line sets up with heart
+	// rate (Session.ClockOffsetMs). The Mac Mini keeps NTP time.
+	w.Header().Set("X-Server-Time", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }

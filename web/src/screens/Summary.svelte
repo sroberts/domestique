@@ -1,19 +1,38 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
+  import HrAlignment from '../components/HrAlignment.svelte';
+  import ExportMenu from '../components/ExportMenu.svelte';
   import HrTrace from '../components/HrTrace.svelte';
   import Stepper from '../components/Stepper.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import ZoneBar from '../components/ZoneBar.svelte';
   import { AuthError, HTTPError, OfflineError, fetchSummary } from '../lib/api';
+  import { sessionExports } from '../lib/export';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
-  import { link } from '../lib/router.svelte';
-  import { Workout } from '../lib/workout.svelte';
+  import { backTarget, link } from '../lib/router.svelte';
+  import { Workout, earlyText, endedEarly, progressOf } from '../lib/workout.svelte';
   import type { SetRecord, SetStat, Summary } from '../lib/types';
 
   let { id }: { id: string } = $props();
+  // Back goes where you came from; on a direct load, to this tab's list.
+  const back = backTarget({ href: '/activities', label: 'Activities' });
 
   let summary = $state<Summary | null>(null);
+  // "Done" ends a session just finished; elsewhere it would be a second Back.
+  // (The screen is keyed by id, so reading it once is correct.)
+  // svelte-ignore state_referenced_locally
+  const justFinished = consumeJustFinished(id);
+  function consumeJustFinished(sid: string): boolean {
+    try {
+      if (sessionStorage.getItem('domestique:just-finished') !== sid) return false;
+      sessionStorage.removeItem('domestique:just-finished');
+      return true;
+    } catch {
+      return false;
+    }
+  }
   let source = $state<'server' | 'local' | null>(null);
   let problem = $state<'offline' | 'auth' | 'unsynced' | 'missing' | null>(null);
   let workout = $state<Workout | null>(null);
@@ -37,6 +56,7 @@
       peak_bpm: 0,
       avg_bpm: 0,
       zone_seconds: [0, 0, 0, 0, 0, 0],
+      progress: progressOf(w.session.plan, sets),
       set_stats: sets.map((s, i) => ({
         set_id: s.id,
         has_hr: false,
@@ -64,6 +84,7 @@
         for (const l of workout.sets) if (!s.sets.some((x) => x.id === l.id)) s.sets.push({ ...l });
         s.sets.sort((a, b) => a.started_at - b.started_at);
         recompute(s);
+        s.progress = progressOf(s.session.plan, s.sets);
       }
       summary = s;
       source = 'server';
@@ -87,10 +108,12 @@
   }
 
   $effect(() => {
-    void load();
+    // untrack: load() reads `workout` before its first await, and assigning it
+    // would otherwise re-run this effect (a second fetch, a new interval).
+    untrack(() => void load());
     // Poll while heart rate hasn't arrived, and only while the screen is visible.
     const t = setInterval(() => {
-      if (document.visibilityState === 'visible' && (summary?.hr_status !== 'ready' || problem)) void load();
+      if (document.visibilityState === 'visible' && (summary?.hr_status === 'pending' || problem)) void load();
     }, 10_000);
     return () => clearInterval(t);
   });
@@ -126,8 +149,11 @@
 
 <main class="summary">
   <header class="top">
-    <a class="btn btn-quiet back" href="/" use:link><ChevronLeft size={20} aria-hidden="true" /> Today</a>
-    <SyncStatus />
+    <a class="btn btn-quiet back" href={back.href} use:link><ChevronLeft size={20} aria-hidden="true" /> {back.label}</a>
+    <span class="top-end">
+      <SyncStatus />
+      {#if summary && source === 'server'}<ExportMenu items={sessionExports(summary.session.id, summary.hr_status === 'ready')} />{/if}
+    </span>
   </header>
 
   {#if !summary && problem === 'missing'}
@@ -146,6 +172,9 @@
     <p class="mono meta">
       {day(summary.session.started_at)} · {time(summary.session.started_at)}–{time(end)} · {duration(summary.duration_s)}
     </p>
+    {#if endedEarly(summary.progress)}
+      <p class="early">{earlyText(summary.progress)}</p>
+    {/if}
 
     {#if source === 'local'}
       <p class="notice">
@@ -163,8 +192,8 @@
     </dl>
 
     <section class="hr" aria-labelledby="hr-h">
+      <h2 id="hr-h" class="block-h">Heart rate by set</h2>
       <div class="readout" aria-live="polite">
-        <h2 id="hr-h" class="visually-hidden">Heart rate by set</h2>
         {#if sel}
           <p class="ro-main">
             <span>Set {sel.set_index + 1} · {sel.exercise_name}</span>
@@ -179,10 +208,13 @@
             <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
           {/if}
         {:else}
-          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order.'}</p>
+          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order. Touch one to read it.'}</p>
         {/if}
       </div>
       <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
+      {#if summary.hr_status === 'ready' && source === 'server' && summary.alignment}
+        <HrAlignment sessionId={id} alignment={summary.alignment} onchange={load} />
+      {/if}
     </section>
 
     {#if summary.hr_status === 'ready'}
@@ -225,7 +257,7 @@
                 </span>
                 <span role="cell" class="r">
                   {#if st?.has_hr}
-                    <span class="zone-tag"><span class="sw" style:background={`var(--zone-${Math.max(1, st.zone)})`} aria-hidden="true"></span><span class="num">{st.peak_bpm}</span><span class="visually-hidden"> bpm, zone {st.zone}</span></span>
+                    <span class="zone-tag"><span class="num">{st.peak_bpm}</span><span class="sw" style:background={`var(--zone-${Math.max(1, st.zone)})`} aria-hidden="true"></span><span class="zl">Z{st.zone}</span><span class="visually-hidden"> bpm</span></span>
                   {:else}<span class="dim">–</span>{/if}
                 </span>
                 <span role="cell" class="r">{#if st?.has_hr}<span class="num">−{st.recovery_drop}</span>{:else}<span class="dim">–</span>{/if}</span>
@@ -249,25 +281,27 @@
         {/each}
       </div>
       {#if summary.hr_status === 'ready'}
-        <p class="mono muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
+        <p class="muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
       {/if}
     </section>
   {/if}
 </main>
 
-<ActionBar>
-  <a class="btn btn-primary" href="/" use:link>Back to today</a>
-</ActionBar>
+{#if justFinished}
+  <ActionBar>
+    <a class="btn btn-primary" href="/" use:link>Done</a>
+  </ActionBar>
+{/if}
 
 <style>
   .summary {
-    max-width: 35rem;
+    max-width: var(--page-narrow);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
   @media (min-width: 900px) {
     .summary {
-      max-width: 60rem;
+      max-width: var(--page-wide);
     }
   }
   .top {
@@ -278,6 +312,11 @@
   .back {
     margin-left: calc(var(--space-2) * -1);
     text-decoration: none;
+  }
+  .top-end {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
   .gone {
     display: grid;
@@ -365,6 +404,23 @@
     font-weight: 600;
     font-size: var(--size-small);
   }
+  .zl {
+    font-size: var(--size-label);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .early {
+    display: inline-block;
+    margin-top: var(--space-2);
+    padding: 0.125rem var(--space-2);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+    font-size: var(--size-small);
+    font-weight: 600;
+  }
+  .summary {
+    overflow-x: clip;
+  }
   .zone-tag .num {
     font-size: var(--size-lead);
   }
@@ -411,6 +467,9 @@
     padding-bottom: var(--space-1);
     border-bottom: 1px solid var(--line-strong);
     border-radius: 0;
+      margin: 0;
+    padding-left: 0;
+    padding-right: 0;
   }
   .tr:not(.th):hover {
     background: var(--band);

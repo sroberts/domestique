@@ -1,5 +1,7 @@
 /* Domestique design tokens: "Team Car".
-   Colors are the spec's committed palette. Dark is the default theme. */
+   Colors are the spec's committed palette. Dark is the default theme.
+   Color carries meaning (recovery, sport, zones, chart roles) and shows it
+   at full strength; signal yellow stays the one action. */
 
 :root,
 :root[data-theme='dark'] {
@@ -18,6 +20,8 @@
   --on-plate: #16171a;
   --band: rgb(236 232 223 / 0.06);
   --band-active: rgb(236 232 223 / 0.14);
+  --set-band: rgb(236 232 223 / 0.12);       /* sets on the HR trace */
+  --set-band-active: rgb(236 232 223 / 0.24);
   --zone-1: #7d8590;
   --zone-2: #4f8fd9;
   --zone-3: #45b07a;
@@ -31,6 +35,17 @@
   --sport-other: #3fa88a;
   --grid: #2a2d33;
   --map-style: 'dark';
+  /* Recovery, at full strength: slabs carry dark ink (all >= 5:1) */
+  --rec-green: #4fc283;
+  --rec-amber: #f2b43d;
+  --rec-red: #f0656a;
+  --on-color: #16171a;
+  /* Ink on a solid sport block */
+  --on-sport: #16171a;
+  /* Chart roles (validated for CVD, band and contrast on graphite) */
+  --fitness: #8c78ec;
+  --fatigue: #de5a78;
+  --power: #8c78ec;
 }
 
 :root[data-theme='light'] {
@@ -49,6 +64,8 @@
   --on-plate: #f4f1ea;
   --band: rgb(27 28 31 / 0.05);
   --band-active: rgb(27 28 31 / 0.12);
+  --set-band: rgb(27 28 31 / 0.08);
+  --set-band-active: rgb(27 28 31 / 0.18);
   --zone-1: #7d8590;
   --zone-2: #2f6fb9;
   --zone-3: #2a8a57;
@@ -57,10 +74,18 @@
   --danger: #c8323a;
   --focus: #8e6a00;
   --sport-ride: #2f6fb9;
-  --sport-strength: #b8661a;
-  --sport-other: #238a6a;
+  --sport-strength: #a65b14;
+  --sport-other: #0f7f5c;
   --grid: #e7e2d6;
   --map-style: 'positron';
+  --rec-green: #3fae73;
+  --rec-amber: #e9a326;
+  --rec-red: #e5575d;
+  --on-color: #1b1c1f;
+  --on-sport: #ffffff;
+  --fitness: #6a55d8;
+  --fatigue: #c9476a;
+  --power: #6a55d8;
 }
 
 :root {
@@ -90,6 +115,10 @@
   --space-7: 3rem;
   --space-8: 4rem;
   --gutter: 1rem;
+  /* Page widths: phone column, list screens, analysis screens on iPad/Mac */
+  --page-narrow: 35rem;
+  --page-list: 40rem;
+  --page-wide: 60rem;
 
   /* Shape: tape and painted plates, barely rounded */
   --radius-s: 3px;

@@ -143,6 +143,58 @@ var migrations = []string{
 		scope         TEXT NOT NULL DEFAULT ''
 	);
 	`,
+	// 3: clock alignment between the phone's set timestamps and heart rate
+	`
+	ALTER TABLE sessions ADD COLUMN clock_offset_ms INTEGER NOT NULL DEFAULT 0; -- server minus device clock, measured on the phone
+	ALTER TABLE sessions ADD COLUMN hr_shift_ms INTEGER;                       -- manual HR alignment; NULL = automatic
+	`,
+	// 4: gear. Distances and hours are computed from activities, never stored,
+	// so reassigning a ride recomputes everything.
+	`
+	CREATE TABLE bikes (
+		id               TEXT PRIMARY KEY,
+		name             TEXT NOT NULL,
+		aliases          TEXT NOT NULL DEFAULT '[]', -- JSON []string: names other apps use (Strava's gear name)
+		default_ride     INTEGER NOT NULL DEFAULT 0, -- default bike for outdoor rides
+		default_virtual  INTEGER NOT NULL DEFAULT 0, -- default bike for indoor and virtual rides
+		start_distance_m REAL NOT NULL DEFAULT 0,    -- distance before Domestique knew of it
+		retired          INTEGER NOT NULL DEFAULT 0,
+		created_at       INTEGER NOT NULL,
+		updated_at       INTEGER NOT NULL
+	);
+	CREATE TABLE components (
+		id               TEXT PRIMARY KEY,
+		bike_id          TEXT NOT NULL REFERENCES bikes(id),
+		kind             TEXT NOT NULL,              -- chain, tyres, cassette, brake_pads, other
+		name             TEXT NOT NULL DEFAULT '',
+		installed_at     INTEGER NOT NULL,           -- epoch ms; rides from then on count
+		removed_at       INTEGER,                    -- epoch ms; NULL while fitted
+		replace_at_m     REAL NOT NULL DEFAULT 0,    -- 0 = no target
+		start_distance_m REAL NOT NULL DEFAULT 0,
+		replaced_by      TEXT,                       -- the component fitted in its place
+		created_at       INTEGER NOT NULL,
+		updated_at       INTEGER NOT NULL
+	);
+	CREATE INDEX components_bike ON components(bike_id);
+	CREATE TABLE sensors (
+		id             TEXT PRIMARY KEY,
+		name           TEXT NOT NULL,
+		kind           TEXT NOT NULL DEFAULT 'hr_strap',
+		device_match   TEXT NOT NULL DEFAULT '',     -- device name substring; '' = any non-Whoop heart rate
+		battery_at     INTEGER NOT NULL,             -- epoch ms the battery was replaced
+		battery_life_h REAL NOT NULL,
+		retired        INTEGER NOT NULL DEFAULT 0,
+		created_at     INTEGER NOT NULL,
+		updated_at     INTEGER NOT NULL
+	);
+	-- A manual choice of bike for one ride. No foreign key to activities: an
+	-- activity can be merged away, and that must not fail on this table.
+	CREATE TABLE activity_bikes (
+		activity_id TEXT PRIMARY KEY,
+		bike_id     TEXT,                            -- NULL = no bike (a hire bike, a spin class)
+		updated_at  INTEGER NOT NULL
+	);
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

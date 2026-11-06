@@ -37,6 +37,19 @@
     });
     return out;
   }
+  // Only the sports that happened, named as load: "ride 120, strength 30".
+  let split = $derived(
+    cur
+      ? [
+          ['ride', cur.ride_tss],
+          ['strength', cur.strength_tss],
+          ['other', cur.other_tss],
+        ]
+          .filter(([, v]) => Math.round(Number(v)) > 0)
+          .map(([k, v]) => `${k} ${Math.round(Number(v))}`)
+          .join(', ')
+      : '',
+  );
 </script>
 
 <div class="weeks" bind:clientWidth={width}>
@@ -47,7 +60,7 @@
     <p class="read" aria-live="polite">
       <span class="mono when">{hover == null ? 'This week' : `Week of ${day(new Date(cur.start + 'T12:00').getTime())}`}</span>
       <strong class="num">{Math.round(total(cur))}</strong> TSS · {cur.hours} h{#if cur.ride_km} · {cur.ride_km} km{/if}
-      <span class="muted">({Math.round(cur.ride_tss)} ride, {Math.round(cur.strength_tss)} strength{cur.other_tss ? `, ${Math.round(cur.other_tss)} other` : ''})</span>
+      {#if split}<span class="muted">({split})</span>{/if}
     </p>
   {/if}
   {#if width > 0}

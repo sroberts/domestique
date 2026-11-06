@@ -6,6 +6,14 @@ mcp         = true
 restart_policy = "on-failure"
 start_grace_seconds = 30
 
-# Provider apps: the client IDs aren't secret; secrets are read from files so
-# they never sit in the manifest. Folders are watched for new FIT files.
+# Whoop's and Wahoo's servers can't sign in to Outpost, so their webhook paths
+# skip the login. Domestique checks each request itself (Whoop: HMAC signature
+# with the client secret; Wahoo: the webhook token) and a webhook can only ask
+# for a sync, never supply data. Nothing else is public.
+public_paths = ["/v1/webhooks/whoop", "/v1/webhooks/wahoo"]
+
+# Provider apps: the client IDs aren't secret; secrets are read only from the
+# files named here (mode 600; see README "Secrets"). Never put a secret in env:
+# a DOMESTIQUE_*_CLIENT_SECRET set directly is refused at start.
+# Folders are watched for new FIT files.
 env = { DOMESTIQUE_WHOOP_CLIENT_ID = "", DOMESTIQUE_WHOOP_CLIENT_SECRET_FILE = "~/.config/domestique/whoop-secret", DOMESTIQUE_WAHOO_CLIENT_ID = "", DOMESTIQUE_WAHOO_CLIENT_SECRET_FILE = "~/.config/domestique/wahoo-secret", DOMESTIQUE_WATCH_DIRS = "~/Dropbox/Apps/WahooFitness:~/Documents/Zwift/Activities" }

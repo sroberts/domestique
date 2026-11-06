@@ -31,12 +31,17 @@
     return 'all';
   }
 
+  let generation = 0;
+
   async function load(reset: boolean) {
+    // A reply for a filter the athlete has already left must not land.
+    const gen = reset ? ++generation : generation;
     loading = true;
     const q = new URLSearchParams({ limit: '40' });
     if (filter !== 'all') q.set('sport', filter);
     if (!reset && next) q.set('before', String(next));
     const res = await fetchActivities('?' + q.toString());
+    if (gen !== generation) return;
     if (res.data) {
       rows = reset ? res.data.activities : [...rows, ...res.data.activities];
       next = res.data.next_before;
@@ -56,9 +61,11 @@
     void load(true);
   });
 
+  // A week this heavy fills its stripe.
+  const WEEK_FULL = 500;
   // Group by ISO week (Monday start), with totals per week.
   let weeks = $derived.by(() => {
-    const out: { key: string; label: string; rows: Row[]; hours: number; tss: number; km: number }[] = [];
+    const out: { key: string; label: string; rows: Row[]; hours: number; tss: number; km: number; by: Record<'ride' | 'strength' | 'other', number> }[] = [];
     for (const r of rows) {
       const d = new Date(r.start_at);
       const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
@@ -71,12 +78,13 @@
           monday.getTime() === thisMon.getTime() ? 'This week'
           : monday.getTime() === thisMon.getTime() - 7 * 86400000 ? 'Last week'
           : `Week of ${day(monday.getTime())}`;
-        w = { key, label, rows: [], hours: 0, tss: 0, km: 0 };
+        w = { key, label, rows: [], hours: 0, tss: 0, km: 0, by: { ride: 0, strength: 0, other: 0 } };
         out.push(w);
       }
       w.rows.push(r);
       w.hours += (r.moving_s || r.elapsed_s) / 3600;
       w.tss += r.tss;
+      w.by[r.sport === 'ride' || r.sport === 'virtual_ride' ? 'ride' : r.sport === 'strength' ? 'strength' : 'other'] += r.tss;
       if (r.sport === 'ride' || r.sport === 'virtual_ride') w.km += r.distance_m / 1000;
     }
     return out;
@@ -126,6 +134,13 @@
         <span>{w.label}</span>
         <span class="mono muted">{[duration(w.hours * 3600), w.km >= 1 ? `${Math.round(w.km)} km` : '', `${Math.round(w.tss)} TSS`].filter(Boolean).join(' · ')}</span>
       </h2>
+      <!-- The week's load as a kit stripe: length is load (full at 500 TSS),
+           split by sport. The numbers above say the same in words. -->
+      <div class="stripe" aria-hidden="true">
+        {#each (['ride', 'strength', 'other'] as const) as k (k)}
+          {#if w.by[k] > 0}<span class="seg sport-{k}" style:flex-basis={`${Math.min(100, (w.by[k] / WEEK_FULL) * 100)}%`}></span>{/if}
+        {/each}
+      </div>
       {#each w.rows as r (r.id)}
         <ActivityRow a={r} />
       {/each}
@@ -141,9 +156,14 @@
 
 <style>
   .page {
-    max-width: 40rem;
+    max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
+  }
+  @media (min-width: 900px) {
+    .page {
+      max-width: var(--page-wide);
+    }
   }
   .top {
     display: flex;
@@ -164,7 +184,7 @@
   }
   .chip {
     flex: none;
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     padding: 0 var(--space-4);
     border: 1px solid var(--line-strong);
     border-radius: 999px;
@@ -196,8 +216,27 @@
     align-items: baseline;
     gap: var(--space-2);
     padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--line-strong);
     font-size: var(--size-body);
+  }
+  .stripe {
+    display: flex;
+    gap: 2px;
+    height: 4px;
+    background: var(--line);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .seg {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 2px;
+    background: var(--sport-other);
+  }
+  .seg.sport-ride {
+    background: var(--sport-ride);
+  }
+  .seg.sport-strength {
+    background: var(--sport-strength);
   }
   .week-h .mono {
     font-size: var(--size-label);

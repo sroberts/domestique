@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -158,5 +159,58 @@ func TestIngestMergeAndStravaExport(t *testing.T) {
 	raws, _ := filepath.Glob(filepath.Join(dir, "raw", "*", "*"))
 	if len(raws) != 3 { // fit, gpx, fit.gz
 		t.Errorf("raw archive has %d files, want 3: %v", len(raws), raws)
+	}
+}
+
+// The same Strava activity from a newer export (different bytes, same ID)
+// stays one activity; it must not leave the first copy behind as an orphan.
+func TestReimportSameSourceKeepsActivity(t *testing.T) {
+	in, st, _ := setup(t)
+	ctx := context.Background()
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0"?><gpx creator="StravaGPX"><trk><type>1</type><trkseg>`)
+	for i := 0; i < 600; i++ {
+		fmt.Fprintf(&b, `<trkpt lat="%.5f" lon="-73.0"><time>%s</time></trkpt>`, 45+float64(i)*0.0001,
+			time.Date(2024, 5, 1, 10, 0, i, 0, time.UTC).Format(time.RFC3339))
+	}
+	b.WriteString(`</trkseg></trk></gpx>`)
+	h := ingest.Hint{Source: "strava", ExternalID: "42", Name: "Loop"}
+	r1, err := in.Ingest(ctx, "42.gpx", []byte(b.String()), "strava-export", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2, err := in.Ingest(ctx, "42.gpx", []byte(b.String()+"\n"), "strava-export", h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acts, err := st.ListActivities(ctx, store.ActivityQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r1.ActivityID != r2.ActivityID || len(acts) != 1 {
+		t.Fatalf("re-import split the activity: %s vs %s, %d activities", r1.ActivityID, r2.ActivityID, len(acts))
+	}
+	// Reported as already there, not as a new activity.
+	if r1.Refreshed || !r2.Refreshed || r2.Merged {
+		t.Fatalf("first import refreshed=%v; re-import refreshed=%v merged=%v", r1.Refreshed, r2.Refreshed, r2.Merged)
+	}
+}
+
+// A small gzip that inflates past the file limit is refused, not decoded.
+func TestGzipBombRefused(t *testing.T) {
+	in, _, dir := setup(t)
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	chunk := make([]byte, 1<<20)
+	for i := 0; i < ingest.MaxFileBytes>>20+1; i++ {
+		_, _ = zw.Write(chunk)
+	}
+	zw.Close()
+	_, err := in.Ingest(context.Background(), "bomb.fit.gz", buf.Bytes(), "upload", ingest.Hint{Source: "upload"})
+	if !errors.Is(err, ingest.ErrTooLarge) {
+		t.Fatalf("got %v, want ErrTooLarge", err)
+	}
+	if m, _ := filepath.Glob(filepath.Join(dir, "raw", "*", "*")); len(m) != 0 {
+		t.Fatalf("bomb was stored: %v", m)
 	}
 }

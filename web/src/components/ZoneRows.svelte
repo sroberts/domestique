@@ -14,9 +14,9 @@
 
 <ul class="zones">
   {#each rows as r (r.label)}
-    <li>
+    <li class:empty={r.seconds === 0}>
       <span class="z">{r.label}{#if r.hint}<span class="hint muted">{r.hint}</span>{/if}</span>
-      <span class="track"><span class="bar" style:width={`${(r.seconds / max) * 100}%`} style:background={r.color}></span></span>
+      <span class="track">{#if r.seconds > 0}<span class="bar" style:width={`${(r.seconds / max) * 100}%`} style:background={r.color}></span>{/if}</span>
       <span class="mono t">{clock(r.seconds)}</span>
       <span class="mono pct muted">{total ? Math.round((r.seconds / total) * 100) : 0}%</span>
     </li>
@@ -56,6 +56,10 @@
     height: 100%;
     min-width: 2px;
     border-radius: 0 3px 3px 0;
+  }
+  li.empty .t,
+  li.empty .pct {
+    color: var(--text-muted);
   }
   .t,
   .pct {

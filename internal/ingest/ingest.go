@@ -33,7 +33,10 @@ type Ingester struct {
 	Store      *store.Store
 	StorageDir string
 	Log        *slog.Logger
-	mu         sync.Mutex
+	// Loc is the athlete's time zone, for default names ("Morning Ride").
+	// Nil means the process's local zone.
+	Loc *time.Location
+	mu  sync.Mutex
 }
 
 // Hint carries what the origin knows beyond the file itself, e.g. the
@@ -46,6 +49,7 @@ type Hint struct {
 	Description string
 	Route       string
 	Strain      *float64
+	Gear        string // the bike the origin recorded (Strava's "Activity Gear")
 }
 
 // Result reports what an import did.
@@ -53,11 +57,38 @@ type Result struct {
 	SourceID   string `json:"source_id"`
 	ActivityID string `json:"activity_id"`
 	Duplicate  bool   `json:"duplicate"` // the exact file was already imported
-	Merged     bool   `json:"merged"`    // joined an existing activity
+	// Refreshed: a source already known (the same Strava activity from a
+	// newer export, whose bytes differ) was updated in place, not added.
+	Refreshed bool `json:"refreshed,omitempty"`
+	Merged    bool `json:"merged"` // joined an existing activity
+}
+
+// MaxFileBytes bounds one activity file, compressed or not. A day-long 1 Hz
+// ride is a few megabytes of FIT or a few tens of GPX; parsing expands a file
+// many times over in memory, so anything far beyond that is refused rather
+// than decoded (a gzip or zip bomb, or simply the wrong file).
+const MaxFileBytes = 64 << 20
+
+// ErrTooLarge is returned for a file over MaxFileBytes.
+var ErrTooLarge = fmt.Errorf("file is larger than %d MB", MaxFileBytes>>20)
+
+// ReadLimited reads all of r, failing with ErrTooLarge past MaxFileBytes.
+func ReadLimited(r io.Reader) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, MaxFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > MaxFileBytes {
+		return nil, ErrTooLarge
+	}
+	return b, nil
 }
 
 // Ingest imports one file. name is used for its extension (.fit, .gpx.gz, ...).
 func (in *Ingester) Ingest(ctx context.Context, name string, data []byte, origin string, h Hint) (Result, error) {
+	if len(data) > MaxFileBytes {
+		return Result{}, fmt.Errorf("%s: %w", filepath.Base(name), ErrTooLarge)
+	}
 	in.mu.Lock()
 	defer in.mu.Unlock()
 
@@ -141,6 +172,9 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 	if h.Strain != nil {
 		extra["strain"] = *h.Strain
 	}
+	if g := strings.TrimSpace(h.Gear); g != "" {
+		extra["gear"] = g
+	}
 	extra["format"] = p.Format
 	src.Extra, _ = json.Marshal(extra)
 	switch {
@@ -153,9 +187,17 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 		src.ID = "manual:" + randID()
 	}
 
-	// Find the activity this records, if one exists.
-	actID, merged, err := in.match(ctx, src, &p.Stream)
-	if err != nil {
+	// Find the activity this records, if one exists. A source seen before
+	// (the same Strava activity from a newer export, whose bytes differ) stays
+	// with its activity; matching afresh would skip its own old record and
+	// strand the old activity with no sources.
+	var actID string
+	var merged, refreshed bool
+	if prev, err := in.Store.GetSource(ctx, src.ID); err == nil {
+		actID, refreshed = prev.ActivityID, true
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return Result{}, err
+	} else if actID, merged, err = in.match(ctx, src, &p.Stream); err != nil {
 		return Result{}, err
 	}
 	if actID == "" {
@@ -180,7 +222,7 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 	}
 	in.Log.Info("imported", "source", src.ID, "kind", src.Source, "sport", src.Sport,
 		"start", p.Start.Format(time.RFC3339), "activity", actID, "merged", merged)
-	return Result{SourceID: src.ID, ActivityID: actID, Merged: merged}, nil
+	return Result{SourceID: src.ID, ActivityID: actID, Merged: merged, Refreshed: refreshed}, nil
 }
 
 func (in *Ingester) saveRaw(ctx context.Context, sha, name string, data []byte, format, origin string) error {
@@ -223,7 +265,7 @@ func decode(name string, data []byte) (format string, plain []byte, err error) {
 		if err != nil {
 			return "", nil, fmt.Errorf("gunzip: %w", err)
 		}
-		if plain, err = io.ReadAll(io.LimitReader(zr, 256<<20)); err != nil {
+		if plain, err = ReadLimited(zr); err != nil {
 			return "", nil, fmt.Errorf("gunzip: %w", err)
 		}
 		l = strings.TrimSuffix(l, ".gz")
@@ -267,12 +309,10 @@ func randID() string {
 
 // ---- Matching ---------------------------------------------------------------------
 
-// MatchWindow and MatchOverlap are the spec's dedup rule: starts within two
-// minutes and durations overlapping by more than 80%.
-const (
-	MatchWindow  = 2 * 60 * 1000
-	MatchOverlap = 0.8
-)
+// MatchOverlap is the spec's dedup rule: two recordings are one workout when
+// their time spans overlap by at least 80% of the shorter one. Start times
+// alone aren't enough: Whoop detects a workout minutes after it starts.
+const MatchOverlap = 0.8
 
 func compatible(a, b string) bool {
 	if a == b {
@@ -282,18 +322,22 @@ func compatible(a, b string) bool {
 	if ride(a) && ride(b) {
 		return true
 	}
+	foot := func(s string) bool { return s == activity.SportWalk || s == activity.SportHike }
+	if foot(a) && foot(b) {
+		return true
+	}
 	// Whoop often labels a ride or lift loosely; "other" matches anything.
 	return a == activity.SportOther || b == activity.SportOther
 }
 
 func (in *Ingester) match(ctx context.Context, src store.Source, st *activity.Stream) (string, bool, error) {
-	cands, err := in.Store.SourcesNear(ctx, src.StartAt, MatchWindow)
+	cands, err := in.Store.SourcesOverlapping(ctx, src.StartAt, src.StartAt+int64(src.ElapsedS)*1000)
 	if err != nil {
 		return "", false, err
 	}
 	best, bestScore := "", 0.0
 	for _, c := range cands {
-		if c.ID == src.ID || !compatible(c.Sport, src.Sport) {
+		if c.ID == src.ID || (src.ActivityID != "" && c.ActivityID == src.ActivityID) || !compatible(c.Sport, src.Sport) {
 			continue
 		}
 		ov := overlap(src.StartAt, src.ElapsedS, c.StartAt, c.ElapsedS)
@@ -307,8 +351,12 @@ func (in *Ingester) match(ctx context.Context, src store.Source, st *activity.St
 			var other activity.Stream
 			if err := in.Store.GetStream(ctx, c.ID, &other); err == nil {
 				r, n := hrCorrelation(src.StartAt, st, c.StartAt, &other)
-				if n >= 120 && r < 0.3 {
-					continue // two different workouts that happen to coincide
+				// Two workouts that only partly coincide (one ends as the next
+				// starts) are told apart by heart rate. Near-total overlap is
+				// one workout whatever the correlation: one athlete can't do
+				// two at once, and a steady walk barely moves heart rate.
+				if n >= 120 && r < 0.3 && ov < 0.95 {
+					continue
 				}
 				if n >= 120 {
 					score += r
@@ -385,7 +433,10 @@ func (in *Ingester) AddWhoopWorkout(ctx context.Context, id string, start time.T
 		extra["strain"] = *h.Strain
 	}
 	srcID := "whoop:" + id
+	// One critical section: releasing the lock between the lookup and the
+	// insert would let two syncs both create the workout.
 	in.mu.Lock()
+	defer in.mu.Unlock()
 	if prev, err := in.Store.GetSource(ctx, srcID); err == nil {
 		prev.Extra, _ = json.Marshal(extra)
 		prev.ElapsedS = elapsedS
@@ -393,15 +444,13 @@ func (in *Ingester) AddWhoopWorkout(ctx context.Context, id string, start time.T
 		if err == nil {
 			err = in.Rebuild(ctx, prev.ActivityID)
 		}
-		in.mu.Unlock()
 		return Result{SourceID: srcID, ActivityID: prev.ActivityID, Duplicate: true}, err
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return Result{}, err
 	}
-	in.mu.Unlock()
 
 	p := &activity.Parsed{Start: start, ElapsedS: elapsedS, MovingS: elapsedS, DistanceM: distanceM,
 		Sport: activity.TextSport(h.Sport, false)}
-	in.mu.Lock()
-	defer in.mu.Unlock()
 	res, err := in.addParsed(ctx, p, nil, h)
 	if err != nil {
 		return res, err

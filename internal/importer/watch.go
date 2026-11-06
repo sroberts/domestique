@@ -70,8 +70,10 @@ func (w *Watcher) Scan(ctx context.Context) int {
 			if d.IsDir() || !isActivityFile(d.Name()) {
 				return nil
 			}
-			info, err := d.Info()
-			if err != nil {
+			info, err := os.Stat(p) // follows a symlink to what it names
+			// Regular files only: a FIFO named ride.fit would block the
+			// read forever, a device would never end.
+			if err != nil || !info.Mode().IsRegular() {
 				return nil
 			}
 			// A file still being written by Dropbox or Zwift settles first.
@@ -83,6 +85,11 @@ func (w *Watcher) Scan(ctx context.Context) int {
 			if prev, err := w.In.Store.SyncState(ctx, key); err == nil && prev == sig {
 				return nil
 			}
+			if info.Size() > ingest.MaxFileBytes {
+				w.In.Log.Warn("watch: file too large", "file", p, "bytes", info.Size())
+				_ = w.In.Store.SetSyncState(ctx, key, sig)
+				return nil
+			}
 			data, err := os.ReadFile(p)
 			if err != nil {
 				return nil
@@ -90,7 +97,7 @@ func (w *Watcher) Scan(ctx context.Context) int {
 			res, err := w.In.Ingest(ctx, p, data, "watch:"+dir, ingest.Hint{Source: "watch"})
 			if err != nil {
 				w.In.Log.Warn("watch: import failed", "file", p, "err", err.Error())
-			} else if !res.Duplicate {
+			} else if !res.Duplicate && !res.Refreshed {
 				added++
 			}
 			// Remember the file even if it failed, so a bad file isn't retried every minute.

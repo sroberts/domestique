@@ -21,10 +21,61 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 | `DOMESTIQUE_WHOOP_CLIENT_ID`, `DOMESTIQUE_WHOOP_CLIENT_SECRET_FILE` | Whoop developer app (scopes incl. `offline`) |
 | `DOMESTIQUE_WAHOO_CLIENT_ID`, `DOMESTIQUE_WAHOO_CLIENT_SECRET_FILE` | Wahoo Cloud API app |
 | `DOMESTIQUE_WATCH_DIRS` | `:`-separated folders polled for FIT/GPX/TCX files |
-| `DOMESTIQUE_PUBLIC_URL` | Override the OAuth redirect base (default: the address you browsed from) |
+| `DOMESTIQUE_PUBLIC_URL` | The address Domestique is served at, e.g. `https://domestique.tail1234.ts.net`. Sets the OAuth redirect base (default: the address you browsed from) and, behind the gateway, pins the identity token's audience so another service on the machine can't replay its own tokens here. Set it. |
+| `DOMESTIQUE_ALLOWED_HOSTS` | Comma-separated extra host names Domestique is reached at (a renamed node, a custom name). Behind the gateway they are accepted audiences; without it, requests for any other non-local name are refused (DNS-rebinding guard) |
 | `DOMESTIQUE_TZ` | Athlete's time zone for days and weeks (default: system) |
 | `DOMESTIQUE_MAX_HR` | Fallback max HR until one is detected (default 190) |
 | `DOMESTIQUE_DEMO=1` | Stand-in Whoop data until Whoop is connected |
+
+### Secrets
+
+The easy way: Settings → Connections → **Set up Whoop** (or Wahoo), paste the
+app's client ID and secret, Save. Domestique writes them to
+`OUTPOST_STORAGE_DIR/secrets/` (directory `700`, files `600`), applies them
+without a restart, and never sends the secret back to the browser. Replace or
+Remove from the same place; removing also disconnects. They travel with
+backups of the storage directory, like the OAuth tokens.
+
+Or name the files in the manifest, which takes precedence and locks the
+Settings form. Client secrets are read only from files; the manifest is plaintext and its
+`env` is visible in the process table, so a `DOMESTIQUE_*_CLIENT_SECRET` set
+directly in the environment stops Domestique at start. On the Mac Mini:
+
+    mkdir -p ~/.config/domestique && chmod 700 ~/.config/domestique
+    (umask 077; pbpaste > ~/.config/domestique/whoop-secret)   # copy the secret first
+    (umask 077; pbpaste > ~/.config/domestique/wahoo-secret)
+
+Each file must be non-empty and readable only by you (mode `600`); a
+group- or world-readable file is refused, as ssh refuses a loose key. Client
+IDs aren't secret and go in the manifest. OAuth access and refresh tokens are
+kept in the SQLite database under `OUTPOST_STORAGE_DIR` (mode `600`), are never
+returned by the API, MCP or exports, and are dropped by Settings → Disconnect.
+
+### Webhooks (optional)
+
+Polling always runs (Whoop every 30 minutes, Wahoo every 15). Webhooks bring
+new data within seconds; for Whoop they also pass deletions on, which polling
+can't. Settings → Connections → Webhooks shows what to enter for each.
+
+- **Whoop**: in the developer dashboard add
+  `<your Domestique address>/v1/webhooks/whoop`, model version **v2**.
+  Requests must carry a valid `X-WHOOP-Signature` (HMAC-SHA256 of timestamp +
+  body with the client secret, timestamp within 2 hours). Updates trigger a
+  sync; a deleted workout, sleep or recovery is removed here too.
+- **Wahoo**: in the developer portal turn webhooks on with
+  `<your Domestique address>/v1/webhooks/wahoo` and the webhook token Settings
+  shows (Domestique makes one on first run, kept in
+  `OUTPOST_STORAGE_DIR/secrets/wahoo-webhook-token`; Settings can replace it).
+  Wahoo signs nothing, so a matching token only triggers a Wahoo sync over the
+  authenticated API; the FIT URL in the payload is never fetched.
+- `outpost.toml` lists exactly those two paths in `public_paths`, so the
+  gateway lets the providers' unauthenticated POSTs through; everything else
+  under `/v1/` still needs a login. Bursts are batched into one sync after 10
+  seconds and redeliveries are dropped.
+- Both call from the public internet. A tailnet-only address (`*.ts.net`
+  without Funnel) can't receive them; Outpost doesn't offer Funnel yet, so this
+  needs the gateway reachable at a public hostname. Without that, leave the
+  webhook URLs unset and polling carries on alone.
 
 OAuth redirect URIs to register: `<your Domestique address>/v1/oauth/whoop/callback`
 and `/v1/oauth/wahoo/callback`. Connect from Settings in the app.
@@ -41,3 +92,21 @@ Import does the same from a browser.
 Whoop's API has no heart-rate time series. Post samples to `POST /v1/hr`
 (`{"source":"health","samples":[{"t":<ms or ISO time>,"bpm":123}]}`), e.g. from
 an iOS Shortcut reading Apple Health, and sessions in that window are re-analysed.
+
+### Clock alignment
+
+Sets are timestamped by the phone; heart rate carries the strap's or watch's
+clock. Two corrections line them up before a session is analysed:
+
+1. **Phone clock.** Every `/v1` response carries `X-Server-Time` (ms). The PWA
+   brackets it with the request's round trip, keeps the median of recent quick
+   readings, and sends it as `clock_offset_ms` (server minus phone) with each
+   session upload. The session's activity is placed on true time with it.
+2. **Heart rate source.** The summary predicts the heart rate curve the logged
+   sets should produce and finds the shift (within ±2 minutes) where the recorded
+   curve fits it best. It applies the shift only when the fit is strong and
+   clearly beats any other shift; shifts under 5 s are left alone. The result is
+   in the summary's `alignment` field (`source`: `auto`, `manual` or `none`).
+   Override it with `PUT /v1/sessions/{id}/hr-shift` and `{"shift_ms": 12000}`
+   (positive moves heart rate earlier), or `{"shift_ms": null}` to go back to
+   automatic. The Summary screen's "Adjust" control does the same.

@@ -1,14 +1,18 @@
 <script lang="ts">
   import CalendarDays from '@lucide/svelte/icons/calendar-days';
+  import Dumbbell from '@lucide/svelte/icons/dumbbell';
   import List from '@lucide/svelte/icons/list';
   import TrendingUp from '@lucide/svelte/icons/trending-up';
+  import Bike from '@lucide/svelte/icons/bike';
   import Settings from '@lucide/svelte/icons/settings-2';
   import { link, router } from '../lib/router.svelte';
 
   const tabs = [
     { href: '/', label: 'Today', icon: CalendarDays, match: ['today'] },
+    { href: '/workouts', label: 'Workouts', icon: Dumbbell, match: ['workouts', 'workout'] },
     { href: '/activities', label: 'Activities', icon: List, match: ['activities', 'activity', 'summary'] },
     { href: '/trends', label: 'Trends', icon: TrendingUp, match: ['trends'] },
+    { href: '/gear', label: 'Gear', icon: Bike, match: ['gear'] },
     { href: '/settings', label: 'Settings', icon: Settings, match: ['settings'] },
   ];
 </script>
@@ -38,7 +42,8 @@
   }
   ul {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     max-width: 35rem;
     margin: 0 auto;
     padding: 0;
@@ -52,7 +57,7 @@
     height: var(--tabbar-h);
     color: var(--text-muted);
     text-decoration: none;
-    font-size: 0.6875rem;
+    font-size: var(--size-label);
     font-weight: 600;
     letter-spacing: 0.02em;
   }
@@ -61,5 +66,13 @@
   }
   a:active {
     background: var(--band);
+  }
+  /* Six tabs on the narrowest phones: drop the tracking and a size step so
+     "Workouts" and "Activities" don't run together. */
+  @media (max-width: 374px) {
+    a {
+      font-size: 0.6875rem;
+      letter-spacing: 0;
+    }
   }
 </style>

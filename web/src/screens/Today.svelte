@@ -2,12 +2,14 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import ActionBar from '../components/ActionBar.svelte';
   import ActivityRow from '../components/ActivityRow.svelte';
+  import GearReminder from '../components/GearReminder.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, fetchToday, localDate } from '../lib/api';
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
   import { day, duration, recoveryBand, time, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
-  import { beginSession, estimateMinutes } from '../lib/workout.svelte';
+  import { fetchTemplates } from '../lib/templates';
+  import { beginSession, complete, estimateMinutes } from '../lib/workout.svelte';
   import type { LocalSession, Today } from '../lib/types';
 
   type Load = 'loading' | 'fresh' | 'stale' | 'none' | 'auth';
@@ -35,6 +37,7 @@
       today = await fetchToday(date);
       load = 'fresh';
       await cacheToday($state.snapshot(today) as Today);
+      void fetchTemplates(); // keep the workout list on the phone for offline starts
     } catch (err) {
       const cached = await cachedToday(date);
       if (cached) {
@@ -49,6 +52,12 @@
   let plan = $derived(today?.plan ?? null);
   let totalSets = $derived(plan ? plan.exercises.reduce((n, e) => n + e.sets.length, 0) : 0);
   let ld = $derived(today?.load ?? null);
+  // Today's planned session, already done.
+  let doneToday = $derived(
+    plan && today
+      ? (today.recent.find((r) => r.template_id === plan.id && r.finished_at && complete(r.progress) && localDate(new Date(r.started_at)) === date) ?? null)
+      : null,
+  );
   let hasLoad = $derived(!!ld && ld.ctl > 1);
 
   // Monday to Sunday, today marked; days still to come drawn empty.
@@ -76,6 +85,12 @@
     const repText = reps.size === 1 ? `${sets.length} × ${sets[0]!.reps}` : `${sets.length} sets`;
     const kgText = kgs.size === 1 ? weight(sets[0]!.weight_kg) : `${weight(Math.min(...kgs))}–${weight(Math.max(...kgs))}`;
     return { reps: repText, kg: kgText };
+  }
+
+  /** h:mm, rounding to the minute first so 7:59:40 reads 8:00, not 7:60. */
+  function sleepText(seconds: number): string {
+    const mins = Math.round(seconds / 60);
+    return `${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}`;
   }
 
   function formWord(tsb: number): string {
@@ -119,66 +134,41 @@
       <button class="btn" onclick={() => refresh()}>Try again</button>
     </section>
   {:else if today}
-    <!-- The call for the day: recovery and form in one sentence -->
-    <section class="call call-{today.readiness.level}" aria-labelledby="call-h">
+    <div class="cols">
+      <div class="col-main">
+    <!-- The call for the day, painted in the recovery colour like a race
+         graphic: the score, then the verdict in one sentence. -->
+    <section class="call band-{band ?? 'none'}" aria-labelledby="call-h">
+      <p class="call-rec">
+        <span class="call-k">Recovery</span>
+        {#if today.recovery && band}
+          <span class="num call-pct">{today.recovery.score}<span class="pct">%</span></span>
+          <span class="visually-hidden"> ({band})</span>
+        {:else}
+          <span class="call-none">Not scored yet</span>
+        {/if}
+      </p>
       <h1 id="call-h" class="call-title">{today.readiness.title}</h1>
       <p class="call-detail">{today.readiness.detail}</p>
     </section>
 
     <section class="body" aria-label="Recovery and sleep">
-      <div class="rec">
-        <h2 class="label">Recovery</h2>
-        {#if today.recovery && band}
-          <p class="rec-score num"><span class="swatch sw-{band}" aria-hidden="true"></span><span>{today.recovery.score}<span class="pct">%</span></span><span class="visually-hidden"> ({band})</span></p>
-        {:else}
-          <p class="muted small">Not scored yet</p>
-        {/if}
-      </div>
       <dl class="vitals">
         {#if today.recovery}
           <div><dt class="label">HRV</dt><dd><span class="num">{today.recovery.hrv_ms}</span><span class="unit">ms</span></dd></div>
           <div><dt class="label">Resting</dt><dd><span class="num">{today.recovery.resting_hr}</span><span class="unit">bpm</span></dd></div>
         {/if}
         {#if today.sleep}
-          <div><dt class="label">Sleep</dt><dd><span class="num">{Math.floor(today.sleep.asleep_s / 3600)}:{String(Math.round((today.sleep.asleep_s % 3600) / 60)).padStart(2, '0')}</span>{#if today.sleep.performance != null}<span class="unit">{today.sleep.performance}%</span>{/if}</dd></div>
+          <div><dt class="label">Sleep</dt><dd><span class="num">{sleepText(today.sleep.asleep_s)}</span>{#if today.sleep.performance != null}<span class="unit">{today.sleep.performance}%</span>{/if}</dd></div>
         {/if}
       </dl>
     </section>
-
-    {#if hasLoad && ld}
-      <section class="form" aria-labelledby="form-h">
-        <h2 id="form-h" class="sec-h">Training load <a class="more" href="/trends" use:link>Trends <ChevronRight size={16} aria-hidden="true" /></a></h2>
-        <dl class="figs">
-          <div><dt class="label">Fitness</dt><dd><span class="num">{Math.round(ld.ctl)}</span>{#if today.ramp_ctl}<span class="unit">{today.ramp_ctl > 0 ? '+' : ''}{today.ramp_ctl} in 7 days</span>{/if}</dd></div>
-          <div><dt class="label">Fatigue</dt><dd><span class="num">{Math.round(ld.atl)}</span></dd></div>
-          <div><dt class="label">Form</dt><dd><span class="num">{ld.tsb > 0 ? '+' : ''}{Math.round(ld.tsb)}</span><span class="unit">{formWord(ld.tsb)}</span></dd></div>
-        </dl>
-        <div class="week" role="img" aria-label={`This week so far: ${Math.round(weekTSS)} TSS over ${weekHours.toFixed(1)} hours`}>
-          {#each week as w, i (i)}
-            <div class="wday" class:now={w.isToday} class:future={!w.d}>
-              <div class="wbar">
-                {#if w.d}
-                  {#each segs(w.d) as s (s.k)}
-                    <span class="seg seg-{s.k}" style:height={`${(s.v / w.max) * 100}%`}></span>
-                  {/each}
-                {/if}
-              </div>
-              <span class="mono wn">{w.n}</span>
-            </div>
-          {/each}
-          <p class="mono wsum"><span class="num">{Math.round(weekTSS)}</span>TSS · {weekHours.toFixed(1)} h</p>
-        </div>
-        <p class="legend small">
-          <span><span class="lk seg-ride" aria-hidden="true"></span>Rides</span>
-          <span><span class="lk seg-strength" aria-hidden="true"></span>Strength</span>
-          <span><span class="lk seg-other" aria-hidden="true"></span>Other</span>
-        </p>
-      </section>
-    {/if}
-
     {#if plan}
       <section class="plan" aria-labelledby="plan-h">
-        <h2 id="plan-h" class="plan-name">{plan.name}</h2>
+        <div class="plan-head">
+          <h2 id="plan-h" class="plan-name">{plan.name}</h2>
+          <a class="more" href="/workouts" use:link aria-label="Change today's workout">Change</a>
+        </div>
         <p class="mono plan-meta">{plan.exercises.length} lifts · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
         <ol class="sheet">
           {#each plan.exercises as ex, i (i)}
@@ -199,9 +189,42 @@
     {:else}
       <section class="plan empty-plan" aria-labelledby="plan-h">
         <h2 id="plan-h" class="plan-name">No lift planned today</h2>
-        <p class="muted small">Ask Claude to plan one, or send a template for the date:</p>
-        <pre class="mono code">PUT /v1/plans/{date}
-{`{"template_id": "lower-a"}`}</pre>
+        <p class="muted small">Rest, or pick a workout to do today.</p>
+        <a class="btn pick" href="/workouts" use:link>Choose a workout</a>
+      </section>
+    {/if}
+
+      </div>
+      <div class="col-side">
+
+    {#if hasLoad && ld}
+      <section class="form" aria-labelledby="form-h">
+        <h2 id="form-h" class="sec-h">Training load <a class="more" href="/trends" use:link>Trends <ChevronRight size={16} aria-hidden="true" /></a></h2>
+        <dl class="figs">
+          <div><dt class="label">Fitness</dt><dd><span class="num">{Math.round(ld.ctl)}</span>{#if today.ramp_ctl}<span class="unit">{today.ramp_ctl > 0 ? '+' : ''}{today.ramp_ctl} in 7 days</span>{/if}</dd></div>
+          <div><dt class="label">Fatigue</dt><dd><span class="num">{Math.round(ld.atl)}</span></dd></div>
+          <div><dt class="label">Form</dt><dd><span class="num">{ld.tsb > 0 ? '+' : ''}{Math.round(ld.tsb)}</span><span class="state st-{formWord(ld.tsb)}">{formWord(ld.tsb)}</span></dd></div>
+        </dl>
+        <div class="week" role="img" aria-label={`This week so far: ${Math.round(weekTSS)} TSS over ${weekHours.toFixed(1)} hours`}>
+          {#each week as w, i (i)}
+            <div class="wday" class:now={w.isToday} class:future={!w.d}>
+              <div class="wbar">
+                {#if w.d}
+                  {#each segs(w.d) as s (s.k)}
+                    <span class="seg seg-{s.k}" style:height={`${(s.v / w.max) * 100}%`}></span>
+                  {/each}
+                {/if}
+              </div>
+              <span class="mono wn">{w.n}</span>
+            </div>
+          {/each}
+          <p class="mono wsum"><span class="label">Week</span><span class="num">{Math.round(weekTSS)}</span>TSS · {weekHours.toFixed(1)} h</p>
+        </div>
+        <p class="legend small">
+          <span><span class="lk seg-ride" aria-hidden="true"></span>Rides</span>
+          <span><span class="lk seg-strength" aria-hidden="true"></span>Strength</span>
+          <span><span class="lk seg-other" aria-hidden="true"></span>Other</span>
+        </p>
       </section>
     {/if}
 
@@ -213,24 +236,32 @@
         {/each}
       </section>
     {/if}
+    <GearReminder />
+      </div>
+    </div>
   {/if}
 </main>
 
 {#if active}
-  <ActionBar>
+  <ActionBar column>
     <a class="btn btn-primary" href={`/session/${active.id}`} use:link>
       Resume {active.name} · set {Math.min(activeDone + 1, totalOf(active))} of {totalOf(active)}
     </a>
   </ActionBar>
+{:else if plan && doneToday}
+  <ActionBar column>
+    <a class="btn btn-primary" href={`/session/${doneToday.id}/summary`} use:link>{plan.name} done · View summary</a>
+    <button class="btn btn-quiet again" onclick={start} disabled={starting}>Start {plan.name} again</button>
+  </ActionBar>
 {:else if plan}
-  <ActionBar>
+  <ActionBar column>
     <button class="btn btn-primary" onclick={start} disabled={starting}>Start {plan.name}</button>
   </ActionBar>
 {/if}
 
 <style>
   .today {
-    max-width: 35rem;
+    max-width: var(--page-narrow);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
@@ -278,26 +309,72 @@
     color: var(--text-muted);
   }
 
-  /* The call */
+  /* Phone: one column, plan first. iPad/Mac: verdict and plan beside the body. */
+  @media (min-width: 900px) {
+    .today {
+      max-width: var(--page-wide);
+    }
+    .cols {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      gap: var(--space-7);
+      align-items: start;
+    }
+    .col-side > :first-child {
+      margin-top: var(--space-5);
+    }
+  }
+
+  /* The call: a solid slab in the recovery colour, dark ink on it, like a
+     race graphic's caption. No score yet: a quiet raised slab. */
   .call {
     margin-top: var(--space-4);
-    padding: var(--space-4);
-    border: 1px solid var(--line-strong);
+    padding: var(--space-4) var(--space-4) var(--space-5);
     border-radius: var(--radius-m);
+    background: var(--surface-raised);
+    color: var(--text);
+    transition: background-color var(--dur-state) var(--ease-out);
   }
-  .call-easy {
-    border-color: var(--zone-5);
-    background: color-mix(in srgb, var(--zone-5) 8%, transparent);
+  .band-green {
+    background: var(--rec-green);
+    color: var(--on-color);
   }
-  .call-hold {
-    border-color: var(--zone-4);
-    background: color-mix(in srgb, var(--zone-4) 7%, transparent);
+  .band-yellow {
+    background: var(--rec-amber);
+    color: var(--on-color);
   }
-  .call-push {
-    border-color: var(--zone-3);
-    background: color-mix(in srgb, var(--zone-3) 7%, transparent);
+  .band-red {
+    background: var(--rec-red);
+    color: var(--on-color);
+  }
+  .call-rec {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .call-k {
+    font-size: var(--size-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+  .call-pct {
+    font-size: var(--size-live);
+    font-weight: 700;
+    line-height: 0.82;
+  }
+  .call-pct .pct {
+    font-size: var(--size-target);
+    font-weight: 600;
+    margin-left: 0.05em;
+  }
+  .call-none {
+    font-size: var(--size-small);
+    color: var(--text-muted);
   }
   .call-title {
+    margin-top: var(--space-3);
     font-size: var(--size-heading);
   }
   .call-detail {
@@ -312,34 +389,10 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: var(--space-4);
-    margin-top: var(--space-5);
+    margin-top: var(--space-4);
   }
-  .rec-score {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: 4.5rem;
-    font-weight: 700;
-    margin-top: var(--space-1);
-  }
-  .pct {
-    font-size: var(--size-target);
-    color: var(--text-muted);
-    font-weight: 600;
-  }
-  .swatch {
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: 2px;
-  }
-  .sw-green {
-    background: var(--zone-3);
-  }
-  .sw-yellow {
-    background: var(--zone-4);
-  }
-  .sw-red {
-    background: var(--zone-5);
+  .again {
+    min-height: 2.75rem;
   }
   .vitals {
     display: flex;
@@ -378,7 +431,8 @@
     font-weight: 600;
     color: var(--text-muted);
     text-decoration: none;
-    min-height: 2rem;
+    min-height: 2.75rem;
+    margin: -0.5rem 0;
   }
   .figs {
     display: grid;
@@ -458,6 +512,9 @@
     color: var(--text-muted);
     text-align: right;
   }
+  .wsum .label {
+    display: block;
+  }
   .wsum .num {
     display: block;
     font-size: var(--size-heading);
@@ -482,7 +539,7 @@
 
   /* Plan */
   .plan {
-    margin-top: var(--space-6);
+    margin-top: var(--space-5);
   }
   .plan-name {
     font-size: var(--size-heading);
@@ -531,14 +588,14 @@
     color: var(--signal);
     font-size: 0.7em;
   }
-  .code {
-    margin: var(--space-3) 0 0;
-    padding: var(--space-3) var(--space-4);
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-m);
-    font-size: var(--size-small);
-    overflow-x: auto;
+  .plan-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+  .pick {
+    margin-top: var(--space-3);
   }
   .empty-plan .small {
     margin-top: var(--space-2);

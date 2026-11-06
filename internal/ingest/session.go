@@ -30,7 +30,10 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 		return err
 	}
 	srcID := "app:" + sessionID
-	elapsed := int((*sess.FinishedAt - sess.StartedAt) / 1000)
+	// The phone's clock can be off; the offset it measured against ours
+	// puts the session on true time, where Whoop and ride files live.
+	start, end := sess.StartedAt+sess.ClockOffsetMs, *sess.FinishedAt+sess.ClockOffsetMs
+	elapsed := int((end - start) / 1000)
 
 	extra := map[string]any{"sets": len(sets)}
 	var volume float64
@@ -44,13 +47,17 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	extraJSON, _ := json.Marshal(extra)
 
 	// Slice heart rate for the session window into a stream.
-	hr, err := in.Store.HR(ctx, sess.StartedAt, *sess.FinishedAt)
+	hr, err := in.Store.HR(ctx, start, end)
 	if err != nil {
 		return err
 	}
 	var st activity.Stream
 	for _, h := range hr {
-		st.T = append(st.T, int32((h.T-sess.StartedAt)/1000))
+		t := int32((h.T - start) / 1000)
+		if n := len(st.T); n > 0 && t <= st.T[n-1] {
+			continue // sub-second samples, or two sources at once: one per second
+		}
+		st.T = append(st.T, t)
 		st.HR = append(st.HR, int32(h.BPM))
 	}
 
@@ -62,7 +69,7 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	} else if a, err := in.Store.ActivityBySession(ctx, sessionID); err == nil {
 		actID = a.ID
 	} else {
-		src := store.Source{ID: srcID, Sport: activity.SportStrength, StartAt: sess.StartedAt, ElapsedS: elapsed}
+		src := store.Source{ID: srcID, Sport: activity.SportStrength, StartAt: start, ElapsedS: elapsed}
 		if id, _, err := in.match(ctx, src, &st); err != nil {
 			return err
 		} else {
@@ -72,13 +79,13 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 	if actID == "" {
 		actID = "s_" + sessionID
 		if err := in.Store.PutActivity(ctx, store.Activity{ID: actID, Sport: activity.SportStrength, Name: sess.Name,
-			StartAt: sess.StartedAt, ElapsedS: elapsed, MovingS: elapsed, SessionID: &sessionID}); err != nil {
+			StartAt: start, ElapsedS: elapsed, MovingS: elapsed, SessionID: &sessionID}); err != nil {
 			return err
 		}
 	}
 	src := store.Source{
 		ID: srcID, ActivityID: actID, Source: "app", ExternalID: sessionID,
-		Sport: activity.SportStrength, Name: sess.Name, StartAt: sess.StartedAt,
+		Sport: activity.SportStrength, Name: sess.Name, StartAt: start,
 		ElapsedS: elapsed, MovingS: elapsed, HasHR: st.HasHR(), Extra: extraJSON,
 		ImportedAt: time.Now().UnixMilli(),
 	}
@@ -91,4 +98,43 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 		}
 	}
 	return in.Rebuild(ctx, actID)
+}
+
+// RemoveSession drops a discarded session from the activity store. If Whoop
+// also recorded the workout, that activity stays, without the app's sets.
+func (in *Ingester) RemoveSession(ctx context.Context, sessionID string) error {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	srcID := "app:" + sessionID
+	src, err := in.Store.GetSource(ctx, srcID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := in.Store.DeleteSource(ctx, srcID); err != nil {
+		return err
+	}
+	if err := in.Store.ClearSession(ctx, src.ActivityID); err != nil {
+		return err
+	}
+	return in.Rebuild(ctx, src.ActivityID)
+}
+
+// RemoveSource drops one source (a Whoop workout deleted at Whoop, say) and
+// rebuilds its activity from what's left, deleting the activity if nothing is.
+// A source that isn't stored is fine.
+func (in *Ingester) RemoveSource(ctx context.Context, srcID string) error {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	src, err := in.Store.GetSource(ctx, srcID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := in.Store.DeleteSource(ctx, srcID); err != nil {
+		return err
+	}
+	return in.Rebuild(ctx, src.ActivityID)
 }

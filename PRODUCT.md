@@ -19,7 +19,7 @@ Jobs to be done:
 
 ## Product Purpose
 
-Domestique is a self-hosted Outpost service on a Mac Mini. It imports workouts from Whoop, Wahoo, and Zwift automatically, stores raw and normalized data locally, and exposes it over REST and MCP. The PWA is the only place data is entered by hand, and it covers the live strength log, which no device records.
+Domestique is a self-hosted Outpost service on a home computer. It imports workouts from Whoop, Wahoo, and Zwift automatically, takes a one-time Strava bulk export for past history, combines recordings of the same workout into one, stores raw and normalized data locally, and exposes it over REST and MCP. The PWA is the only place data is entered by hand, and it covers the live strength log, which no device records.
 
 Success: a whole strength session gets logged with nothing but one tap per set, works with no signal in a basement gym, and later shows per-set heart rate effort and recovery without any manual reconciliation.
 

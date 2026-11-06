@@ -1,11 +1,13 @@
 <script lang="ts">
   import Sun from '@lucide/svelte/icons/sun';
   import Moon from '@lucide/svelte/icons/moon';
+  import ExportRange from '../components/ExportRange.svelte';
   import { AuthError, getJSON, putJSON } from '../lib/api';
   import { fetchConnections } from '../lib/data';
-  import { theme } from '../lib/device.svelte';
+  import { restSound, theme } from '../lib/device.svelte';
   import { relDay, time } from '../lib/format';
   import type { ProviderStatus } from '../lib/types';
+  import ProviderCredentials from '../components/ProviderCredentials.svelte';
 
   const params = new URLSearchParams(location.search);
   let flash = $state<{ ok: boolean; text: string } | null>(
@@ -35,6 +37,7 @@
   }
 
   let providers = $state<ProviderStatus[]>([]);
+  let soundOn = $state(restSound.on);
   let base = $state('');
   let offline = $state(false);
 
@@ -168,7 +171,6 @@
     whoop: 'Recovery, HRV, resting heart rate, sleep, workout strain and max heart rate. Checked every 30 minutes.',
     wahoo: 'The original FIT file of every ride from your ELEMNT: power, heart rate, cadence, GPS. Checked every 15 minutes.',
   };
-  const envName: Record<string, string> = { whoop: 'DOMESTIQUE_WHOOP', wahoo: 'DOMESTIQUE_WAHOO' };
   let hrURL = $derived(`${base || location.origin}/v1/hr`);
 </script>
 
@@ -190,10 +192,44 @@
           <button class="btn" type="submit">Sign out of Outpost</button>
         </form>
       {:else if !me.gateway}
-        <p class="muted small">No Outpost sign-in is in front of Domestique, so anyone who can reach this address can use it. Run it under Outpost with the login gateway on.</p>
+        <p class="warn small" role="note"><strong>No sign-in in front of Domestique.</strong> Anyone who can reach this address can use it. Run it under Outpost with the login gateway on.</p>
       {/if}
     </section>
   {/if}
+
+  <section class="block" aria-labelledby="thr-h">
+    <h2 id="thr-h">Thresholds</h2>
+    {#if ath}
+      <form class="thr" onsubmit={saveAthlete}>
+        <label>
+          <span class="label">FTP</span>
+          <span class="field">
+            <input class="mono" inputmode="numeric" pattern="[0-9]*" placeholder={ath.ftp_detected ? `Auto · ${ath.ftp_detected}` : 'Auto'} bind:value={ftpInput} aria-describedby="ftp-help" />
+            <span class="unit">W</span>
+          </span>
+          <span id="ftp-help" class="muted small">
+            {ath.ftp_detected ? `Detected ${ath.ftp_detected} W from your best 20 minutes.` : 'Detected once you ride with power.'} Leave blank to keep detecting.
+          </span>
+        </label>
+        <label>
+          <span class="label">Max heart rate</span>
+          <span class="field">
+            <input class="mono" inputmode="numeric" pattern="[0-9]*" placeholder={`Auto · ${ath.max_hr_whoop ?? ath.max_hr_detected ?? 190}`} bind:value={hrInput} aria-describedby="hr-help" />
+            <span class="unit">bpm</span>
+          </span>
+          <span id="hr-help" class="muted small">
+            {ath.max_hr_whoop ? `Whoop says ${ath.max_hr_whoop}.` : ath.max_hr_detected ? `Highest seen: ${ath.max_hr_detected}.` : ''} Zones and heart-rate load use this.
+          </span>
+        </label>
+        <div class="thr-act">
+          <button class="btn" type="submit" disabled={savingAth}>{savingAth ? 'Rescoring…' : 'Save'}</button>
+          {#if athMsg}<span class="small" role="status">{athMsg}</span>{/if}
+        </div>
+      </form>
+    {:else}
+      <p class="muted small">Needs a connection to the Mac Mini.</p>
+    {/if}
+  </section>
 
   <section class="block" aria-labelledby="conn-h">
     <h2 id="conn-h">Connections</h2>
@@ -211,16 +247,15 @@
               <p class="mono small muted">
                 {p.syncing ? 'Syncing now…' : p.last_sync ? `Last synced ${relDay(p.last_sync)} ${time(p.last_sync)}` : 'Waiting for first sync'}
               </p>
-            {/if}
-            {#if p.last_error}<p class="mono small err">{p.last_error}</p>{/if}
-            {#if !p.configured}
-              <p class="small">
-                Register an app with {cap(p.provider)}, then give Domestique <code class="mono">{envName[p.provider]}_CLIENT_ID</code>
-                and <code class="mono">{envName[p.provider]}_CLIENT_SECRET_FILE</code> (a path to a file holding the secret).
-                Redirect URI: <code class="mono">{base}/v1/oauth/{p.provider}/callback</code>
+              <p class="small muted">
+                {p.last_webhook
+                  ? `Webhooks on: last update pushed ${relDay(p.last_webhook)} ${time(p.last_webhook)}.`
+                  : `No webhooks yet, so new data arrives by checking every ${p.provider === 'whoop' ? 30 : 15} minutes.`}
               </p>
             {/if}
+            {#if p.last_error}<p class="mono small err">{p.last_error}</p>{/if}
           </div>
+          {#if p.connected || p.configured}
           <div class="conn-act">
             {#if p.connected}
               <button class="btn" onclick={() => syncNow(p.provider)} disabled={p.syncing}>Sync now</button>
@@ -230,6 +265,8 @@
               <a class="btn btn-connect" href={`/v1/oauth/${p.provider}/start`}>Connect {cap(p.provider)}</a>
             {/if}
           </div>
+          {/if}
+          <ProviderCredentials {p} {base} onchange={loadConnections} />
         </li>
       {/each}
     </ul>
@@ -251,7 +288,7 @@
         <p class="small"><strong>{j.name}</strong> · {j.state === 'running' ? 'importing' : j.state}</p>
         {#if j.progress.Total}
           <div class="meter" role="progressbar" aria-valuemin={0} aria-valuemax={j.progress.Total} aria-valuenow={j.progress.Done}>
-            <span style:width={`${(j.progress.Done / j.progress.Total) * 100}%`}></span>
+            <span style:transform={`scaleX(${j.progress.Done / j.progress.Total})`}></span>
           </div>
           <p class="mono small muted">
             {j.progress.Done} of {j.progress.Total} · {j.progress.Imported} new · {j.progress.Merged} merged · {j.progress.Duplicates} already here{j.progress.Failed ? ` · ${j.progress.Failed} unreadable` : ''}
@@ -267,38 +304,10 @@
     </p>
   </section>
 
-  <section class="block" aria-labelledby="thr-h">
-    <h2 id="thr-h">Thresholds</h2>
-    {#if ath}
-      <form class="thr" onsubmit={saveAthlete}>
-        <label>
-          <span class="label">FTP</span>
-          <span class="field">
-            <input class="mono" inputmode="numeric" pattern="[0-9]*" placeholder={ath.ftp_detected ? String(ath.ftp_detected) : 'auto'} bind:value={ftpInput} aria-describedby="ftp-help" />
-            <span class="unit">W</span>
-          </span>
-          <span id="ftp-help" class="muted small">
-            {ath.ftp_detected ? `Detected ${ath.ftp_detected} W from your best 20 minutes.` : 'Detected once you ride with power.'} Leave blank to keep detecting.
-          </span>
-        </label>
-        <label>
-          <span class="label">Max heart rate</span>
-          <span class="field">
-            <input class="mono" inputmode="numeric" pattern="[0-9]*" placeholder={String(ath.max_hr_whoop ?? ath.max_hr_detected ?? 190)} bind:value={hrInput} aria-describedby="hr-help" />
-            <span class="unit">bpm</span>
-          </span>
-          <span id="hr-help" class="muted small">
-            {ath.max_hr_whoop ? `Whoop says ${ath.max_hr_whoop}.` : ath.max_hr_detected ? `Highest seen: ${ath.max_hr_detected}.` : ''} Zones and heart-rate load use this.
-          </span>
-        </label>
-        <div class="thr-act">
-          <button class="btn" type="submit" disabled={savingAth}>{savingAth ? 'Rescoring…' : 'Save'}</button>
-          {#if athMsg}<span class="small" role="status">{athMsg}</span>{/if}
-        </div>
-      </form>
-    {:else}
-      <p class="muted small">Needs a connection to the Mac Mini.</p>
-    {/if}
+  <section class="block" aria-labelledby="exp-h">
+    <h2 id="exp-h">Export</h2>
+    <p class="muted small">Everything in standard formats, for Strava, Garmin Connect, intervals.icu or a spreadsheet.</p>
+    <ExportRange />
   </section>
 
   <section class="block" aria-labelledby="hr-h2">
@@ -308,6 +317,8 @@
       Apple Health integration is on (Whoop app → Settings → Integrations → Apple Health, with heart rate allowed), an iOS
       Shortcut can forward the samples after each session:
     </p>
+    <details class="setup">
+      <summary>Set up the Apple Health shortcut</summary>
     <ol class="steps small">
       <li>Shortcuts → new shortcut → <strong>Find Health Samples</strong>: Heart Rate, start date in the last 3 hours.</li>
       <li><strong>Get Contents of URL</strong>: <code class="mono">{hrURL}</code>, method POST, JSON body
@@ -315,20 +326,29 @@
         <code class="mono">Authorization: Bearer opat_…</code> header from <code class="mono">outpost token create</code>.</li>
       <li>Add it as a Personal Automation when a Whoop workout ends, or run it from the session summary.</li>
     </ol>
+    </details>
     <p class="muted small">A chest strap recorded by the Wahoo app or head unit works too: import its file and the sets pick up its heart rate.</p>
   </section>
 
   <section class="block" aria-labelledby="app-h">
-    <h2 id="app-h">Appearance</h2>
-    <button class="btn" onclick={() => theme.toggle()}>
-      {#if theme.value === 'dark'}<Sun size={18} aria-hidden="true" /> Use light theme{:else}<Moon size={18} aria-hidden="true" /> Use dark theme{/if}
-    </button>
+    <h2 id="app-h">Preferences</h2>
+    <div class="pref">
+      <button class="btn" role="switch" aria-checked={soundOn} aria-describedby="chime-note" onclick={() => { soundOn = !soundOn; restSound.set(soundOn); }}>
+        Rest timer chime <span class="sw-state" class:on={soundOn} aria-hidden="true">{soundOn ? 'On' : 'Off'}</span>
+      </button>
+      <p id="chime-note" class="muted small">Plays when rest is over. iPhones can't vibrate from a web app, so this is the cue that reaches a phone on the bench.</p>
+    </div>
+    <div class="pref">
+      <button class="btn" onclick={() => theme.toggle()}>
+        {#if theme.value === 'dark'}<Sun size={18} aria-hidden="true" /> Use light theme{:else}<Moon size={18} aria-hidden="true" /> Use dark theme{/if}
+      </button>
+    </div>
   </section>
 </main>
 
 <style>
   .page {
-    max-width: 40rem;
+    max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
@@ -352,8 +372,14 @@
     color: var(--danger);
   }
   code {
-    font-size: 0.8125em;
-    word-break: break-all;
+    font-size: 0.875em;
+    overflow-wrap: anywhere;
+  }
+  .warn {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--zone-4);
+    border-radius: var(--radius-m);
+    background: color-mix(in srgb, var(--zone-4) 8%, transparent);
   }
   .flash {
     margin-top: var(--space-3);
@@ -396,6 +422,9 @@
     gap: var(--space-3);
     padding: var(--space-4) 0;
     border-bottom: 1px solid var(--line);
+  }
+  .conn:last-child {
+    border-bottom: 0; /* the next section's rule is the divider */
   }
   .conn-name {
     display: flex;
@@ -451,7 +480,8 @@
     display: block;
     height: 100%;
     background: var(--text);
-    transition: width 300ms linear;
+    transform-origin: left center;
+    transition: transform 300ms linear;
   }
   .thr {
     display: grid;
@@ -468,7 +498,7 @@
     gap: var(--space-2);
   }
   .field input {
-    width: 7rem;
+    width: 9rem;
     min-height: 2.75rem;
     padding: 0 var(--space-3);
     border: 1px solid var(--line-strong);
@@ -488,6 +518,36 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
+  }
+  .setup {
+    margin-top: var(--space-2);
+    font-size: var(--size-small);
+  }
+  .setup summary {
+    /* list-item keeps the disclosure triangle; padding keeps a 44px target */
+    display: list-item;
+    padding: 0.7rem 0;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pref {
+    display: grid;
+    justify-items: start;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .sw-state {
+    margin-left: var(--space-2);
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-s);
+    font-size: var(--size-label);
+    font-weight: 700;
+    background: var(--line);
+    color: var(--text-muted);
+  }
+  .sw-state.on {
+    background: var(--signal);
+    color: var(--on-signal);
   }
   .steps {
     padding-left: 1.25rem;

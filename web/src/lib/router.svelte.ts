@@ -6,8 +6,11 @@ export type Route =
   | { name: 'activity'; id: string }
   | { name: 'trends' }
   | { name: 'settings' }
+  | { name: 'gear' }
   | { name: 'session'; id: string }
   | { name: 'summary'; id: string }
+  | { name: 'workouts' }
+  | { name: 'workout'; id: string } // id 'new' for a new workout
   | { name: 'notfound' };
 
 function parse(path: string): Route {
@@ -15,6 +18,10 @@ function parse(path: string): Route {
   if (path === '/activities') return { name: 'activities' };
   if (path === '/trends') return { name: 'trends' };
   if (path === '/settings') return { name: 'settings' };
+  if (path === '/workouts') return { name: 'workouts' };
+  const wk = /^\/workouts\/([A-Za-z0-9_-]+)\/?$/.exec(path);
+  if (wk?.[1]) return { name: 'workout', id: wk[1] };
+  if (path === '/gear') return { name: 'gear' };
   const a = /^\/activity\/([A-Za-z0-9_-]+)\/?$/.exec(path);
   if (a?.[1]) return { name: 'activity', id: a[1] };
   let m = /^\/session\/([A-Za-z0-9_-]+)\/?$/.exec(path);
@@ -26,26 +33,59 @@ function parse(path: string): Route {
 
 class Router {
   route = $state<Route>(parse(location.pathname));
+  /** The in-app path before the current one, for context-aware Back links. */
+  prev = $state<string | null>(null);
   /** Live-session screens hide the tab bar: one action per state. */
   get chrome(): boolean {
     return this.route.name !== 'session';
   }
 
+  /** A screen with unsaved work can hold navigation: return false to stay. */
+  leaveGuard: ((to: string) => boolean) | null = null;
+  #here = location.pathname + location.search;
+
   constructor() {
     window.addEventListener('popstate', () => {
+      const to = location.pathname + location.search;
+      if (this.leaveGuard && !this.leaveGuard(to)) {
+        history.pushState(null, '', this.#here);
+        return;
+      }
+      this.#here = to;
       this.route = parse(location.pathname);
     });
   }
 
   go(path: string, opts: { replace?: boolean } = {}): void {
+    if (this.leaveGuard && !this.leaveGuard(path)) return;
+    this.#here = path;
+    if (!opts.replace) this.prev = location.pathname;
     if (opts.replace) history.replaceState(null, '', path);
     else history.pushState(null, '', path);
-    this.route = parse(path.split('?')[0] ?? '/');
+    this.route = parse(path.split(/[?#]/)[0] ?? '/');
+    const hash = path.split('#')[1];
     window.scrollTo(0, 0);
+    if (hash) scrollToWhenReady(hash);
   }
 }
 
+/** The target screen may still be loading; look for the anchor for a second. */
+function scrollToWhenReady(id: string, tries = 60): void {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ block: 'start' });
+  else if (tries > 0) requestAnimationFrame(() => scrollToWhenReady(id, tries - 1));
+}
+
 export const router = new Router();
+
+/** Where a Back link should go: the previous list screen, else a default. */
+export function backTarget(fallback: { href: string; label: string }): { href: string; label: string } {
+  const p = router.prev;
+  if (p === '/activities') return { href: p, label: 'Activities' };
+  if (p === '/trends') return { href: p, label: 'Trends' };
+  if (p === '/') return { href: p, label: 'Today' };
+  return fallback;
+}
 
 /** Svelte action: make an <a href> navigate in-app. */
 export function link(node: HTMLAnchorElement) {

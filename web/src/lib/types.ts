@@ -37,6 +37,27 @@ export interface Session {
   finished_at: number | null;
   strain?: number | null;
   updated_at: number;
+  /** How much of the plan was lifted. Server-side lists only. */
+  progress?: Progress;
+  /** Server clock minus the phone's, sent with each upload. */
+  clock_offset_ms?: number;
+  /** Manual heart rate alignment; null means automatic. */
+  hr_shift_ms?: number | null;
+}
+
+export interface Alignment {
+  clock_offset_ms: number;
+  /** How far heart rate was moved earlier to meet the sets, in ms. */
+  hr_shift_ms: number;
+  source: 'auto' | 'manual' | 'none';
+  confidence: number;
+}
+
+export interface Progress {
+  /** Sets really lifted; taps under 5 s (or 2 s a rep) don't count. */
+  done: number;
+  logged: number;
+  planned: number;
 }
 
 export type Phase = 'ready' | 'active' | 'rest' | 'last';
@@ -97,7 +118,7 @@ export interface Summary {
   session: Session;
   sets: SetRecord[];
   hr: HRSample[];
-  hr_status: 'ready' | 'pending';
+  hr_status: 'ready' | 'pending' | 'none';
   max_hr: number;
   zones: [number, number, number, number, number];
   duration_s: number;
@@ -107,6 +128,8 @@ export interface Summary {
   avg_bpm: number;
   zone_seconds: [number, number, number, number, number, number];
   set_stats: SetStat[];
+  progress: Progress;
+  alignment?: Alignment;
 }
 
 export interface Today {
@@ -155,6 +178,7 @@ export interface Activity {
 export interface ActivityRow extends Activity {
   sources: Badge[];
   summary: { avg_power: number; np: number; avg_hr: number; max_hr: number; ascent_m: number; kj: number };
+  progress?: Progress;
 }
 
 export interface Metrics {
@@ -205,10 +229,41 @@ export interface ActivityDetail {
   stream: ChartStream;
   power_zones: number[];
   hr_zones: number[];
+  hr_zones_from?: 'whoop';
   max_hr: number;
+  hr_zone_bounds?: number[];
   curve_durations: number[];
   best_curve: number[] | null;
   strength?: Summary;
+  /** Each recording's own numbers, when more than one recorded this. */
+  versions?: Version[];
+  /** The source shown alone, or absent for the merged view. */
+  view?: string;
+}
+
+/** One recording's own account of a workout, before merging. */
+export interface Version {
+  id: string;
+  source: string;
+  device: string;
+  file: boolean;
+  start_at: number;
+  elapsed_s: number;
+  moving_s: number;
+  distance_m: number;
+  avg_hr: number;
+  max_hr: number;
+  avg_power: number;
+  np: number;
+  avg_cadence: number;
+  strain: number | null;
+  tss: number;
+  load_method: Activity['load_method'];
+  has_power: boolean;
+  has_hr: boolean;
+  has_gps: boolean;
+  sets?: number;
+  volume_kg?: number;
 }
 
 export interface Athlete {
@@ -288,6 +343,13 @@ export interface ProviderStatus {
   configured: boolean;
   connected: boolean;
   last_sync: number;
+  /** When the provider last sent a verified webhook (Whoop only). */
+  last_webhook?: number;
   last_error?: string;
   syncing: boolean;
+  /** Where the app credentials came from; the secret itself is never sent. */
+  credentials_from: '' | 'manifest' | 'settings';
+  client_id?: string;
+  /** Token to give Wahoo for its webhooks. */
+  webhook_token?: string;
 }

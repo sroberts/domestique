@@ -144,6 +144,23 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 	}
 	var window []effort
 	lastFTP := 0
+	// Workouts with no heart rate stream: Whoop's time in zones stands in.
+	var noHR []string
+	for i, a := range acts {
+		if len(ms[i].HRHist) == 0 {
+			noHR = append(noHR, a.ID)
+		}
+	}
+	srcs, err := st.SourcesForMany(ctx, noHR)
+	if err != nil {
+		return Athlete{}, err
+	}
+	for i, a := range acts {
+		if z, ok := store.WhoopZones(srcs[a.ID]); ok && len(ms[i].HRHist) == 0 {
+			ms[i].HRHist = activity.ZoneHRHist(z, ath.MaxHR, ath.RestHR)
+		}
+	}
+
 	for i, a := range acts {
 		m := ms[i]
 		if activity.IsRide(a.Sport) && len(m.PowerCurve) > idx20min && m.PowerCurve[idx20min] > 0 {
@@ -180,6 +197,13 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 	return Current(ctx, st, fallbackMaxHR), nil
 }
 
+// Score is the load of one activity, or of one source's version of it, from
+// its own metrics: TSS, intensity factor, and how it was scored.
+func Score(a store.Activity, m activity.Metrics, ath Athlete) (float64, float64, string) {
+	return score(a, metricsLite{NP: m.NP, MaxHR: m.MaxHR, PowerCurve: m.PowerCurve, HRHist: m.HRHist,
+		PowerSeconds: m.PowerSeconds}, a.FTP, ath)
+}
+
 func score(a store.Activity, m metricsLite, ftp int, ath Athlete) (float64, float64, string) {
 	moving := a.MovingS
 	if moving <= 0 {
@@ -190,11 +214,11 @@ func score(a store.Activity, m metricsLite, ftp int, ath Athlete) (float64, floa
 		tss, ifv := activity.PowerTSS(m.NP, moving, ftp)
 		return tss, ifv, "power"
 	case a.Sport == activity.SportStrength && a.Strain != nil:
-		return activity.StrainLoad(*a.Strain), 0, "strain"
+		return activity.StrainLoad(*a.Strain, moving), 0, "strain"
 	case len(m.HRHist) > 0:
 		return activity.HRTSS(m.HRHist, ath.RestHR, ath.LTHR), 0, "hr"
 	case a.Strain != nil:
-		return activity.StrainLoad(*a.Strain), 0, "strain"
+		return activity.StrainLoad(*a.Strain, moving), 0, "strain"
 	}
 	return 0, 0, "none"
 }

@@ -10,8 +10,10 @@
     route: [number, number][];
     cursor: [number, number] | null;
     virtual?: boolean;
+    /** CSS colour token for the route line, e.g. the sport's colour. */
+    tone?: string;
   }
-  let { route, cursor, virtual = false }: Props = $props();
+  let { route, cursor, virtual = false, tone = '--text' }: Props = $props();
 
   let el = $state<HTMLDivElement | null>(null);
   let map: MLMap | null = null;
@@ -40,7 +42,7 @@
       });
       m.addSource('cursor', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     }
-    const ink = css('--text');
+    const ink = css(tone);
     const bg = css('--bg');
     m.addLayer({ id: 'route-casing', type: 'line', source: 'route', paint: { 'line-color': bg, 'line-width': 6, 'line-opacity': 0.8 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
     m.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': ink, 'line-width': 3 }, layout: { 'line-join': 'round', 'line-cap': 'round' } });
@@ -80,6 +82,8 @@
         });
         m.touchZoomRotate.disableRotation();
         m.on('load', () => {
+          // Start the attribution folded to its "i" button; it opens on tap.
+          el?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');
           addLayers(m);
           fit(m);
           ready = true;

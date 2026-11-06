@@ -4,11 +4,11 @@ package importer
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"strconv"
 	"strings"
@@ -51,8 +51,13 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 	if err != nil {
 		return Progress{}, err
 	}
-	rows, err := csv.NewReader(rc).ReadAll()
+	// The CSV is decompressed from an untrusted archive: bound it like a file.
+	data, err := ingest.ReadLimited(rc)
 	rc.Close()
+	var rows [][]string
+	if err == nil {
+		rows, err = csv.NewReader(bytes.NewReader(data)).ReadAll()
+	}
 	if err != nil {
 		return Progress{}, fmt.Errorf("read activities.csv: %w", err)
 	}
@@ -81,6 +86,7 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 			Name:        get("Activity Name"),
 			Sport:       get("Activity Type"),
 			Description: get("Activity Description"),
+			Gear:        get("Activity Gear"),
 		}
 		p.Last = h.Name
 		var res ingest.Result
@@ -118,8 +124,14 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 				continue
 			}
 		}
+		if (res.Duplicate || res.Refreshed) && h.Gear != "" && res.SourceID != "" {
+			// Imported before gear was kept: learn it from this export.
+			if err := in.Store.SetSourceExtra(ctx, res.SourceID, "gear", h.Gear); err != nil {
+				in.Log.Warn("strava export: keep gear", "id", id, "err", err.Error())
+			}
+		}
 		switch {
-		case res.Duplicate:
+		case res.Duplicate, res.Refreshed:
 			p.Duplicates++
 		case res.Merged:
 			p.Merged++
@@ -170,7 +182,7 @@ func readZip(f *zip.File) ([]byte, error) {
 		return nil, err
 	}
 	defer rc.Close()
-	return io.ReadAll(io.LimitReader(rc, 256<<20))
+	return ingest.ReadLimited(rc)
 }
 
 // parseStravaDate reads "Jan 2, 2021, 3:04:05 PM" (UTC) and older variants.

@@ -1,9 +1,9 @@
 // The live session: where the athlete is, and what one tap does next.
 // Every transition is persisted to IndexedDB before the UI moves on, so a
 // reload, a crash or a dead battery resumes exactly where it stopped.
-import { getSession, saveCursor, saveSession, saveSet, sessionSets } from './db';
+import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSets } from './db';
 import { sync } from './sync.svelte';
-import type { Exercise, LocalSession, SetRecord, TargetSet, Template } from './types';
+import type { Exercise, LocalSession, Progress, SetRecord, TargetSet, Template } from './types';
 
 export interface Slot {
   index: number;
@@ -155,7 +155,7 @@ export class Workout {
   async addRest(seconds: number): Promise<void> {
     const c = this.session.cursor;
     if (c.phase !== 'rest') return;
-    c.rest_s = Math.max(0, c.rest_s + seconds);
+    c.rest_s = Math.max(15, c.rest_s + seconds);
     await saveCursor($state.snapshot(this.session) as LocalSession);
   }
 
@@ -178,6 +178,12 @@ export class Workout {
     await saveCursor($state.snapshot(this.session) as LocalSession);
   }
 
+  /** Throw the session away entirely: it was started by mistake. */
+  async discard(): Promise<void> {
+    await discardSession(this.session.id);
+    sync.kick();
+  }
+
   /** End the session. An unfinished active set is discarded, not logged. */
   async finish(): Promise<void> {
     const now = Date.now();
@@ -187,3 +193,25 @@ export class Workout {
     sync.kick();
   }
 }
+
+/** Mirrors strength.Real on the server: a set logged faster than 5 s, or
+ * 2 s a rep, was tapped through rather than lifted. */
+export function isReal(s: SetRecord): boolean {
+  return s.ended_at - s.started_at >= Math.max(5, 2 * s.reps) * 1000;
+}
+
+export function progressOf(plan: Exercise[], sets: SetRecord[]): Progress {
+  return { done: sets.filter(isReal).length, logged: sets.length, planned: plan.reduce((n, e) => n + e.sets.length, 0) };
+}
+
+/** "Ended early · 3 of 12 sets", noting any that were too quick to count. */
+export function earlyText(p: Progress): string {
+  const quick = p.logged - p.done;
+  return `Ended early · ${p.done} of ${p.planned} sets` + (quick > 0 ? ` (${quick} too quick to count)` : '');
+}
+
+/** True when the session lifted under the plan: shown as "Ended early". */
+export const endedEarly = (p: Progress | undefined) => !!p && p.planned > 0 && p.done < p.planned;
+
+/** Enough lifted to call it done: half the planned sets, as progression counts it. */
+export const complete = (p: Progress | undefined) => !p || p.planned === 0 || p.done * 2 >= p.planned;

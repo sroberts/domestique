@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,8 @@ func (a *API) registerConnections(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/oauth/{provider}/callback", a.oauthCallback)
 	mux.HandleFunc("DELETE /v1/oauth/{provider}", a.oauthDisconnect)
 	mux.HandleFunc("POST /v1/connections/{provider}/sync", a.syncNow)
+	mux.HandleFunc("PUT /v1/connections/{provider}/credentials", a.putCredentials)
+	mux.HandleFunc("DELETE /v1/connections/{provider}/credentials", a.deleteCredentials)
 	mux.HandleFunc("POST /v1/imports", a.upload)
 	mux.HandleFunc("GET /v1/imports", a.uploadStatus)
 }
@@ -62,22 +65,100 @@ func (a *API) provider(w http.ResponseWriter, r *http.Request) *provider.Client 
 		writeErr(w, http.StatusNotFound, "unknown provider")
 		return nil
 	}
-	if !c.Cfg.Configured() {
-		writeErr(w, http.StatusConflict, fmt.Sprintf("%s isn't configured: set %s_CLIENT_ID and %s_CLIENT_SECRET_FILE",
-			c.Cfg.Name, envPrefix(c.Cfg.Name), envPrefix(c.Cfg.Name)))
+	if !c.Config().Configured() {
+		writeErr(w, http.StatusConflict, fmt.Sprintf("%s isn't set up: add its client ID and secret in Settings", c.Config().Name))
 		return nil
 	}
 	return c
 }
 
-func envPrefix(name string) string { return "DOMESTIQUE_" + strings.ToUpper(name) }
+// putCredentials saves a provider's client ID and secret entered in
+// Settings, as owner-only files in the storage directory, and applies them
+// without a restart. The secret is write-only: nothing returns it.
+func (a *API) putCredentials(w http.ResponseWriter, r *http.Request) {
+	c := a.Providers[r.PathValue("provider")]
+	if c == nil || a.Ingest == nil {
+		writeErr(w, http.StatusNotFound, "unknown provider")
+		return
+	}
+	if c.CredentialsFrom() == provider.FromManifest {
+		writeErr(w, http.StatusConflict, "these are set in the Outpost manifest; change them there")
+		return
+	}
+	var body struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	id, err := provider.CheckCredential("Client ID", body.ClientID)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	secret, err := provider.CheckCredential("Client secret", body.ClientSecret)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	name := c.Config().Name
+	if err := provider.SaveCredentials(provider.SecretsDir(a.Ingest.StorageDir), name, id, secret); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	// Tokens belong to the app that issued them: a different client ID
+	// means the old connection can't be refreshed, so drop it.
+	if prev := c.Config().ClientID; prev != "" && prev != id {
+		if err := a.Store.DeleteToken(r.Context(), name); err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
+	c.SetCredentials(id, secret, provider.FromSettings)
+	a.Log.Info("credentials saved from settings", "provider", name)
+	writeJSON(w, http.StatusOK, c.Status(r.Context()))
+}
+
+// deleteCredentials forgets credentials saved from Settings and the
+// connection made with them.
+func (a *API) deleteCredentials(w http.ResponseWriter, r *http.Request) {
+	c := a.Providers[r.PathValue("provider")]
+	if c == nil || a.Ingest == nil {
+		writeErr(w, http.StatusNotFound, "unknown provider")
+		return
+	}
+	if c.CredentialsFrom() == provider.FromManifest {
+		writeErr(w, http.StatusConflict, "these are set in the Outpost manifest; change them there")
+		return
+	}
+	name := c.Config().Name
+	if err := provider.DeleteCredentials(provider.SecretsDir(a.Ingest.StorageDir), name); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.Store.DeleteToken(r.Context(), name); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	c.SetCredentials("", "", provider.FromNone)
+	a.Log.Info("credentials removed from settings", "provider", name)
+	writeJSON(w, http.StatusOK, c.Status(r.Context()))
+}
 
 func (a *API) oauthStart(w http.ResponseWriter, r *http.Request) {
+	// A GET that replaces the pending sign-in state: only our own page (or a
+	// typed address) may start it, not another site's link or <img>.
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		writeErr(w, http.StatusForbidden, "start the connection from Settings")
+		return
+	}
 	c := a.provider(w, r)
 	if c == nil {
 		return
 	}
-	redirect := a.publicBase(r) + "/v1/oauth/" + c.Cfg.Name + "/callback"
+	redirect := a.publicBase(r) + "/v1/oauth/" + c.Config().Name + "/callback"
 	u, err := c.AuthorizeURL(r.Context(), redirect)
 	if err != nil {
 		a.fail(w, r, err)
@@ -92,13 +173,13 @@ func (a *API) oauthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	back := "/settings?provider=" + c.Cfg.Name
+	back := "/settings?provider=" + c.Config().Name
 	if e := q.Get("error"); e != "" {
 		http.Redirect(w, r, back+"&error="+url.QueryEscape(firstNonEmpty(q.Get("error_description"), e)), http.StatusFound)
 		return
 	}
 	if err := c.Exchange(r.Context(), q.Get("code"), q.Get("state")); err != nil {
-		a.Log.Warn("oauth exchange", "provider", c.Cfg.Name, "err", err.Error())
+		a.Log.Warn("oauth exchange", "provider", c.Config().Name, "err", err.Error())
 		http.Redirect(w, r, back+"&error="+url.QueryEscape(err.Error()), http.StatusFound)
 		return
 	}
@@ -112,7 +193,7 @@ func (a *API) oauthDisconnect(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "unknown provider")
 		return
 	}
-	if err := a.Store.DeleteToken(r.Context(), c.Cfg.Name); err != nil {
+	if err := a.Store.DeleteToken(r.Context(), c.Config().Name); err != nil {
 		a.fail(w, r, err)
 		return
 	}
@@ -198,7 +279,7 @@ func (a *API) upload(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	var results []map[string]any
+	results := []map[string]any{}
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
@@ -232,7 +313,11 @@ func (a *API) upload(w http.ResponseWriter, r *http.Request) {
 			results = append(results, map[string]any{"file": name, "job": job.ID})
 			continue
 		}
-		data, err := io.ReadAll(io.LimitReader(part, 256<<20))
+		data, err := ingest.ReadLimited(part)
+		if errors.Is(err, ingest.ErrTooLarge) {
+			results = append(results, map[string]any{"file": name, "error": err.Error()})
+			continue
+		}
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, "upload interrupted: "+err.Error())
 			return

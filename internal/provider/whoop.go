@@ -31,6 +31,8 @@ type Whoop struct {
 	In *ingest.Ingester
 	// Loc is the athlete's time zone, for assigning recoveries to days.
 	Loc *time.Location
+	// After runs when a webhook changed activities (training load recalc).
+	After func(context.Context)
 }
 
 type whoopPage[T any] struct {
@@ -87,10 +89,18 @@ type whoopWorkout struct {
 	} `json:"score"`
 }
 
-// collect pages through a Whoop collection since start.
+// whoopPages caps one collection walk; a walk that hits it is incomplete.
+const whoopPages = 400
+
+// errIncomplete means a collection had more pages than one walk reads.
+var errIncomplete = errors.New("whoop: collection has more pages than one sync reads")
+
+// collect pages through a Whoop collection since start. It returns
+// errIncomplete, after handing over every record it read, if there were
+// more pages than it reads in one go.
 func collect[T any](ctx context.Context, c *Client, path string, start time.Time, each func(T) error) error {
 	next := ""
-	for page := 0; page < 400; page++ {
+	for page := 0; page < whoopPages; page++ {
 		q := url.Values{"limit": {"25"}, "start": {start.UTC().Format(time.RFC3339)}}
 		if next != "" {
 			q.Set("nextToken", next)
@@ -109,7 +119,7 @@ func collect[T any](ctx context.Context, c *Client, path string, start time.Time
 		}
 		next = p.NextToken
 	}
-	return nil
+	return errIncomplete
 }
 
 // since returns where to resume: two days before the last sync (scores are
@@ -158,12 +168,14 @@ func (w *Whoop) Sync(ctx context.Context) error {
 			RestingHR: int(r.Score.RestingHeartRate + 0.5),
 			Source:    "whoop",
 		})
-	}); err != nil {
+	}); err != nil && !errors.Is(err, errIncomplete) {
 		return err
 	}
 	w.mark(ctx, "recovery")
 
-	if err := collect(ctx, w.C, "/v2/activity/sleep", w.since(ctx, "sleep"), func(s whoopSleep) error {
+	sleepSince, sleepsSeen := w.since(ctx, "sleep"), map[string]bool{}
+	sleepErr := collect(ctx, w.C, "/v2/activity/sleep", sleepSince, func(s whoopSleep) error {
+		sleepsSeen["whoop:"+s.ID] = true
 		if s.Nap || s.ScoreState != "SCORED" || s.Score == nil {
 			return nil
 		}
@@ -175,12 +187,23 @@ func (w *Whoop) Sync(ctx context.Context) error {
 			x.Performance = &p
 		}
 		return st.PutSleep(ctx, x)
-	}); err != nil {
-		return err
+	})
+	if sleepErr != nil && !errors.Is(sleepErr, errIncomplete) {
+		return sleepErr
+	}
+	if sleepErr == nil {
+		if err := w.reconcile(ctx, sleepSince, sleepsSeen, st.SleepIDsSince, func(id string) error {
+			_, err := st.DeleteSleep(ctx, id)
+			return err
+		}); err != nil {
+			return err
+		}
 	}
 	w.mark(ctx, "sleep")
 
-	if err := collect(ctx, w.C, "/v2/activity/workout", w.since(ctx, "workout"), func(x whoopWorkout) error {
+	workoutSince, workoutsSeen := w.since(ctx, "workout"), map[string]bool{}
+	workoutErr := collect(ctx, w.C, "/v2/activity/workout", workoutSince, func(x whoopWorkout) error {
+		workoutsSeen["whoop:"+x.ID] = true
 		if x.ScoreState != "SCORED" || x.Score == nil {
 			return nil
 		}
@@ -190,10 +213,51 @@ func (w *Whoop) Sync(ctx context.Context) error {
 			x.Score.AvgHR, x.Score.MaxHR, [6]int64{x.Score.Zones.Z0, x.Score.Zones.Z1, x.Score.Zones.Z2,
 				x.Score.Zones.Z3, x.Score.Zones.Z4, x.Score.Zones.Z5})
 		return err
-	}); err != nil {
-		return err
+	})
+	if workoutErr != nil && !errors.Is(workoutErr, errIncomplete) {
+		return workoutErr
+	}
+	if workoutErr == nil {
+		if err := w.reconcile(ctx, workoutSince, workoutsSeen, st.SourceIDsSince, func(id string) error {
+			return w.In.RemoveSource(ctx, id)
+		}); err != nil {
+			return err
+		}
 	}
 	w.mark(ctx, "workout")
+	return nil
+}
+
+// reconcile removes what Whoop deleted: records stored from Whoop's API that
+// started inside the window a complete sync just read, but that Whoop no
+// longer returned. It's the backstop for a deletion webhook that was missed
+// or failed. Whoop files from a Strava export have other ids and are never
+// touched. An empty answer against several stored records looks like an
+// outage, not a mass deletion, so it's left alone.
+func (w *Whoop) reconcile(ctx context.Context, since time.Time, seen map[string]bool,
+	stored func(context.Context, string, int64) ([]string, error), remove func(string) error) error {
+	// A minute inside the window: a record right at its edge may or may not
+	// have been returned.
+	ids, err := stored(ctx, "whoop:", since.Add(time.Minute).UnixMilli())
+	if err != nil {
+		return err
+	}
+	var gone []string
+	for _, id := range ids {
+		if !seen[id] {
+			gone = append(gone, id)
+		}
+	}
+	if len(seen) == 0 && len(gone) > 1 {
+		w.C.Log.Warn("whoop: returned nothing for a window with stored records; not deleting", "stored", len(gone))
+		return nil
+	}
+	for _, id := range gone {
+		if err := remove(id); err != nil {
+			return err
+		}
+		w.C.Log.Info("whoop: removed what Whoop deleted", "id", id)
+	}
 	return nil
 }
 

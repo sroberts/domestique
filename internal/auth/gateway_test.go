@@ -50,6 +50,11 @@ const (
 
 func gatewayFor(t *testing.T, f *fakeOutpost, enabled bool) http.Handler {
 	t.Helper()
+	return gatewayWith(t, f, enabled, nil)
+}
+
+func gatewayWith(t *testing.T, f *fakeOutpost, enabled bool, tweak func(*Gateway)) http.Handler {
+	t.Helper()
 	if enabled {
 		t.Setenv("OUTPOST_AUTH", "gateway")
 	} else {
@@ -58,6 +63,10 @@ func gatewayFor(t *testing.T, f *fakeOutpost, enabled bool) http.Handler {
 	t.Setenv("OUTPOST_ISSUER", issuer)
 	t.Setenv("OUTPOST_JWKS_URL", f.jwks.URL)
 	g := FromEnv(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	g.minFetch = 0
+	if tweak != nil {
+		tweak(g)
+	}
 	return g.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := UserFrom(r.Context())
 		if ok {
@@ -140,5 +149,118 @@ func TestNoGatewayTrustsNoHeaders(t *testing.T) {
 	// Origin checks still apply to writes.
 	if w := do(h, "POST", "/v1/hr", map[string]string{"Origin": "https://evil.example"}); w.Code != 403 {
 		t.Fatalf("cross-origin write without gateway: %d", w.Code)
+	}
+}
+
+// A sibling service receives the user's tokens with its own audience. Without
+// a pinned host it can replay one here by naming itself in Host and
+// X-Forwarded-Host on a direct loopback connection; with one it can't.
+func TestGatewayAudiencePinned(t *testing.T) {
+	f := newFakeOutpost(t)
+	sibling := "yarr.tail1234.ts.net"
+	t.Setenv("DOMESTIQUE_PUBLIC_URL", "https://"+host+"/")
+	h := gatewayFor(t, f, true)
+	r := httptest.NewRequest("GET", "/v1/today", nil)
+	r.Host = sibling
+	r.Header.Set("X-Forwarded-Host", sibling)
+	r.Header.Set("X-Outpost-Identity", f.token("scott", issuer, sibling, time.Now().Add(time.Minute), f.priv))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 401 {
+		t.Fatalf("replayed sibling token with spoofed Host: %d, want 401", w.Code)
+	}
+	good := f.token("scott", issuer, host, time.Now().Add(time.Minute), f.priv)
+	if w := do(h, "GET", "/v1/today", map[string]string{"X-Outpost-Identity": good}); w.Code != 200 {
+		t.Fatalf("our own token: %d", w.Code)
+	}
+
+	// A renamed node is listed in DOMESTIQUE_ALLOWED_HOSTS.
+	t.Setenv("DOMESTIQUE_ALLOWED_HOSTS", "domestique-1.tail1234.ts.net")
+	h = gatewayFor(t, f, true)
+	renamed := f.token("scott", issuer, "domestique-1.tail1234.ts.net", time.Now().Add(time.Minute), f.priv)
+	if w := do(h, "GET", "/v1/today", map[string]string{"X-Outpost-Identity": renamed}); w.Code != 200 {
+		t.Fatalf("allowed host: %d", w.Code)
+	}
+}
+
+// Junk kids from unauthenticated callers must not each cost a JWKS fetch.
+func TestGatewayJunkKidsRateLimited(t *testing.T) {
+	f := newFakeOutpost(t)
+	var fetches int
+	inner := f.jwks.Config.Handler
+	f.jwks.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetches++
+		inner.ServeHTTP(w, r)
+	})
+	h := gatewayWith(t, f, true, func(g *Gateway) { g.minFetch = time.Hour })
+	for i := 0; i < 50; i++ {
+		f.kid = "junk" + string(rune('a'+i%26)) + string(rune('a'+i/26))
+		do(h, "GET", "/v1/today", map[string]string{"X-Outpost-Identity": f.token("scott", issuer, host, time.Now().Add(time.Minute), f.priv)})
+	}
+	if fetches > 1 {
+		t.Fatalf("%d JWKS fetches for 50 junk kids, want 1", fetches)
+	}
+}
+
+// Without the gateway nothing authenticates requests, so a site whose DNS
+// name is re-pointed at 127.0.0.1 must not be served.
+func TestNoGatewayRefusesRebindHost(t *testing.T) {
+	f := newFakeOutpost(t)
+	h := gatewayFor(t, f, false)
+	for _, c := range []struct {
+		host string
+		code int
+	}{
+		{"evil.example:8095", 421},
+		{"127.0.0.1:8095", 200},
+		{"localhost:8095", 200},
+		{"[::1]:8095", 200},
+		{"macmini", 200},
+		{"macmini.local", 200},
+		{host, 200},
+	} {
+		r := httptest.NewRequest("GET", "/v1/today", nil)
+		r.Host = c.host
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != c.code {
+			t.Errorf("Host %s: %d, want %d", c.host, w.Code, c.code)
+		}
+	}
+	t.Setenv("DOMESTIQUE_ALLOWED_HOSTS", "fitness.example.com")
+	h = gatewayFor(t, f, false)
+	r := httptest.NewRequest("PUT", "/v1/athlete", nil)
+	r.Host = "fitness.example.com"
+	r.Header.Set("Origin", "https://fitness.example.com")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("configured host: %d", w.Code)
+	}
+}
+
+// The Whoop webhook path skips the identity check (its handler verifies
+// Whoop's signature); nothing near it does.
+func TestGatewayPublicWebhookPath(t *testing.T) {
+	f := newFakeOutpost(t)
+	h := gatewayFor(t, f, true)
+	for _, c := range []struct {
+		method, path string
+		code         int
+	}{
+		{"POST", WhoopWebhookPath, 200},
+		{"GET", WhoopWebhookPath, 401},
+		{"POST", WhoopWebhookPath + "/x", 401},
+		{"POST", WahooWebhookPath, 200},
+		{"POST", "/v1/webhooks/strava", 401},
+		{"POST", "/v1/webhooks/whoop/../../v1/sets", 401},
+	} {
+		if w := do(h, c.method, c.path, nil); w.Code != c.code {
+			t.Errorf("%s %s = %d, want %d", c.method, c.path, w.Code, c.code)
+		}
+	}
+	// A webhook carrying a cross-site browser's marks is still refused.
+	if w := do(h, "POST", WhoopWebhookPath, map[string]string{"Origin": "https://evil.example", "Sec-Fetch-Site": "cross-site"}); w.Code != 403 {
+		t.Errorf("cross-site webhook = %d, want 403", w.Code)
 	}
 }

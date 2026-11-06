@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"domestique/internal/activity"
+	"domestique/internal/ingest"
 	"domestique/internal/load"
 	"domestique/internal/store"
 	"domestique/internal/strength"
@@ -60,6 +61,8 @@ type ActivityRow struct {
 	store.Activity
 	Sources []Badge    `json:"sources"`
 	Summary rowMetrics `json:"summary"`
+	// Progress is set for sessions logged in the app.
+	Progress *strength.Progress `json:"progress,omitempty"`
 }
 
 type rowMetrics struct {
@@ -93,6 +96,19 @@ func (a *API) rows(r *http.Request, acts []store.Activity) ([]ActivityRow, error
 			row.Sources = append(row.Sources, Badge{s.Source, s.HasPower, s.HasHR, s.HasGPS})
 		}
 		row.Metrics = nil // lists don't need curves and histograms
+		if x.SessionID != nil {
+			sess, err := a.Store.GetSession(r.Context(), *x.SessionID)
+			if err == nil {
+				sets, err := a.Store.SessionSets(r.Context(), sess.ID)
+				if err != nil {
+					return nil, err
+				}
+				p := strength.ProgressOf(sess.Plan, sets)
+				row.Progress = &p
+			} else if !errors.Is(err, store.ErrNotFound) {
+				return nil, err
+			}
+		}
 		out[i] = row
 	}
 	return out, nil
@@ -156,10 +172,77 @@ type detailResp struct {
 	Stream     ChartStream       `json:"stream"`
 	PowerZones [7]int            `json:"power_zones"`
 	HRZones    [6]int            `json:"hr_zones"`
-	MaxHR      int               `json:"max_hr"`
-	Curve      []int             `json:"curve_durations"`
-	BestCurve  []int             `json:"best_curve"` // all-time best at each duration, before this ride
-	Strength   *strength.Summary `json:"strength,omitempty"`
+	// HRZonesFrom is "whoop" when there's no heart rate stream and the zone
+	// times are Whoop's own summary instead.
+	HRZonesFrom string `json:"hr_zones_from,omitempty"`
+	MaxHR       int    `json:"max_hr"`
+	// HRZoneBounds are the lower edges of zones 1-5 in bpm, for the zones
+	// shown: shares of max HR, or Whoop's shares of heart rate reserve.
+	HRZoneBounds [5]int            `json:"hr_zone_bounds"`
+	Curve        []int             `json:"curve_durations"`
+	BestCurve    []int             `json:"best_curve"` // all-time best at each duration, before this ride
+	Strength     *strength.Summary `json:"strength,omitempty"`
+	// Versions is each recording's own numbers, when there's more than one.
+	Versions []versionResp `json:"versions,omitempty"`
+	// View is the source shown alone (?source=), or "" for the merged view.
+	View string `json:"view,omitempty"`
+}
+
+// versionResp is one source's own account of a workout, before merging.
+type versionResp struct {
+	ID         string   `json:"id"`
+	Source     string   `json:"source"`
+	Device     string   `json:"device"`
+	File       bool     `json:"file"` // came from a file rather than an API
+	StartAt    int64    `json:"start_at"`
+	ElapsedS   int      `json:"elapsed_s"`
+	MovingS    int      `json:"moving_s"`
+	DistanceM  float64  `json:"distance_m"`
+	AvgHR      int      `json:"avg_hr"`
+	MaxHR      int      `json:"max_hr"`
+	AvgPower   int      `json:"avg_power"`
+	NP         int      `json:"np"`
+	AvgCadence int      `json:"avg_cadence"`
+	Strain     *float64 `json:"strain"`
+	TSS        float64  `json:"tss"`
+	LoadMethod string   `json:"load_method"`
+	HasPower   bool     `json:"has_power"`
+	HasHR      bool     `json:"has_hr"`
+	HasGPS     bool     `json:"has_gps"`
+	Sets       int      `json:"sets,omitempty"`
+	VolumeKg   float64  `json:"volume_kg,omitempty"`
+}
+
+// sourceExtra is what a source's summary says about itself, for sources
+// (Whoop's API) that have no stream to compute from.
+type sourceExtra struct {
+	Strain *float64 `json:"strain"`
+	AvgHR  int      `json:"avg_hr"`
+	MaxHR  int      `json:"max_hr"`
+}
+
+// asVersion is act as one source alone recorded it: that source's timing,
+// distance, strain and metrics, and the load those would score.
+func asVersion(act store.Activity, v ingest.Version, ath load.Athlete) (store.Activity, activity.Metrics) {
+	src, m := v.Source, v.Metrics
+	var ex sourceExtra
+	_ = json.Unmarshal(src.Extra, &ex)
+	if m.AvgHR == 0 {
+		m.AvgHR, m.MaxHR = ex.AvgHR, ex.MaxHR
+	}
+	act.StartAt, act.ElapsedS, act.MovingS, act.DistanceM = src.StartAt, src.ElapsedS, src.MovingS, src.DistanceM
+	if act.MovingS <= 0 {
+		act.MovingS = src.ElapsedS
+	}
+	act.Strain = ex.Strain
+	scored := m
+	if len(scored.HRHist) == 0 {
+		if z, ok := store.WhoopZones([]store.Source{src}); ok {
+			scored.HRHist = activity.ZoneHRHist(z, ath.MaxHR, ath.RestHR)
+		}
+	}
+	act.TSS, act.Intensity, act.LoadMethod = load.Score(act, scored, ath)
+	return act, m
 }
 
 func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
@@ -172,20 +255,63 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	m, srcs, err := a.Ingest.MergedStream(ctx, act.ID)
-	if err != nil {
+	only := r.URL.Query().Get("source")
+	m, vs, err := a.Ingest.Versions(ctx, act.ID, only)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "no such version of this activity")
+		return
+	} else if err != nil {
 		a.fail(w, r, err)
 		return
 	}
 	ath := load.Current(ctx, a.Store, a.MaxHR)
+	srcs := make([]store.Source, len(vs))
+	for i, v := range vs {
+		srcs[i] = v.Source
+	}
+	var sum *strength.Summary
+	if act.SessionID != nil {
+		if s, err := a.strengthSummary(r, *act.SessionID); err == nil {
+			sum = s
+		}
+	}
+
 	resp := detailResp{Activity: act, Sources: srcs, Channels: m.Channels, MaxHR: ath.MaxHR,
-		Curve: activity.CurveDurations}
+		Curve: activity.CurveDurations, View: only}
 	_ = json.Unmarshal(act.Metrics, &resp.Metrics)
+	shown := srcs // the sources behind what's on screen
+	for _, v := range vs {
+		va, vm := asVersion(act, v, ath)
+		if len(vs) > 1 {
+			vr := versionResp{ID: v.Source.ID, Source: v.Source.Source, Device: v.Source.Device,
+				File: v.Source.RawSHA256 != nil, StartAt: va.StartAt, ElapsedS: va.ElapsedS, MovingS: va.MovingS,
+				DistanceM: va.DistanceM, AvgHR: vm.AvgHR, MaxHR: vm.MaxHR, AvgPower: vm.AvgPower, NP: vm.NP,
+				AvgCadence: vm.AvgCadence, Strain: va.Strain, TSS: va.TSS, LoadMethod: va.LoadMethod,
+				HasPower: v.Source.HasPower, HasHR: v.Source.HasHR, HasGPS: v.Source.HasGPS}
+			if v.Source.Source == "app" && sum != nil {
+				vr.Sets, vr.VolumeKg = len(sum.Sets), sum.VolumeKg
+			}
+			resp.Versions = append(resp.Versions, vr)
+		}
+		if v.Source.ID == only {
+			resp.Activity, resp.Metrics = va, vm
+			shown = []store.Source{v.Source}
+		}
+	}
 	resp.Activity.Metrics = nil
 	resp.Stream = downsample(&m.Stream, 1200)
 	resp.PowerZones = activity.PowerZoneSeconds(&m.Stream, act.FTP)
 	resp.HRZones = activity.HRZoneSeconds(resp.Metrics.HRHist, ath.MaxHR)
 	resp.Metrics.HRHist = nil
+	for i, p := range []float64{0.5, 0.6, 0.7, 0.8, 0.9} {
+		resp.HRZoneBounds[i] = int(math.Round(p * float64(ath.MaxHR)))
+	}
+	if resp.HRZones == ([6]int{}) {
+		if z, ok := store.WhoopZones(shown); ok {
+			resp.HRZones, resp.HRZonesFrom = z, "whoop"
+			resp.HRZoneBounds = activity.WhoopZoneBounds(ath.MaxHR, ath.RestHR)
+		}
+	}
 	if activity.IsRide(act.Sport) && m.Stream.HasPower() {
 		best, err := a.bestCurve(r, 0, act.StartAt, act.ID)
 		if err != nil {
@@ -197,10 +323,9 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 			resp.BestCurve[i] = b.Watts
 		}
 	}
-	if act.SessionID != nil {
-		if sum, err := a.strengthSummary(r, *act.SessionID); err == nil {
-			resp.Strength = sum
-		}
+	// The lifting itself belongs to the merged view and to Domestique's own.
+	if sum != nil && (only == "" || shown[0].Source == "app") {
+		resp.Strength = sum
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -208,7 +333,7 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 // downsample reduces a stream to at most n points by bucket means, and the
 // GPS route by stride, so the phone draws a 5-hour ride without stalling.
 func downsample(s *activity.Stream, n int) ChartStream {
-	var c ChartStream
+	c := ChartStream{T: []int32{}} // always a list: the page reads its length
 	total := s.Len()
 	if total == 0 {
 		return c
@@ -381,7 +506,8 @@ func (a *API) getTrends(w http.ResponseWriter, r *http.Request) {
 		weeks[i].Start = first.AddDate(0, 0, 7*i).Format("2006-01-02")
 	}
 	for _, x := range acts {
-		i := int(monday(time.UnixMilli(x.StartAt).In(loc)).Sub(first).Hours() / (24 * 7))
+		// Round to whole days: a week spanning a DST change is 167 or 169 hours.
+		i := int(math.Round(monday(time.UnixMilli(x.StartAt).In(loc)).Sub(first).Hours()/24)) / 7
 		if i < 0 || i >= len(weeks) {
 			continue
 		}
@@ -434,8 +560,8 @@ func (a *API) getTrends(w http.ResponseWriter, r *http.Request) {
 	lifts := map[string]*liftPR{}
 	lastSession := map[string]string{}
 	for _, s := range sets {
-		if s.Reps <= 0 || s.Reps > 12 || s.WeightKg <= 0 {
-			continue
+		if s.Reps <= 0 || s.Reps > 12 || s.WeightKg <= 0 || !strength.Real(s) {
+			continue // tapped-through sets aren't lifts, and mustn't become PRs
 		}
 		key := strings.ToLower(s.ExerciseName)
 		p := lifts[key]
@@ -499,15 +625,20 @@ func (a *API) putAthlete(w http.ResponseWriter, r *http.Request) {
 		if v == nil {
 			return true
 		}
+		var err error
 		if *v == 0 {
-			_ = a.Store.DeleteAthlete(ctx, key) // 0 clears the override: back to detection
-			return true
-		}
-		if *v < lo || *v > hi {
+			err = a.Store.DeleteAthlete(ctx, key) // 0 clears the override: back to detection
+		} else if *v < lo || *v > hi {
 			writeErr(w, http.StatusBadRequest, key+" is out of range")
 			return false
+		} else {
+			err = a.Store.SetAthlete(ctx, key, strconv.Itoa(*v))
 		}
-		return a.Store.SetAthlete(ctx, key, strconv.Itoa(*v)) == nil
+		if err != nil {
+			a.fail(w, r, err) // never leave the request without a response
+			return false
+		}
+		return true
 	}
 	if !set("ftp_override", body.FTPOverride, 80, 600) || !set("max_hr_override", body.MaxHROverride, 120, 230) {
 		return

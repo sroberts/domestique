@@ -1,43 +1,105 @@
 <script lang="ts">
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+  import BikePicker from '../components/BikePicker.svelte';
   import CurveChart from '../components/CurveChart.svelte';
+  import ExportMenu from '../components/ExportMenu.svelte';
   import RouteMap from '../components/RouteMap.svelte';
   import Sources from '../components/Sources.svelte';
   import StreamPanels from '../components/StreamPanels.svelte';
   import ZoneRows from '../components/ZoneRows.svelte';
   import { fetchActivity } from '../lib/data';
+  import { activityExports } from '../lib/export';
   import { SOURCE_LABEL, SPORT_LABEL, day, duration, km, thousands, time } from '../lib/format';
-  import { link, router } from '../lib/router.svelte';
-  import type { ActivityDetail } from '../lib/types';
+  import { backTarget, link, router } from '../lib/router.svelte';
+  import type { ActivityDetail, Version } from '../lib/types';
 
   let { id }: { id: string } = $props();
+  const back = backTarget({ href: '/activities', label: 'Activities' });
   let d = $state<ActivityDetail | null>(null);
   let stale = $state<number | null>(null);
   let failed = $state(false);
   let cursor = $state<number | null>(null);
+  // The recording shown alone, or '' for everything merged.
+  let view = $state('');
+  let loading = $state(false);
 
   $effect(() => {
-    fetchActivity(id).then((res) => {
+    const want = view;
+    loading = true;
+    fetchActivity(id, want || undefined).then((res) => {
+      if (want !== view) return; // switched again before this arrived
+      loading = false;
+      if (!res.data && d) return; // keep what's on screen; the switch just didn't load
       d = res.data;
       stale = res.stale;
       failed = !res.data;
-      // A logged strength session has its own, richer screen.
-      if (res.data?.activity.session_id) router.go(`/session/${res.data.activity.session_id}/summary`, { replace: true });
+      cursor = null;
+      // A logged strength session has its own, richer screen, unless another
+      // app recorded it too and there are versions to compare.
+      const sid = res.data?.activity.session_id;
+      if (sid && !want && !res.data?.versions) router.go(`/session/${sid}/summary`, { replace: true });
     });
   });
+
+  // Names for each recording, told apart when one app recorded twice (Whoop's
+  // own record and the copy it posted to Strava, or a ride Whoop split).
+  // In time order; at the same minute, bike computers before wrist bands and
+  // an app's own record before its file copy.
+  const RANK = ['wahoo', 'garmin', 'zwift', 'device', 'strava', 'upload', 'watch', 'app', 'whoop'];
+  let versions = $derived(
+    [...(d?.versions ?? [])].sort(
+      (x, y) =>
+        Math.floor(x.start_at / 60000) - Math.floor(y.start_at / 60000) ||
+        RANK.indexOf(x.source) - RANK.indexOf(y.source) ||
+        Number(x.file) - Number(y.file),
+    ),
+  );
+  let versionNames = $derived.by(() => {
+    const vs = versions;
+    const base = vs.map((v) => SOURCE_LABEL[v.source] ?? v.source);
+    const named = vs.map((v, i) => (base.filter((b) => b === base[i]).length > 1 && v.file ? `${base[i]} file` : base[i]!));
+    return Object.fromEntries(
+      vs.map((v, i) => [v.id, named.filter((n) => n === named[i]).length > 1 ? `${named[i]} ${time(v.start_at)}` : named[i]!]),
+    );
+  });
+  let viewName = $derived(view ? versionNames[view] ?? '' : '');
+
+  const METHOD: Record<string, string> = { power: 'power', hr: 'HR', strain: 'strain', none: '' };
+  // The comparison: one row per measure any recording has, '–' where one
+  // didn't measure it.
+  const versionRows: { label: string; value: (v: Version) => string }[] = [
+    { label: 'Started', value: (v) => time(v.start_at) },
+    { label: 'Duration', value: (v) => duration(v.moving_s || v.elapsed_s) },
+    { label: 'Distance', value: (v) => (v.distance_m > 0 ? `${km(v.distance_m)} km` : '') },
+    { label: 'Avg power', value: (v) => (v.avg_power > 0 ? `${v.avg_power} W` : '') },
+    { label: 'NP', value: (v) => (v.np > 0 ? `${v.np} W` : '') },
+    { label: 'Avg HR', value: (v) => (v.avg_hr > 0 ? `${v.avg_hr}` : '') },
+    { label: 'Max HR', value: (v) => (v.max_hr > 0 ? `${v.max_hr}` : '') },
+    { label: 'Cadence', value: (v) => (v.avg_cadence > 0 ? `${v.avg_cadence} rpm` : '') },
+    { label: 'Strain', value: (v) => (v.strain != null ? v.strain.toFixed(1) : '') },
+    { label: 'Sets', value: (v) => (v.sets ? `${v.sets} · ${thousands(v.volume_kg ?? 0)} kg` : '') },
+    { label: 'TSS', value: (v) => (v.tss > 0 ? `${Math.round(v.tss)} · ${METHOD[v.load_method]}` : '') },
+  ];
+  let shownRows = $derived(versionRows.filter((r) => versions.some((v) => r.value(v) !== '')));
 
   let a = $derived(d?.activity);
   let m = $derived(d?.metrics);
   let isRide = $derived(a?.sport === 'ride' || a?.sport === 'virtual_ride');
+  let kind = $derived(isRide ? 'ride' : a?.sport === 'strength' ? 'strength' : 'other');
   let hrZoneBounds = $derived(d ? [0.5, 0.6, 0.7, 0.8, 0.9].map((p) => Math.round(p * d!.max_hr)) : undefined);
   let cursorLatLng = $derived.by((): [number, number] | null => {
-    if (cursor == null || !d?.stream.route?.length || !d.stream.t.length) return null;
-    const frac = cursor / Math.max(1, d.stream.t.length - 1);
+    if (cursor == null || !d?.stream.route?.length || !d.stream.t?.length) return null;
+    const frac = cursor / Math.max(1, (d.stream.t?.length ?? 0) - 1);
     return d.stream.route[Math.round(frac * (d.stream.route.length - 1))] ?? null;
   });
 
-  const powerZoneNames = ['Recovery', 'Endurance', 'Tempo', 'Threshold', 'VO2 max', 'Anaerobic', 'Neuromuscular'];
-  const powerZoneShades = ['var(--zone-1)', 'var(--zone-2)', 'var(--zone-3)', 'var(--zone-4)', 'var(--zone-4)', 'var(--zone-5)', 'var(--zone-5)'];
+  const powerZoneNames = ['Recovery', 'Endurance', 'Tempo', 'Threshold', 'VO2 max', 'Anaerobic', 'Sprint'];
+  // Seven power zones on five zone hues: the top three step through red so
+  // neighbours never share a colour (the label carries identity anyway).
+  const powerZoneShades = [
+    'var(--zone-1)', 'var(--zone-2)', 'var(--zone-3)', 'var(--zone-4)', 'var(--zone-5)',
+    'color-mix(in srgb, var(--zone-5) 70%, var(--text))', 'color-mix(in srgb, var(--zone-5) 45%, var(--text))',
+  ];
 
   let channelNote = $derived.by(() => {
     if (!d) return [];
@@ -53,7 +115,9 @@
       case 'power':
         return `Scored by power against an FTP of ${a.ftp} W on the day (IF ${a.intensity.toFixed(2)}).`;
       case 'hr':
-        return 'Scored by heart rate: no power meter on this one.';
+        return d?.hr_zones_from === 'whoop'
+          ? "Scored by heart rate, from Whoop's time in each zone: no power meter on this one."
+          : 'Scored by heart rate: no power meter on this one.';
       case 'strain':
         return `Scored from Whoop strain ${a.strain?.toFixed(1)}.`;
     }
@@ -63,7 +127,8 @@
 
 <main class="page">
   <header class="top">
-    <a class="btn btn-quiet back" href="/activities" use:link><ChevronLeft size={20} aria-hidden="true" /> Activities</a>
+    <a class="btn btn-quiet back" href={back.href} use:link><ChevronLeft size={20} aria-hidden="true" /> {back.label}</a>
+    {#if d && !stale && !d.view}<ExportMenu items={activityExports(d)} />{/if}
   </header>
 
   {#if failed && !d}
@@ -74,13 +139,26 @@
   {:else if d && a && m}
     <h1 class="name">{a.name}</h1>
     <p class="mono meta">
-      {day(a.start_at)} · {time(a.start_at)} · {SPORT_LABEL[a.sport] ?? a.sport}{#if a.route} · {a.route}{/if}
+      <span class="sport-tag sport-{kind}">{SPORT_LABEL[a.sport] ?? a.sport}</span>
+      {day(a.start_at)} · {time(a.start_at)}{#if a.route} · {a.route}{/if}
     </p>
-    <div class="srcs"><Sources sources={d.sources} /></div>
+    {#if d.versions}
+      <div class="versions-switch" role="group" aria-label="Show this workout as" aria-busy={loading}>
+        <button type="button" class="vbtn" aria-pressed={!view} onclick={() => (view = '')}>Combined</button>
+        {#each versions as v (v.id)}
+          <button type="button" class="vbtn" aria-pressed={view === v.id} onclick={() => (view = v.id)}>{versionNames[v.id]}</button>
+        {/each}
+      </div>
+      {#if d.view}
+        <p class="note view-note">{viewName}'s own recording, before merging with the others.</p>
+      {/if}
+    {:else}
+      <div class="srcs"><Sources sources={d.sources} /></div>
+    {/if}
     {#if stale}<p class="notice">No connection. Showing this activity as last opened at {time(stale)}.</p>{/if}
 
     {#if d.stream.route && d.stream.route.length > 1}
-      <div class="map-wrap"><RouteMap route={d.stream.route} cursor={cursorLatLng} virtual={a.sport === 'virtual_ride'} /></div>
+      <div class="map-wrap"><RouteMap route={d.stream.route} cursor={cursorLatLng} virtual={a.sport === 'virtual_ride'} tone={`--sport-${kind}`} /></div>
     {/if}
 
     <dl class="stats">
@@ -111,9 +189,20 @@
         <div><dt class="label">Strain</dt><dd><span class="num">{a.strain.toFixed(1)}</span></dd></div>
       {/if}
     </dl>
-    <p class="mono note">{loadNote()}</p>
+    <p class="note">{loadNote()}</p>
+    {#if isRide && !stale && !d.view}<BikePicker activityId={a.id} />{/if}
 
-    {#if d.stream.t.length > 1}
+    {#if d.strength && a.session_id}
+      <section class="block" aria-labelledby="lift-h">
+        <h2 id="lift-h" class="block-h">Lifting</h2>
+        <p class="lift">
+          <span class="mono">{d.strength.sets.length} sets · {d.strength.total_reps} reps · {thousands(d.strength.volume_kg)} kg</span>
+          <a class="btn" href={`/session/${a.session_id}/summary`} use:link>Open the session</a>
+        </p>
+      </section>
+    {/if}
+
+    {#if (d.stream.t?.length ?? 0) > 1}
       <section class="block" aria-labelledby="streams-h">
         <h2 id="streams-h" class="block-h">Over the ride</h2>
         <StreamPanels stream={d.stream} hrZones={hrZoneBounds} {cursor} oncursor={(i) => (cursor = i)} />
@@ -144,40 +233,77 @@
     {#if d.hr_zones.slice(1).some((v) => v > 0)}
       <section class="block" aria-labelledby="hz-h">
         <h2 id="hz-h" class="block-h">Time in heart rate zones <span class="mono muted">max {d.max_hr}</span></h2>
-        <ZoneRows rows={d.hr_zones.slice(1).map((s, i) => ({ label: `Z${i + 1}`, hint: `${Math.round([0.5, 0.6, 0.7, 0.8, 0.9][i]! * d!.max_hr)}+`, seconds: s, color: `var(--zone-${i + 1})` }))} />
+        {#if d.hr_zones_from === 'whoop'}<p class="muted small zone-src">As Whoop measured them; there's no second-by-second heart rate for this one.</p>{/if}
+        <ZoneRows rows={d.hr_zones.slice(1).map((s, i) => ({ label: `Z${i + 1}`, hint: `${d!.hr_zone_bounds?.[i] ?? Math.round([0.5, 0.6, 0.7, 0.8, 0.9][i]! * d!.max_hr)}+`, seconds: s, color: `var(--zone-${i + 1})` }))} />
       </section>
     {/if}
 
+    {#if d.versions}
+      <section class="block" aria-labelledby="ver-h">
+        <h2 id="ver-h" class="block-h">Versions <span class="mono muted">{d.versions.length} recordings</span></h2>
+        <div class="vtable-wrap">
+          <table class="vtable">
+            <thead>
+              <tr>
+                <td></td>
+                {#each versions as v (v.id)}
+                  <th scope="col">
+                    <button type="button" class="vhead" aria-pressed={view === v.id} onclick={() => (view = view === v.id ? '' : v.id)}>
+                      {versionNames[v.id]}
+                    </button>
+                  </th>
+                {/each}
+              </tr>
+            </thead>
+            <tbody>
+              {#each shownRows as r (r.label)}
+                <tr>
+                  <th scope="row">{r.label}</th>
+                  {#each versions as v (v.id)}<td class="mono" class:on={view === v.id}>{r.value(v) || '–'}</td>{/each}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          {#if !d.view && channelNote.length}Combined: {channelNote.join('; ')}.{/if}
+          Every original file is kept. Pick a version to see its own charts{#if d.view}, or Combined for all of them merged{/if}.
+        </p>
+      </section>
+    {:else}
     <section class="block" aria-labelledby="src-h">
       <h2 id="src-h" class="block-h">Recorded by</h2>
       <ul class="sources">
         {#each d.sources as s (s.id)}
           <li>
-            <span class="s-name">{SOURCE_LABEL[s.source] ?? s.source}{#if s.device}<span class="muted">{' · '}{s.device}</span>{/if}</span>
+            <span class="s-name">{SOURCE_LABEL[s.source] ?? s.source}{#if s.device && s.device.toLowerCase() !== (SOURCE_LABEL[s.source] ?? s.source).toLowerCase()}<span class="muted">{' · '}{s.device}</span>{/if}</span>
             <span class="mono muted">{time(s.start_at)} · {duration(s.elapsed_s)}{s.has_power ? ' · power' : ''}{s.has_hr ? ' · HR' : ''}{s.has_gps ? ' · GPS' : ''}</span>
           </li>
         {/each}
       </ul>
       {#if d.sources.length > 1}
-        <p class="mono note">Merged into one: {channelNote.join('; ')}. Every original file is kept.</p>
+        <p class="note">Merged into one: {channelNote.join('; ')}. Every original file is kept.</p>
       {/if}
     </section>
+    {/if}
   {/if}
 </main>
 
 <style>
   .page {
-    max-width: 40rem;
+    max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
   }
   @media (min-width: 900px) {
     .page {
-      max-width: 56rem;
+      max-width: var(--page-wide);
     }
   }
   .top {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
     min-height: 2.75rem;
   }
   .back {
@@ -199,6 +325,26 @@
     margin-top: var(--space-1);
     font-size: var(--size-small);
     color: var(--text-muted);
+  }
+  /* The sport, painted like a team-car door panel: solid colour, dark ink. */
+  .sport-tag {
+    display: inline-block;
+    margin-right: var(--space-2);
+    padding: 0.0625rem 0.4375rem;
+    border-radius: var(--radius-s);
+    font-family: var(--font-ui);
+    font-size: var(--size-label);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--on-sport);
+    background: var(--sport-other);
+    vertical-align: 0.0625rem;
+  }
+  .sport-tag.sport-ride {
+    background: var(--sport-ride);
+  }
+  .sport-tag.sport-strength {
+    background: var(--sport-strength);
   }
   .srcs {
     margin-top: var(--space-2);
@@ -283,5 +429,87 @@
   }
   .sources .mono {
     font-size: var(--size-label);
+  }
+  .versions-switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-top: var(--space-3);
+  }
+  .vbtn {
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-m);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: var(--size-small);
+    cursor: pointer;
+  }
+  .vbtn[aria-pressed='true'] {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--bg);
+    font-weight: 600;
+  }
+  .view-note {
+    margin-top: var(--space-2);
+  }
+  .lift {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin: 0;
+  }
+  .vtable-wrap {
+    overflow-x: auto;
+    border-top: 1px solid var(--line);
+  }
+  .vtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--size-small);
+  }
+  .vtable th,
+  .vtable td {
+    padding: var(--space-2) var(--space-2) var(--space-2) 0;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    white-space: nowrap;
+    vertical-align: baseline;
+  }
+  .vtable tbody th {
+    font-weight: 400;
+    color: var(--text-muted);
+    position: sticky;
+    left: 0;
+    background: var(--bg);
+  }
+  .vtable td.on {
+    font-weight: 600;
+  }
+  .vhead {
+    min-height: var(--tap-min);
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .vhead[aria-pressed='true'] {
+    text-decoration-color: var(--text);
+    text-decoration-thickness: 2px;
+  }
+  .zone-src {
+    margin: 0 0 var(--space-2);
+    font-size: var(--size-small);
   }
 </style>

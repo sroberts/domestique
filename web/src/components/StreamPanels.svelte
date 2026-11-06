@@ -125,8 +125,8 @@
               <path class="line" d={r.d} style:stroke={`var(--zone-${r.z})`} />
             {/each}
           {:else}
-            <path class="area faint" d={areaPath(xs, g.ys, g.y(g.lo))} />
-            <path class="line" d={linePath(xs, g.ys)} />
+            <path class="area faint ch-{p.key}" d={areaPath(xs, g.ys, g.y(g.lo))} />
+            <path class="line ch-{p.key}" d={linePath(xs, g.ys)} />
           {/if}
           {#if cursor != null}
             {@const ci = Math.min(xs.length - 1, Math.floor(cursor / step))}
@@ -209,6 +209,16 @@
   .area.faint {
     fill: var(--text);
     opacity: 0.06;
+  }
+  /* Power has its own colour wherever it's drawn; it's the ride's hero
+     channel. The area under it carries the same hue, faintly. */
+  .line.ch-power {
+    stroke: var(--power);
+    stroke-width: 1.75;
+  }
+  .area.faint.ch-power {
+    fill: var(--power);
+    opacity: 0.16;
   }
   .cursor {
     stroke: var(--text-muted);
