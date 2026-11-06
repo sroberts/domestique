@@ -157,7 +157,7 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 	}
 	for i, a := range acts {
 		if z, ok := store.WhoopZones(srcs[a.ID]); ok && len(ms[i].HRHist) == 0 {
-			ms[i].HRHist = activity.ZoneHRHist(z, ath.MaxHR)
+			ms[i].HRHist = activity.ZoneHRHist(z, ath.MaxHR, ath.RestHR)
 		}
 	}
 
@@ -195,6 +195,13 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 		}
 	}
 	return Current(ctx, st, fallbackMaxHR), nil
+}
+
+// Score is the load of one activity, or of one source's version of it, from
+// its own metrics: TSS, intensity factor, and how it was scored.
+func Score(a store.Activity, m activity.Metrics, ath Athlete) (float64, float64, string) {
+	return score(a, metricsLite{NP: m.NP, MaxHR: m.MaxHR, PowerCurve: m.PowerCurve, HRHist: m.HRHist,
+		PowerSeconds: m.PowerSeconds}, a.FTP, ath)
 }
 
 func score(a store.Activity, m metricsLite, ftp int, ath Athlete) (float64, float64, string) {

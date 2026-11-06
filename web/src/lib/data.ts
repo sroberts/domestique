@@ -34,7 +34,10 @@ export async function cachedGet<T>(path: string): Promise<Loaded<T>> {
 
 export const fetchActivities = (q: string) =>
   cachedGet<{ activities: ActivityRow[]; next_before: number }>(`/v1/activities${q}`);
-export const fetchActivity = (id: string) => cachedGet<ActivityDetail>(`/v1/activities/${encodeURIComponent(id)}`);
+export const fetchActivity = (id: string, source?: string) =>
+  cachedGet<ActivityDetail>(
+    `/v1/activities/${encodeURIComponent(id)}${source ? `?source=${encodeURIComponent(source)}` : ''}`,
+  );
 export const fetchLoad = (days: number) => cachedGet<{ days: LoadDay[]; athlete: Athlete }>(`/v1/load?days=${days}`);
 export const fetchTrends = () => cachedGet<Trends>('/v1/trends');
 export const fetchConnections = () => cachedGet<{ providers: ProviderStatus[]; redirect_base: string }>('/v1/connections');

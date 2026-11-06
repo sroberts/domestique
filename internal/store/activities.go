@@ -252,9 +252,40 @@ func (s *Store) SourcesFor(ctx context.Context, activityID string) ([]Source, er
 	return s.querySources(ctx, `WHERE activity_id = ? ORDER BY imported_at`, activityID)
 }
 
-// SourcesNear returns sources starting within window of t (all epoch ms).
-func (s *Store) SourcesNear(ctx context.Context, t, window int64) ([]Source, error) {
-	return s.querySources(ctx, `WHERE start_at BETWEEN ? AND ?`, t-window, t+window)
+// SourcesOverlapping returns sources whose time span overlaps [start, end)
+// (epoch ms). Nothing lasts over a day, which keeps the scan on the index.
+func (s *Store) SourcesOverlapping(ctx context.Context, start, end int64) ([]Source, error) {
+	return s.querySources(ctx, `WHERE start_at > ? AND start_at < ? AND start_at + elapsed_s * 1000 > ? ORDER BY start_at`,
+		start-24*3600*1000, end, start)
+}
+
+// AllSources returns every source in start order.
+func (s *Store) AllSources(ctx context.Context) ([]Source, error) {
+	return s.querySources(ctx, `ORDER BY start_at, id`)
+}
+
+// MergeActivities folds activity from into to: its sources, its logged
+// session and its bike (unless to already has one), then drops from.
+func (s *Store) MergeActivities(ctx context.Context, from, to string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`UPDATE activity_sources SET activity_id = ?2 WHERE activity_id = ?1`,
+		`UPDATE activities SET session_id = (SELECT session_id FROM activities WHERE id = ?1)
+			WHERE id = ?2 AND session_id IS NULL`,
+		`UPDATE activity_bikes SET activity_id = ?2 WHERE activity_id = ?1
+			AND NOT EXISTS (SELECT 1 FROM activity_bikes WHERE activity_id = ?2)`,
+		`DELETE FROM activity_bikes WHERE activity_id = ?1`,
+		`DELETE FROM activities WHERE id = ?1`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, from, to); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // SourcesFor many activities at once, keyed by activity.
@@ -540,8 +571,9 @@ func (s *Store) DeleteRecovery(ctx context.Context, date, source string) error {
 }
 
 // WhoopZones returns the seconds a Whoop workout spent in Whoop's six heart
-// rate zones (0: under 50% of max HR, then 50-60, 60-70, 70-80, 80-90 and
-// 90-100%), from the first Whoop source that has them.
+// rate zones, from the first Whoop source that has them. Whoop's zones are
+// shares of heart rate reserve (max HR minus resting): zone 0 is under 50%,
+// then 50-60, 60-70, 70-80, 80-90 and 90-100%.
 func WhoopZones(srcs []Source) ([6]int, bool) {
 	for _, s := range srcs {
 		if s.Source != "whoop" || len(s.Extra) == 0 {

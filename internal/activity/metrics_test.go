@@ -66,16 +66,21 @@ func TestStrainLoadCappedByDuration(t *testing.T) {
 }
 
 func TestZoneHRHist(t *testing.T) {
-	h := ZoneHRHist([6]int{60, 0, 600, 0, 0, 30}, 190)
-	if h[86] != 60 || h[124] != 600 || h[181] != 30 {
-		t.Fatalf("zone midpoints wrong: 86=%d 124=%d 181=%d", h[86], h[124], h[181])
+	// Max 189, resting 59: a reserve of 130 bpm.
+	h := ZoneHRHist([6]int{60, 0, 600, 0, 0, 30}, 189, 59)
+	if h[118] != 60 || h[144] != 600 || h[183] != 30 {
+		t.Fatalf("zone midpoints wrong: 118=%d 144=%d 183=%d", h[118], h[144], h[183])
 	}
-	// An hour in zone 3 (70-80% of max) at LTHR = 90% of max is endurance pace.
-	tss := HRTSS(ZoneHRHist([6]int{0, 0, 0, 3600, 0, 0}, 190), 59, 171)
-	if tss < 40 || tss > 70 {
-		t.Errorf("1 h in zone 3 = %v TSS, want an endurance-ride 40-70", tss)
+	if b := WhoopZoneBounds(189, 59); b != [5]int{124, 137, 150, 163, 176} {
+		t.Fatalf("bounds = %v", b)
 	}
-	if ZoneHRHist([6]int{}, 190) != nil || ZoneHRHist([6]int{0, 10}, 0) != nil {
+	// 38 minutes almost all in Whoop zone 1 (a real indoor ride averaging
+	// 125 bpm) scores like its heart rate stream did (24), not half that.
+	tss := HRTSS(ZoneHRHist([6]int{0, 2330, 9, 0, 0, 0}, 189, 59), 59, 170)
+	if tss < 20 || tss > 30 {
+		t.Errorf("38 min in zone 1 = %v TSS, want 20-30", tss)
+	}
+	if ZoneHRHist([6]int{}, 189, 59) != nil || ZoneHRHist([6]int{0, 10}, 0, 59) != nil {
 		t.Error("empty zones or unknown max HR should give no histogram")
 	}
 }

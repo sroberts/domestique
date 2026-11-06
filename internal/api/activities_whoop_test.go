@@ -8,6 +8,7 @@ import (
 
 	"domestique/internal/ingest"
 	"domestique/internal/load"
+	"domestique/internal/store"
 )
 
 // A workout only Whoop recorded has no stream: the detail must still carry a
@@ -68,5 +69,80 @@ func TestWhoopOnlyActivityLoad(t *testing.T) {
 	}
 	if act.TSS <= 20 || act.TSS > 75 {
 		t.Fatalf("TSS = %v, want a plausible 45-minute score (20-75); strain alone gave 104", act.TSS)
+	}
+}
+
+// A merged workout lists each recording's own numbers, and ?source= shows
+// one recording alone.
+func TestActivityVersions(t *testing.T) {
+	a, h := newTestAPI(t)
+	ctx := context.Background()
+	a.Ingest = &ingest.Ingester{Store: a.Store, StorageDir: t.TempDir(), Log: a.Log, Loc: time.UTC}
+	start := time.Now().Add(-5 * time.Hour).Truncate(time.Second)
+	if err := a.Store.PutActivity(ctx, store.Activity{ID: "a_r", Sport: "virtual_ride", Name: "Ride", StartAt: start.UnixMilli(),
+		ElapsedS: 3600, MovingS: 3600, Metrics: []byte("{}")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Store.PutSource(ctx, store.Source{ID: "zwift:1", ActivityID: "a_r", Source: "zwift", Sport: "virtual_ride",
+		StartAt: start.UnixMilli(), ElapsedS: 3600, MovingS: 3600, DistanceM: 30000, Extra: []byte("{}"), ImportedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	strain := 12.5
+	res, err := a.Ingest.AddWhoopWorkout(ctx, "w9", start.Add(5*time.Minute), 3000, 0,
+		ingest.Hint{Source: "whoop", Sport: "Ride", Strain: &strain}, 148, 171, [6]int64{0, 600000, 1200000, 900000, 300000, 0})
+	if err != nil || res.ActivityID != "a_r" {
+		t.Fatalf("whoop merge = %+v %v", res, err)
+	}
+
+	type detail struct {
+		Activity struct {
+			StartAt   int64    `json:"start_at"`
+			DistanceM float64  `json:"distance_m"`
+			Strain    *float64 `json:"strain"`
+		} `json:"activity"`
+		Metrics struct {
+			AvgHR int `json:"avg_hr"`
+		} `json:"metrics"`
+		HRZonesFrom string `json:"hr_zones_from"`
+		View        string `json:"view"`
+		Versions    []struct {
+			ID     string   `json:"id"`
+			Source string   `json:"source"`
+			AvgHR  int      `json:"avg_hr"`
+			Strain *float64 `json:"strain"`
+			TSS    float64  `json:"tss"`
+		} `json:"versions"`
+	}
+	get := func(q string) (int, detail) {
+		w := do(t, h, "GET", "/v1/activities/a_r"+q, nil)
+		var d detail
+		_ = json.Unmarshal(w.Body.Bytes(), &d)
+		return w.Code, d
+	}
+	code, d := get("")
+	if code != 200 || len(d.Versions) != 2 || d.View != "" {
+		t.Fatalf("combined = %d, %d versions, view %q", code, len(d.Versions), d.View)
+	}
+	var whoop string
+	for _, v := range d.Versions {
+		if v.Source == "whoop" {
+			whoop = v.ID
+			if v.AvgHR != 148 || v.Strain == nil || *v.Strain != 12.5 || v.TSS <= 0 {
+				t.Fatalf("whoop version = %+v", v)
+			}
+		}
+	}
+	code, d = get("?source=" + whoop)
+	if code != 200 || d.View != whoop {
+		t.Fatalf("whoop view = %d view %q", code, d.View)
+	}
+	if d.Activity.StartAt != start.Add(5*time.Minute).UnixMilli() || d.Activity.DistanceM != 0 || d.Metrics.AvgHR != 148 || d.HRZonesFrom != "whoop" {
+		t.Fatalf("whoop view shows %+v avg HR %d zones from %q", d.Activity, d.Metrics.AvgHR, d.HRZonesFrom)
+	}
+	if code, d = get("?source=zwift:1"); code != 200 || d.Activity.DistanceM != 30000 || d.Activity.Strain != nil {
+		t.Fatalf("zwift view = %d %+v", code, d.Activity)
+	}
+	if code, _ = get("?source=nope"); code != 404 {
+		t.Fatalf("unknown source = %d, want 404", code)
 	}
 }

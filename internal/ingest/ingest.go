@@ -306,12 +306,10 @@ func randID() string {
 
 // ---- Matching ---------------------------------------------------------------------
 
-// MatchWindow and MatchOverlap are the spec's dedup rule: starts within two
-// minutes and durations overlapping by more than 80%.
-const (
-	MatchWindow  = 2 * 60 * 1000
-	MatchOverlap = 0.8
-)
+// MatchOverlap is the spec's dedup rule: two recordings are one workout when
+// their time spans overlap by at least 80% of the shorter one. Start times
+// alone aren't enough: Whoop detects a workout minutes after it starts.
+const MatchOverlap = 0.8
 
 func compatible(a, b string) bool {
 	if a == b {
@@ -321,18 +319,22 @@ func compatible(a, b string) bool {
 	if ride(a) && ride(b) {
 		return true
 	}
+	foot := func(s string) bool { return s == activity.SportWalk || s == activity.SportHike }
+	if foot(a) && foot(b) {
+		return true
+	}
 	// Whoop often labels a ride or lift loosely; "other" matches anything.
 	return a == activity.SportOther || b == activity.SportOther
 }
 
 func (in *Ingester) match(ctx context.Context, src store.Source, st *activity.Stream) (string, bool, error) {
-	cands, err := in.Store.SourcesNear(ctx, src.StartAt, MatchWindow)
+	cands, err := in.Store.SourcesOverlapping(ctx, src.StartAt, src.StartAt+int64(src.ElapsedS)*1000)
 	if err != nil {
 		return "", false, err
 	}
 	best, bestScore := "", 0.0
 	for _, c := range cands {
-		if c.ID == src.ID || !compatible(c.Sport, src.Sport) {
+		if c.ID == src.ID || (src.ActivityID != "" && c.ActivityID == src.ActivityID) || !compatible(c.Sport, src.Sport) {
 			continue
 		}
 		ov := overlap(src.StartAt, src.ElapsedS, c.StartAt, c.ElapsedS)
@@ -346,8 +348,12 @@ func (in *Ingester) match(ctx context.Context, src store.Source, st *activity.St
 			var other activity.Stream
 			if err := in.Store.GetStream(ctx, c.ID, &other); err == nil {
 				r, n := hrCorrelation(src.StartAt, st, c.StartAt, &other)
-				if n >= 120 && r < 0.3 {
-					continue // two different workouts that happen to coincide
+				// Two workouts that only partly coincide (one ends as the next
+				// starts) are told apart by heart rate. Near-total overlap is
+				// one workout whatever the correlation: one athlete can't do
+				// two at once, and a steady walk barely moves heart rate.
+				if n >= 120 && r < 0.3 && ov < 0.95 {
+					continue
 				}
 				if n >= 120 {
 					score += r

@@ -256,15 +256,25 @@ func StrainLoad(strain float64, secs int) float64 {
 	return round1(tss)
 }
 
-// whoopZoneMid is the middle of each Whoop heart rate zone, as a fraction of
-// max HR.
+// whoopZoneMid is the middle of each Whoop heart rate zone, as a share of
+// heart rate reserve.
 var whoopZoneMid = [6]float64{0.45, 0.55, 0.65, 0.75, 0.85, 0.95}
+
+// WhoopZoneBounds are the lower edges of Whoop's zones 1-5 in bpm: 50-90% of
+// heart rate reserve above resting.
+func WhoopZoneBounds(maxHR, restHR int) [5]int {
+	var b [5]int
+	for i := range b {
+		b[i] = restHR + int(math.Round((0.5+0.1*float64(i))*float64(maxHR-restHR)))
+	}
+	return b
+}
 
 // ZoneHRHist turns time in Whoop's heart rate zones into an HR histogram
 // (seconds at each bpm, as Metrics.HRHist) by placing each zone's time at its
 // midpoint, so HRTSS can score a workout that has no heart rate stream.
-func ZoneHRHist(zoneSecs [6]int, maxHR int) []int32 {
-	if maxHR <= 0 {
+func ZoneHRHist(zoneSecs [6]int, maxHR, restHR int) []int32 {
+	if maxHR <= restHR || restHR < 0 {
 		return nil
 	}
 	hist := make([]int32, 241)
@@ -273,8 +283,8 @@ func ZoneHRHist(zoneSecs [6]int, maxHR int) []int32 {
 		if secs <= 0 {
 			continue
 		}
-		bpm := min(int(math.Round(whoopZoneMid[i]*float64(maxHR))), len(hist)-1)
-		hist[bpm] += int32(secs)
+		bpm := restHR + int(math.Round(whoopZoneMid[i]*float64(maxHR-restHR)))
+		hist[min(bpm, len(hist)-1)] += int32(secs)
 		any = true
 	}
 	if !any {

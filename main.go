@@ -172,6 +172,7 @@ func run() error {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
+			remerge(ctx, s, ing, log)
 			for {
 				if _, err := load.Recalc(ctx, s, maxHR); err != nil && ctx.Err() == nil {
 					log.Warn("load recalc", "err", err.Error())
@@ -330,6 +331,7 @@ func runImport(args []string) error {
 			fmt.Printf("%s: activity %s (merged=%v duplicate=%v)\n", p, res.ActivityID, res.Merged, res.Duplicate)
 		}
 	}
+	remerge(ctx, st, ing, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	ath, err := load.Recalc(ctx, st, envInt("DOMESTIQUE_MAX_HR", 190))
 	if err != nil {
 		return err
@@ -369,4 +371,23 @@ func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 				"ms", time.Since(start).Milliseconds())
 		}
 	})
+}
+
+// remerge folds together recordings of one workout that an older, stricter
+// matching rule left apart. It runs once per rule.
+func remerge(ctx context.Context, s *store.Store, ing *ingest.Ingester, log *slog.Logger) {
+	if v, err := s.SyncState(ctx, "merge:rule"); err == nil && v == ingest.MergeRule {
+		return
+	}
+	changed, err := ing.Remerge(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Warn("re-merge", "err", err.Error())
+		}
+		return
+	}
+	if err := s.SetSyncState(ctx, "merge:rule", ingest.MergeRule); err != nil {
+		log.Warn("re-merge", "err", err.Error())
+	}
+	log.Info("re-merged recordings", "rule", ingest.MergeRule, "activities", len(changed))
 }

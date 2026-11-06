@@ -49,8 +49,9 @@ One Outpost service with three importers, a normalization layer, a dedup engine,
 
 A Zwift ride recorded on a Wahoo head unit produces two records, and Whoop may log a third.
 
-- Match candidates on start time within 2 minutes and overlapping duration above 80%
-- Confirm with heart rate stream correlation when available
+- Match recordings whose time spans overlap by at least 80% of the shorter one (start times alone miss Whoop, which notices a workout minutes after it starts)
+- Use heart rate stream correlation to tell apart workouts that only partly coincide; near-total overlap is one workout regardless
+- The activity list shows one entry per workout; its detail page can show every recording's own version alongside the combined one
 - Merge into one canonical activity; precedence: Wahoo for power, cadence, and heart rate (chest strap beats wrist band whenever the two disagree), Zwift for virtual route, Whoop for strain and recovery
 - Keep all source records; never delete raw data
 

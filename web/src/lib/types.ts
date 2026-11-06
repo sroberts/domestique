@@ -231,9 +231,39 @@ export interface ActivityDetail {
   hr_zones: number[];
   hr_zones_from?: 'whoop';
   max_hr: number;
+  hr_zone_bounds?: number[];
   curve_durations: number[];
   best_curve: number[] | null;
   strength?: Summary;
+  /** Each recording's own numbers, when more than one recorded this. */
+  versions?: Version[];
+  /** The source shown alone, or absent for the merged view. */
+  view?: string;
+}
+
+/** One recording's own account of a workout, before merging. */
+export interface Version {
+  id: string;
+  source: string;
+  device: string;
+  file: boolean;
+  start_at: number;
+  elapsed_s: number;
+  moving_s: number;
+  distance_m: number;
+  avg_hr: number;
+  max_hr: number;
+  avg_power: number;
+  np: number;
+  avg_cadence: number;
+  strain: number | null;
+  tss: number;
+  load_method: Activity['load_method'];
+  has_power: boolean;
+  has_hr: boolean;
+  has_gps: boolean;
+  sets?: number;
+  volume_kg?: number;
 }
 
 export interface Athlete {
