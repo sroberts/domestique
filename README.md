@@ -27,6 +27,22 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 | `DOMESTIQUE_MAX_HR` | Fallback max HR until one is detected (default 190) |
 | `DOMESTIQUE_DEMO=1` | Stand-in Whoop data until Whoop is connected |
 
+### Secrets
+
+Client secrets are read only from files; the manifest is plaintext and its
+`env` is visible in the process table, so a `DOMESTIQUE_*_CLIENT_SECRET` set
+directly in the environment stops Domestique at start. On the Mac Mini:
+
+    mkdir -p ~/.config/domestique && chmod 700 ~/.config/domestique
+    (umask 077; pbpaste > ~/.config/domestique/whoop-secret)   # copy the secret first
+    (umask 077; pbpaste > ~/.config/domestique/wahoo-secret)
+
+Each file must be non-empty and readable only by you (mode `600`); a
+group- or world-readable file is refused, as ssh refuses a loose key. Client
+IDs aren't secret and go in the manifest. OAuth access and refresh tokens are
+kept in the SQLite database under `OUTPOST_STORAGE_DIR` (mode `600`), are never
+returned by the API, MCP or exports, and are dropped by Settings → Disconnect.
+
 OAuth redirect URIs to register: `<your Domestique address>/v1/oauth/whoop/callback`
 and `/v1/oauth/wahoo/callback`. Connect from Settings in the app.
 

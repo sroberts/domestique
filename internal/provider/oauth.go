@@ -40,35 +40,73 @@ type Config struct {
 // Configured reports whether credentials were supplied.
 func (c Config) Configured() bool { return c.ClientID != "" && c.ClientSecret != "" }
 
-// LoadConfig reads <PREFIX>_CLIENT_ID (or _CLIENT_ID_FILE) and
-// <PREFIX>_CLIENT_SECRET_FILE (or _CLIENT_SECRET) from the environment.
+// LoadConfig reads <PREFIX>_CLIENT_ID (or _CLIENT_ID_FILE) and the client
+// secret from the file named by <PREFIX>_CLIENT_SECRET_FILE. The secret is
+// never taken from the environment itself: the Outpost manifest is plaintext
+// and its env shows up in the process table (outpost-service-spec.md §3,
+// Secrets), so a secret set there is refused rather than quietly used.
 func LoadConfig(c Config, prefix string) (Config, error) {
+	if os.Getenv(prefix+"_CLIENT_SECRET") != "" {
+		return c, fmt.Errorf("%s_CLIENT_SECRET is set in the environment; put the secret in a file readable only by you (chmod 600) and set %s_CLIENT_SECRET_FILE to its path instead", prefix, prefix)
+	}
 	var err error
-	if c.ClientID, err = secret(prefix + "_CLIENT_ID"); err != nil {
+	if c.ClientID, err = fromEnvOrFile(prefix + "_CLIENT_ID"); err != nil {
 		return c, err
 	}
 	if c.ClientID == "" {
 		return c, nil // not set up yet: the secret file needn't exist
 	}
-	if c.ClientSecret, err = secret(prefix + "_CLIENT_SECRET"); err != nil {
+	key := prefix + "_CLIENT_SECRET_FILE"
+	path := os.Getenv(key)
+	if path == "" {
+		return c, fmt.Errorf("%s_CLIENT_ID is set but %s isn't: name the file holding the client secret", prefix, key)
+	}
+	if c.ClientSecret, err = readSecretFile(key, path); err != nil {
 		return c, err
 	}
 	return c, nil
 }
 
-func secret(key string) (string, error) {
+// fromEnvOrFile reads a non-secret value from KEY, or from the file named by
+// KEY_FILE.
+func fromEnvOrFile(key string) (string, error) {
 	if p := os.Getenv(key + "_FILE"); p != "" {
-		if strings.HasPrefix(p, "~/") {
-			home, _ := os.UserHomeDir()
-			p = home + p[1:]
-		}
-		b, err := os.ReadFile(p)
-		if err != nil {
-			return "", fmt.Errorf("%s_FILE: %w", key, err)
-		}
-		return strings.TrimSpace(string(b)), nil
+		return readSecretFile(key+"_FILE", p)
 	}
 	return strings.TrimSpace(os.Getenv(key)), nil
+}
+
+// readSecretFile reads a credential file. It must be a regular file, not
+// empty, and not readable by other users: the same rule ssh applies to
+// private keys, so a secret left world-readable is caught at start rather
+// than leaked.
+func readSecretFile(key, p string) (string, error) {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", key, err)
+		}
+		p = home + p[1:]
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", key, err)
+	}
+	if !fi.Mode().IsRegular() {
+		return "", fmt.Errorf("%s: %s is not a regular file", key, p)
+	}
+	if fi.Mode().Perm()&0o077 != 0 {
+		return "", fmt.Errorf("%s: %s is readable by other users (mode %04o); run chmod 600 %s", key, p, fi.Mode().Perm(), p)
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", key, err)
+	}
+	v := strings.TrimSpace(string(b))
+	if v == "" {
+		return "", fmt.Errorf("%s: %s is empty", key, p)
+	}
+	return v, nil
 }
 
 // Client performs authenticated requests, refreshing tokens as needed.
