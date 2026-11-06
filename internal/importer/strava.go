@@ -4,11 +4,11 @@ package importer
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"strconv"
 	"strings"
@@ -52,8 +52,12 @@ func StravaExport(ctx context.Context, in *ingest.Ingester, zipPath string, repo
 		return Progress{}, err
 	}
 	// The CSV is decompressed from an untrusted archive: bound it like a file.
-	rows, err := csv.NewReader(io.LimitReader(rc, ingest.MaxFileBytes)).ReadAll()
+	data, err := ingest.ReadLimited(rc)
 	rc.Close()
+	var rows [][]string
+	if err == nil {
+		rows, err = csv.NewReader(bytes.NewReader(data)).ReadAll()
+	}
 	if err != nil {
 		return Progress{}, fmt.Errorf("read activities.csv: %w", err)
 	}

@@ -109,7 +109,12 @@ func (a *API) wahooWebhook(w http.ResponseWriter, r *http.Request) {
 		ctx = context.Background()
 	}
 	c.MarkWebhook(ctx)
-	if ev.EventType != "workout_summary" || c.Seen(ev.WorkoutSummary.ID.String()+"@"+ev.WorkoutSummary.UpdatedAt, time.Now()) {
+	if ev.EventType != "workout_summary" {
+		return
+	}
+	// Without an id there is no delivery key: a constant "@" would swallow
+	// every such event for a day.
+	if id := ev.WorkoutSummary.ID.String(); id != "" && c.Seen(id+"@"+ev.WorkoutSummary.UpdatedAt, time.Now()) {
 		return
 	}
 	c.ScheduleSync()

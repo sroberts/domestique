@@ -55,8 +55,14 @@ func (in *Ingester) Remerge(ctx context.Context) ([]string, error) {
 		from := s.ActivityID
 		// Keep the activity a logged lifting session hangs off, so its
 		// summary link stays put.
+		// Two logged sessions can't share one activity: MergeActivities keeps
+		// only one session link, stranding the other's summary.
 		if a, err := in.Store.GetActivity(ctx, from); err == nil && a.SessionID != nil {
-			if b, err := in.Store.GetActivity(ctx, to); err == nil && b.SessionID == nil {
+			b, err := in.Store.GetActivity(ctx, to)
+			if err == nil && b.SessionID != nil {
+				continue
+			}
+			if err == nil {
 				from, to = to, from
 			}
 		}

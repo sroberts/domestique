@@ -307,7 +307,7 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 		resp.HRZoneBounds[i] = int(math.Round(p * float64(ath.MaxHR)))
 	}
 	if resp.HRZones == ([6]int{}) {
-		if z, ok := whoopZones(shown); ok {
+		if z, ok := store.WhoopZones(shown); ok {
 			resp.HRZones, resp.HRZonesFrom = z, "whoop"
 			resp.HRZoneBounds = activity.WhoopZoneBounds(ath.MaxHR, ath.RestHR)
 		}
@@ -329,11 +329,6 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
-
-// whoopZones reads the zone times a Whoop workout reports (its zones are
-// the same 50/60/70/80/90 % of max HR bands, zone 0 below them), for
-// activities Whoop recorded without a heart rate stream.
-func whoopZones(srcs []store.Source) ([6]int, bool) { return store.WhoopZones(srcs) }
 
 // downsample reduces a stream to at most n points by bucket means, and the
 // GPS route by stride, so the phone draws a 5-hour ride without stalling.

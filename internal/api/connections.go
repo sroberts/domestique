@@ -77,7 +77,7 @@ func (a *API) provider(w http.ResponseWriter, r *http.Request) *provider.Client 
 // without a restart. The secret is write-only: nothing returns it.
 func (a *API) putCredentials(w http.ResponseWriter, r *http.Request) {
 	c := a.Providers[r.PathValue("provider")]
-	if c == nil {
+	if c == nil || a.Ingest == nil {
 		writeErr(w, http.StatusNotFound, "unknown provider")
 		return
 	}
@@ -124,7 +124,7 @@ func (a *API) putCredentials(w http.ResponseWriter, r *http.Request) {
 // connection made with them.
 func (a *API) deleteCredentials(w http.ResponseWriter, r *http.Request) {
 	c := a.Providers[r.PathValue("provider")]
-	if c == nil {
+	if c == nil || a.Ingest == nil {
 		writeErr(w, http.StatusNotFound, "unknown provider")
 		return
 	}
