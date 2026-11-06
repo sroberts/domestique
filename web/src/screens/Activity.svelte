@@ -85,6 +85,7 @@
   let a = $derived(d?.activity);
   let m = $derived(d?.metrics);
   let isRide = $derived(a?.sport === 'ride' || a?.sport === 'virtual_ride');
+  let kind = $derived(isRide ? 'ride' : a?.sport === 'strength' ? 'strength' : 'other');
   let hrZoneBounds = $derived(d ? [0.5, 0.6, 0.7, 0.8, 0.9].map((p) => Math.round(p * d!.max_hr)) : undefined);
   let cursorLatLng = $derived.by((): [number, number] | null => {
     if (cursor == null || !d?.stream.route?.length || !d.stream.t?.length) return null;
@@ -138,7 +139,8 @@
   {:else if d && a && m}
     <h1 class="name">{a.name}</h1>
     <p class="mono meta">
-      {day(a.start_at)} · {time(a.start_at)} · {SPORT_LABEL[a.sport] ?? a.sport}{#if a.route} · {a.route}{/if}
+      <span class="sport-tag sport-{kind}">{SPORT_LABEL[a.sport] ?? a.sport}</span>
+      {day(a.start_at)} · {time(a.start_at)}{#if a.route} · {a.route}{/if}
     </p>
     {#if d.versions}
       <div class="versions-switch" role="group" aria-label="Show this workout as" aria-busy={loading}>
@@ -156,7 +158,7 @@
     {#if stale}<p class="notice">No connection. Showing this activity as last opened at {time(stale)}.</p>{/if}
 
     {#if d.stream.route && d.stream.route.length > 1}
-      <div class="map-wrap"><RouteMap route={d.stream.route} cursor={cursorLatLng} virtual={a.sport === 'virtual_ride'} /></div>
+      <div class="map-wrap"><RouteMap route={d.stream.route} cursor={cursorLatLng} virtual={a.sport === 'virtual_ride'} tone={`--sport-${kind}`} /></div>
     {/if}
 
     <dl class="stats">
@@ -323,6 +325,26 @@
     margin-top: var(--space-1);
     font-size: var(--size-small);
     color: var(--text-muted);
+  }
+  /* The sport, painted like a team-car door panel: solid colour, dark ink. */
+  .sport-tag {
+    display: inline-block;
+    margin-right: var(--space-2);
+    padding: 0.0625rem 0.4375rem;
+    border-radius: var(--radius-s);
+    font-family: var(--font-ui);
+    font-size: var(--size-label);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--on-sport);
+    background: var(--sport-other);
+    vertical-align: 0.0625rem;
+  }
+  .sport-tag.sport-ride {
+    background: var(--sport-ride);
+  }
+  .sport-tag.sport-strength {
+    background: var(--sport-strength);
   }
   .srcs {
     margin-top: var(--space-2);

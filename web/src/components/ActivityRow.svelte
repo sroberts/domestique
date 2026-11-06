@@ -1,6 +1,5 @@
 <script lang="ts">
   import SportIcon from './SportIcon.svelte';
-  import Sources from './Sources.svelte';
   import { duration, km, relDay, time } from '../lib/format';
   import { link } from '../lib/router.svelte';
   import { earlyText, endedEarly } from '../lib/workout.svelte';
@@ -9,6 +8,10 @@
   let { a, showDay = true }: { a: ActivityRow; showDay?: boolean } = $props();
   let href = $derived(a.session_id ? `/session/${a.session_id}/summary` : `/activity/${a.id}`);
   let isRide = $derived(a.sport === 'ride' || a.sport === 'virtual_ride');
+  // The sport's colour, painted on a solid block behind its icon.
+  let kind = $derived(isRide ? 'ride' : a.sport === 'strength' ? 'strength' : 'other');
+  // Effort at a glance: a bar under the TSS, full at 150 (a hard long ride).
+  let effort = $derived(Math.min(1, a.tss / 150));
   let meta = $derived(
     [
       showDay ? relDay(a.start_at) : '',
@@ -24,19 +27,20 @@
 </script>
 
 <a class="row" {href} use:link>
-  <span class="icon" aria-hidden="false"><SportIcon sport={a.sport} /></span>
+  <span class="icon sport-{kind}"><SportIcon sport={a.sport} /></span>
   <span class="main">
     <span class="name">{a.name}</span>
     <span class="meta mono">{meta}</span>
     {#if endedEarly(a.progress)}
       <span class="early">{earlyText(a.progress!)}</span>
     {/if}
-    <!-- Logged in this app with nothing else attached: no chip, it's the default. -->
-    {#if !(a.sources.length === 1 && a.sources[0]?.source === 'app')}<Sources sources={a.sources} />{/if}
   </span>
   <span class="figs">
     {#if a.tss > 0}
-      <span class="fig"><span class="num">{Math.round(a.tss)}</span><span class="label">TSS</span></span>
+      <span class="fig">
+        <span class="num">{Math.round(a.tss)}</span><span class="label">TSS</span>
+        <span class="effort sport-{kind}" style:--e={effort} aria-hidden="true"></span>
+      </span>
     {/if}
     {#if isRide && a.summary.np > 0}
       <span class="fig"><span class="num">{a.summary.np}</span><span class="label">NP</span></span>
@@ -51,7 +55,7 @@
 <style>
   .row {
     display: grid;
-    grid-template-columns: 2rem minmax(0, 1fr) auto;
+    grid-template-columns: 2.25rem minmax(0, 1fr) auto;
     gap: var(--space-3);
     align-items: start;
     padding: var(--space-3) 0;
@@ -65,9 +69,34 @@
   .icon {
     display: grid;
     place-items: center;
-    width: 2rem;
-    height: 2rem;
-    color: var(--text-muted);
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-s);
+    color: var(--on-sport);
+    background: var(--sport-other);
+  }
+  .icon.sport-ride {
+    background: var(--sport-ride);
+  }
+  .icon.sport-strength {
+    background: var(--sport-strength);
+  }
+  .effort.sport-ride {
+    --c: var(--sport-ride);
+  }
+  .effort.sport-strength {
+    --c: var(--sport-strength);
+  }
+  .effort {
+    display: block;
+    width: 100%;
+    height: 3px;
+    margin-top: 0.125rem;
+    border-radius: 1px;
+    /* the bar's length is the effort, filled from the right over a faint
+       track so a small number still shows its scale */
+    --c: var(--sport-other);
+    background: linear-gradient(to left, var(--c) calc(var(--e) * 100%), var(--line-strong) 0);
   }
   .main {
     display: grid;

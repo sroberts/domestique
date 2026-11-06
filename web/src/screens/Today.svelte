@@ -136,21 +136,23 @@
   {:else if today}
     <div class="cols">
       <div class="col-main">
-    <!-- The call for the day: recovery and form in one sentence -->
-    <section class="call call-{today.readiness.level}" aria-labelledby="call-h">
+    <!-- The call for the day, painted in the recovery colour like a race
+         graphic: the score, then the verdict in one sentence. -->
+    <section class="call band-{band ?? 'none'}" aria-labelledby="call-h">
+      <p class="call-rec">
+        <span class="call-k">Recovery</span>
+        {#if today.recovery && band}
+          <span class="num call-pct">{today.recovery.score}<span class="pct">%</span></span>
+          <span class="visually-hidden"> ({band})</span>
+        {:else}
+          <span class="call-none">Not scored yet</span>
+        {/if}
+      </p>
       <h1 id="call-h" class="call-title">{today.readiness.title}</h1>
       <p class="call-detail">{today.readiness.detail}</p>
     </section>
 
     <section class="body" aria-label="Recovery and sleep">
-      <div class="rec">
-        <h2 class="label">Recovery</h2>
-        {#if today.recovery && band}
-          <p class="rec-score num"><span class="swatch sw-{band}" aria-hidden="true"></span><span>{today.recovery.score}<span class="pct">%</span></span><span class="visually-hidden"> ({band})</span></p>
-        {:else}
-          <p class="muted small">Not scored yet</p>
-        {/if}
-      </div>
       <dl class="vitals">
         {#if today.recovery}
           <div><dt class="label">HRV</dt><dd><span class="num">{today.recovery.hrv_ms}</span><span class="unit">ms</span></dd></div>
@@ -201,7 +203,7 @@
         <dl class="figs">
           <div><dt class="label">Fitness</dt><dd><span class="num">{Math.round(ld.ctl)}</span>{#if today.ramp_ctl}<span class="unit">{today.ramp_ctl > 0 ? '+' : ''}{today.ramp_ctl} in 7 days</span>{/if}</dd></div>
           <div><dt class="label">Fatigue</dt><dd><span class="num">{Math.round(ld.atl)}</span></dd></div>
-          <div><dt class="label">Form</dt><dd><span class="num">{ld.tsb > 0 ? '+' : ''}{Math.round(ld.tsb)}</span><span class="unit">{formWord(ld.tsb)}</span></dd></div>
+          <div><dt class="label">Form</dt><dd><span class="num">{ld.tsb > 0 ? '+' : ''}{Math.round(ld.tsb)}</span><span class="state st-{formWord(ld.tsb)}">{formWord(ld.tsb)}</span></dd></div>
         </dl>
         <div class="week" role="img" aria-label={`This week so far: ${Math.round(weekTSS)} TSS over ${weekHours.toFixed(1)} hours`}>
           {#each week as w, i (i)}
@@ -323,26 +325,56 @@
     }
   }
 
-  /* The call */
+  /* The call: a solid slab in the recovery colour, dark ink on it, like a
+     race graphic's caption. No score yet: a quiet raised slab. */
   .call {
     margin-top: var(--space-4);
-    padding: var(--space-4);
-    border: 1px solid var(--line-strong);
+    padding: var(--space-4) var(--space-4) var(--space-5);
     border-radius: var(--radius-m);
+    background: var(--surface-raised);
+    color: var(--text);
+    transition: background-color var(--dur-state) var(--ease-out);
   }
-  .call-easy {
-    border-color: var(--zone-5);
-    background: color-mix(in srgb, var(--zone-5) 8%, transparent);
+  .band-green {
+    background: var(--rec-green);
+    color: var(--on-color);
   }
-  .call-hold {
-    border-color: var(--zone-4);
-    background: color-mix(in srgb, var(--zone-4) 7%, transparent);
+  .band-yellow {
+    background: var(--rec-amber);
+    color: var(--on-color);
   }
-  .call-push {
-    border-color: var(--zone-3);
-    background: color-mix(in srgb, var(--zone-3) 7%, transparent);
+  .band-red {
+    background: var(--rec-red);
+    color: var(--on-color);
+  }
+  .call-rec {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .call-k {
+    font-size: var(--size-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+  .call-pct {
+    font-size: var(--size-live);
+    font-weight: 700;
+    line-height: 0.82;
+  }
+  .call-pct .pct {
+    font-size: var(--size-target);
+    font-weight: 600;
+    margin-left: 0.05em;
+  }
+  .call-none {
+    font-size: var(--size-small);
+    color: var(--text-muted);
   }
   .call-title {
+    margin-top: var(--space-3);
     font-size: var(--size-heading);
   }
   .call-detail {
@@ -361,33 +393,6 @@
   }
   .again {
     min-height: 2.75rem;
-  }
-  .rec-score {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--size-target);
-    font-weight: 700;
-    margin-top: var(--space-1);
-  }
-  .pct {
-    font-size: var(--size-target);
-    color: var(--text-muted);
-    font-weight: 600;
-  }
-  .swatch {
-    width: 0.75rem;
-    height: 0.75rem;
-    border-radius: 2px;
-  }
-  .sw-green {
-    background: var(--zone-3);
-  }
-  .sw-yellow {
-    background: var(--zone-4);
-  }
-  .sw-red {
-    background: var(--zone-5);
   }
   .vitals {
     display: flex;

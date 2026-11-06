@@ -43,6 +43,14 @@
     });
     return out;
   });
+
+  // Form bars take the colour of their band, the same as Today's form tag.
+  function formState(tsb: number): string {
+    if (tsb > 5) return 'fresh';
+    if (tsb >= -10) return 'neutral';
+    if (tsb >= -30) return 'building';
+    return 'overreaching';
+  }
 </script>
 
 <div class="load" bind:clientWidth={width}>
@@ -87,7 +95,7 @@
         <text class="tick" x={PAD.left - 6} y={y2(0) + 4} text-anchor="end">0</text>
         {#each days as d, i (d.date)}
           {@const yy = y2(d.tsb)}
-          <rect class="tsb" class:on={i === sel} x={xs[i]! - barW / 2} width={barW} y={Math.min(yy, y2(0))} height={Math.max(1, Math.abs(yy - y2(0)))} />
+          <rect class="tsb {formState(d.tsb)}" class:on={i === sel} x={xs[i]! - barW / 2} width={barW} y={Math.min(yy, y2(0))} height={Math.max(1, Math.abs(yy - y2(0)))} />
         {/each}
       </g>
       {#each monthTicks as m (m.x)}
@@ -127,17 +135,19 @@
     align-self: center;
     width: 1rem;
     height: 0;
-    border-top: 2px solid var(--text);
+    border-top: 2px solid var(--fitness);
   }
   .sw.fat {
     border-top-style: dashed;
-    border-top-color: var(--text-muted);
+    border-top-color: var(--fatigue);
   }
   .sw.frm {
     height: 0.625rem;
-    width: 0.375rem;
+    width: 0.625rem;
     border: 0;
-    background: var(--text-muted);
+    /* the four form bands, as one swatch */
+    background: linear-gradient(to bottom, var(--rec-green) 0 50%, var(--rec-amber) 50% 100%);
+    border-radius: 1px;
   }
   svg {
     display: block;
@@ -170,14 +180,15 @@
     stroke-linejoin: round;
   }
   .line.fit {
-    stroke: var(--text);
+    stroke: var(--fitness);
+    stroke-width: 2.25;
   }
   .line.fat {
-    stroke: var(--text-muted);
+    stroke: var(--fatigue);
     stroke-dasharray: 4 3;
   }
   .end {
-    fill: var(--text);
+    fill: var(--fitness);
     stroke: var(--bg);
     stroke-width: 2;
   }
@@ -191,7 +202,16 @@
     stroke: var(--line-strong);
   }
   .tsb {
-    fill: var(--text-muted);
+    fill: var(--zone-1);
+  }
+  .tsb.fresh {
+    fill: var(--rec-green);
+  }
+  .tsb.building {
+    fill: var(--rec-amber);
+  }
+  .tsb.overreaching {
+    fill: var(--rec-red);
   }
   .tsb.on {
     fill: var(--text);

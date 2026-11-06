@@ -61,9 +61,11 @@
     void load(true);
   });
 
+  // A week this heavy fills its stripe.
+  const WEEK_FULL = 500;
   // Group by ISO week (Monday start), with totals per week.
   let weeks = $derived.by(() => {
-    const out: { key: string; label: string; rows: Row[]; hours: number; tss: number; km: number }[] = [];
+    const out: { key: string; label: string; rows: Row[]; hours: number; tss: number; km: number; by: Record<'ride' | 'strength' | 'other', number> }[] = [];
     for (const r of rows) {
       const d = new Date(r.start_at);
       const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
@@ -76,12 +78,13 @@
           monday.getTime() === thisMon.getTime() ? 'This week'
           : monday.getTime() === thisMon.getTime() - 7 * 86400000 ? 'Last week'
           : `Week of ${day(monday.getTime())}`;
-        w = { key, label, rows: [], hours: 0, tss: 0, km: 0 };
+        w = { key, label, rows: [], hours: 0, tss: 0, km: 0, by: { ride: 0, strength: 0, other: 0 } };
         out.push(w);
       }
       w.rows.push(r);
       w.hours += (r.moving_s || r.elapsed_s) / 3600;
       w.tss += r.tss;
+      w.by[r.sport === 'ride' || r.sport === 'virtual_ride' ? 'ride' : r.sport === 'strength' ? 'strength' : 'other'] += r.tss;
       if (r.sport === 'ride' || r.sport === 'virtual_ride') w.km += r.distance_m / 1000;
     }
     return out;
@@ -131,6 +134,13 @@
         <span>{w.label}</span>
         <span class="mono muted">{[duration(w.hours * 3600), w.km >= 1 ? `${Math.round(w.km)} km` : '', `${Math.round(w.tss)} TSS`].filter(Boolean).join(' · ')}</span>
       </h2>
+      <!-- The week's load as a kit stripe: length is load (full at 500 TSS),
+           split by sport. The numbers above say the same in words. -->
+      <div class="stripe" aria-hidden="true">
+        {#each (['ride', 'strength', 'other'] as const) as k (k)}
+          {#if w.by[k] > 0}<span class="seg sport-{k}" style:flex-basis={`${Math.min(100, (w.by[k] / WEEK_FULL) * 100)}%`}></span>{/if}
+        {/each}
+      </div>
       {#each w.rows as r (r.id)}
         <ActivityRow a={r} />
       {/each}
@@ -206,8 +216,27 @@
     align-items: baseline;
     gap: var(--space-2);
     padding-bottom: var(--space-2);
-    border-bottom: 1px solid var(--line-strong);
     font-size: var(--size-body);
+  }
+  .stripe {
+    display: flex;
+    gap: 2px;
+    height: 4px;
+    background: var(--line);
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .seg {
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-width: 2px;
+    background: var(--sport-other);
+  }
+  .seg.sport-ride {
+    background: var(--sport-ride);
+  }
+  .seg.sport-strength {
+    background: var(--sport-strength);
   }
   .week-h .mono {
     font-size: var(--size-label);
