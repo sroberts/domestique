@@ -1,5 +1,4 @@
 <script lang="ts">
-  import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, OfflineError, localDate } from '../lib/api';
@@ -108,10 +107,9 @@
 
 <main class="page">
   <header class="top">
-    <a class="back" href="/" use:link><ChevronLeft size={20} aria-hidden="true" />Today</a>
+    <h1>Workouts</h1>
     <SyncStatus />
   </header>
-  <h1>Workouts</h1>
 
   {#if stale}
     <p class="notice">No connection. Showing workouts as of {time(stale)}. You can start one; editing needs the Mac Mini.</p>
@@ -192,23 +190,8 @@
     gap: var(--space-3);
     min-height: 2.75rem;
   }
-  .back {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-height: 2.75rem;
-    margin-left: calc(var(--space-2) * -1);
-    padding: 0 var(--space-2);
-    color: var(--text-muted);
-    font-weight: 600;
-    text-decoration: none;
-  }
-  .back:hover {
-    color: var(--text);
-  }
   h1 {
     font-size: var(--size-heading);
-    margin-top: var(--space-2);
   }
   .notice {
     display: flex;

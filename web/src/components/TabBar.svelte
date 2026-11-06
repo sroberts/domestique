@@ -1,5 +1,6 @@
 <script lang="ts">
   import CalendarDays from '@lucide/svelte/icons/calendar-days';
+  import Dumbbell from '@lucide/svelte/icons/dumbbell';
   import List from '@lucide/svelte/icons/list';
   import TrendingUp from '@lucide/svelte/icons/trending-up';
   import Bike from '@lucide/svelte/icons/bike';
@@ -7,7 +8,8 @@
   import { link, router } from '../lib/router.svelte';
 
   const tabs = [
-    { href: '/', label: 'Today', icon: CalendarDays, match: ['today', 'workouts', 'workout'] },
+    { href: '/', label: 'Today', icon: CalendarDays, match: ['today'] },
+    { href: '/workouts', label: 'Workouts', icon: Dumbbell, match: ['workouts', 'workout'] },
     { href: '/activities', label: 'Activities', icon: List, match: ['activities', 'activity', 'summary'] },
     { href: '/trends', label: 'Trends', icon: TrendingUp, match: ['trends'] },
     { href: '/gear', label: 'Gear', icon: Bike, match: ['gear'] },
@@ -64,5 +66,13 @@
   }
   a:active {
     background: var(--band);
+  }
+  /* Six tabs on the narrowest phones: drop the tracking and a size step so
+     "Workouts" and "Activities" don't run together. */
+  @media (max-width: 374px) {
+    a {
+      font-size: 0.6875rem;
+      letter-spacing: 0;
+    }
   }
 </style>
