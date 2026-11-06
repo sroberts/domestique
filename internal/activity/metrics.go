@@ -242,12 +242,45 @@ func HRTSS(hist []int32, restHR, lthr int) float64 {
 }
 
 // StrainLoad maps Whoop strain (0-21, logarithmic) onto the TSS scale:
-// strain 14 is about a 100 TSS hour at threshold.
-func StrainLoad(strain float64) float64 {
+// strain 14 is about a 100 TSS hour at threshold. Strain doesn't scale with
+// duration, so the result is capped at an hour at threshold per hour (IF 1.0):
+// a 45-minute workout can't score more than 75.
+func StrainLoad(strain float64, secs int) float64 {
 	if strain <= 0 {
 		return 0
 	}
-	return round1(100 * math.Pow(strain/14, 2))
+	tss := 100 * math.Pow(strain/14, 2)
+	if secs > 0 {
+		tss = math.Min(tss, 100*float64(secs)/3600)
+	}
+	return round1(tss)
+}
+
+// whoopZoneMid is the middle of each Whoop heart rate zone, as a fraction of
+// max HR.
+var whoopZoneMid = [6]float64{0.45, 0.55, 0.65, 0.75, 0.85, 0.95}
+
+// ZoneHRHist turns time in Whoop's heart rate zones into an HR histogram
+// (seconds at each bpm, as Metrics.HRHist) by placing each zone's time at its
+// midpoint, so HRTSS can score a workout that has no heart rate stream.
+func ZoneHRHist(zoneSecs [6]int, maxHR int) []int32 {
+	if maxHR <= 0 {
+		return nil
+	}
+	hist := make([]int32, 241)
+	any := false
+	for i, secs := range zoneSecs {
+		if secs <= 0 {
+			continue
+		}
+		bpm := min(int(math.Round(whoopZoneMid[i]*float64(maxHR))), len(hist)-1)
+		hist[bpm] += int32(secs)
+		any = true
+	}
+	if !any {
+		return nil
+	}
+	return hist
 }
 
 func round1(v float64) float64 { return math.Round(v*10) / 10 }

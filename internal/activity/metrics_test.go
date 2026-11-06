@@ -50,3 +50,32 @@ func TestParseTCXFractionalSpeed(t *testing.T) {
 		t.Fatalf("speed %v power %v", p.Stream.Speed, p.Stream.Power)
 	}
 }
+
+// Strain doesn't scale with duration: a short, hard workout must not score
+// more than an hour at threshold per hour.
+func TestStrainLoadCappedByDuration(t *testing.T) {
+	if got := StrainLoad(14.3, 45*60); got != 75 {
+		t.Errorf("45 min at strain 14.3 = %v, want capped at 75", got)
+	}
+	if got := StrainLoad(14, 2*3600); got != 100 {
+		t.Errorf("2 h at strain 14 = %v, want 100 (under the cap)", got)
+	}
+	if got := StrainLoad(9, 0); got != 41.3 {
+		t.Errorf("no duration = %v, want uncapped 41.3", got)
+	}
+}
+
+func TestZoneHRHist(t *testing.T) {
+	h := ZoneHRHist([6]int{60, 0, 600, 0, 0, 30}, 190)
+	if h[86] != 60 || h[124] != 600 || h[181] != 30 {
+		t.Fatalf("zone midpoints wrong: 86=%d 124=%d 181=%d", h[86], h[124], h[181])
+	}
+	// An hour in zone 3 (70-80% of max) at LTHR = 90% of max is endurance pace.
+	tss := HRTSS(ZoneHRHist([6]int{0, 0, 0, 3600, 0, 0}, 190), 59, 171)
+	if tss < 40 || tss > 70 {
+		t.Errorf("1 h in zone 3 = %v TSS, want an endurance-ride 40-70", tss)
+	}
+	if ZoneHRHist([6]int{}, 190) != nil || ZoneHRHist([6]int{0, 10}, 0) != nil {
+		t.Error("empty zones or unknown max HR should give no histogram")
+	}
+}

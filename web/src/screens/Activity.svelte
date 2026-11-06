@@ -62,7 +62,9 @@
       case 'power':
         return `Scored by power against an FTP of ${a.ftp} W on the day (IF ${a.intensity.toFixed(2)}).`;
       case 'hr':
-        return 'Scored by heart rate: no power meter on this one.';
+        return d?.hr_zones_from === 'whoop'
+          ? "Scored by heart rate, from Whoop's time in each zone: no power meter on this one."
+          : 'Scored by heart rate: no power meter on this one.';
       case 'strain':
         return `Scored from Whoop strain ${a.strain?.toFixed(1)}.`;
     }

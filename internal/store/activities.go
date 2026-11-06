@@ -538,3 +538,30 @@ func (s *Store) DeleteRecovery(ctx context.Context, date, source string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM recovery WHERE date = ? AND source = ?`, date, source)
 	return err
 }
+
+// WhoopZones returns the seconds a Whoop workout spent in Whoop's six heart
+// rate zones (0: under 50% of max HR, then 50-60, 60-70, 70-80, 80-90 and
+// 90-100%), from the first Whoop source that has them.
+func WhoopZones(srcs []Source) ([6]int, bool) {
+	for _, s := range srcs {
+		if s.Source != "whoop" || len(s.Extra) == 0 {
+			continue
+		}
+		var x struct {
+			ZonesMs []int64 `json:"zones_ms"`
+		}
+		if json.Unmarshal(s.Extra, &x) != nil || len(x.ZonesMs) != 6 {
+			continue
+		}
+		var z [6]int
+		any := false
+		for i, ms := range x.ZonesMs {
+			z[i] = int((ms + 500) / 1000)
+			any = any || z[i] > 0
+		}
+		if any {
+			return z, true
+		}
+	}
+	return [6]int{}, false
+}
