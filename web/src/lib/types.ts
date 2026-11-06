@@ -312,6 +312,8 @@ export interface ProviderStatus {
   configured: boolean;
   connected: boolean;
   last_sync: number;
+  /** When the provider last sent a verified webhook (Whoop only). */
+  last_webhook?: number;
   last_error?: string;
   syncing: boolean;
   /** Where the app credentials came from; the secret itself is never sent. */

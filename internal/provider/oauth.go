@@ -153,8 +153,10 @@ type Status struct {
 	Configured bool   `json:"configured"`
 	Connected  bool   `json:"connected"`
 	LastSync   int64  `json:"last_sync"`
-	LastError  string `json:"last_error,omitempty"`
-	Syncing    bool   `json:"syncing"`
+	// LastWebhook is when the provider last sent a verified webhook (0: never).
+	LastWebhook int64  `json:"last_webhook,omitempty"`
+	LastError   string `json:"last_error,omitempty"`
+	Syncing     bool   `json:"syncing"`
 	// Where the client ID and secret came from: "manifest", "settings" or ""
 	// (none). The secret itself is never returned.
 	CredentialsFrom string `json:"credentials_from"`
@@ -183,6 +185,9 @@ func (c *Client) Status(ctx context.Context) Status {
 	s.Connected = err == nil
 	if v, err := c.Store.SyncState(ctx, c.cfg.Name+":last_sync"); err == nil {
 		s.LastSync, _ = strconv.ParseInt(v, 10, 64)
+	}
+	if v, err := c.Store.SyncState(ctx, c.cfg.Name+":last_webhook"); err == nil {
+		s.LastWebhook, _ = strconv.ParseInt(v, 10, 64)
 	}
 	return s
 }

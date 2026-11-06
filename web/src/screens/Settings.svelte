@@ -247,6 +247,13 @@
               <p class="mono small muted">
                 {p.syncing ? 'Syncing now…' : p.last_sync ? `Last synced ${relDay(p.last_sync)} ${time(p.last_sync)}` : 'Waiting for first sync'}
               </p>
+              {#if p.provider === 'whoop'}
+                <p class="small muted">
+                  {p.last_webhook
+                    ? `Webhooks on: last update pushed ${relDay(p.last_webhook)} ${time(p.last_webhook)}.`
+                    : 'No webhooks yet, so new data arrives by checking every 30 minutes.'}
+                </p>
+              {/if}
             {/if}
             {#if p.last_error}<p class="mono small err">{p.last_error}</p>{/if}
           </div>

@@ -32,11 +32,12 @@
   let secret = $state('');
   let busy = $state(false);
   let error = $state('');
-  let copied = $state(false);
+  let copied = $state<'' | 'redirect' | 'webhook'>('');
 
   let name = $derived(cap(p.provider));
   let app = $derived(portal[p.provider]);
   let redirect = $derived(`${base || location.origin}/v1/oauth/${p.provider}/callback`);
+  let webhook = $derived(p.provider === 'whoop' ? `${base || location.origin}/v1/webhooks/whoop` : '');
   let showForm = $derived((p.credentials_from === '' && setup) || editing);
 
   function failText(err: unknown): string {
@@ -84,11 +85,11 @@
     editing = true;
   }
 
-  async function copyRedirect() {
+  async function copy(text: string, which: 'redirect' | 'webhook') {
     try {
-      await navigator.clipboard.writeText(redirect);
-      copied = true;
-      setTimeout(() => (copied = false), 2000);
+      await navigator.clipboard.writeText(text);
+      copied = which;
+      setTimeout(() => (copied = ''), 2000);
     } catch {
       /* clipboard blocked: the address is on screen to copy by hand */
     }
@@ -108,9 +109,17 @@
         </li>
         <li>
           Set its redirect URI to this address
-          <button type="button" class="link" onclick={copyRedirect}>{copied ? 'Copied' : 'Copy'}</button>
+          <button type="button" class="link" onclick={() => copy(redirect, 'redirect')}>{copied === 'redirect' ? 'Copied' : 'Copy'}</button>
           <code class="mono uri">{redirect}</code>
         </li>
+        {#if webhook}
+          <li>
+            Optional, for updates within seconds: add this webhook URL, model version v2
+            <button type="button" class="link" onclick={() => copy(webhook, 'webhook')}>{copied === 'webhook' ? 'Copied' : 'Copy'}</button>
+            <code class="mono uri">{webhook}</code>
+            <span class="muted">Whoop must be able to reach this address from the internet.</span>
+          </li>
+        {/if}
         <li>Paste the app's client ID and secret here.</li>
       </ol>
     {/if}

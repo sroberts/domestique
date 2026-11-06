@@ -152,7 +152,7 @@ func (g *Gateway) Middleware(next http.Handler) http.Handler {
 			// loopback port directly. Training and health data is personal, so
 			// every API and MCP request must carry a valid signed identity, not
 			// just writes. Static app files need nothing: they hold no data.
-			if dataPath(r.URL.Path) || unsafe {
+			if (dataPath(r.URL.Path) || unsafe) && !publicPath(r) {
 				u, err := g.verify(r)
 				if err != nil {
 					g.log.Warn("identity token rejected", "path", r.URL.Path, "err", err.Error())
@@ -166,6 +166,17 @@ func (g *Gateway) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// WhoopWebhookPath is served without a gateway identity: Whoop's servers
+// can't sign in. It must be listed in outpost.toml public_paths, and its
+// handler verifies Whoop's HMAC signature instead.
+const WhoopWebhookPath = "/v1/webhooks/whoop"
+
+// publicPath reports whether a request may skip the identity check. Only the
+// exact path and method count; anything else under /v1/ still needs one.
+func publicPath(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == WhoopWebhookPath
 }
 
 func dataPath(p string) bool {

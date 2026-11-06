@@ -51,6 +51,25 @@ IDs aren't secret and go in the manifest. OAuth access and refresh tokens are
 kept in the SQLite database under `OUTPOST_STORAGE_DIR` (mode `600`), are never
 returned by the API, MCP or exports, and are dropped by Settings → Disconnect.
 
+### Whoop webhooks (optional)
+
+Polling every 30 minutes always runs. Webhooks bring new recovery, sleep and
+workouts within seconds and pass deletions on, which polling can't. In the
+Whoop developer dashboard, add the webhook URL
+`<your Domestique address>/v1/webhooks/whoop` with model version **v2**.
+
+- `outpost.toml` lists that one path in `public_paths`, so the gateway lets
+  Whoop's unauthenticated POST through. Domestique accepts it only with a valid
+  `X-WHOOP-Signature` (HMAC-SHA256 of timestamp + body with the client secret,
+  timestamp within 2 hours); everything else under `/v1/` still needs a login.
+- Whoop calls from the public internet. A tailnet-only address
+  (`*.ts.net` without Funnel) can't receive webhooks; Outpost doesn't offer
+  Funnel yet, so this needs the gateway reachable at a public hostname.
+  Without that, leave the URL unset and polling carries on alone.
+- Updates trigger a sync (bursts are batched over 10 seconds); a deleted
+  workout, sleep or recovery is removed here too. Redeliveries are dropped by
+  `trace_id`. Settings shows when the last webhook arrived.
+
 OAuth redirect URIs to register: `<your Domestique address>/v1/oauth/whoop/callback`
 and `/v1/oauth/wahoo/callback`. Connect from Settings in the app.
 

@@ -238,3 +238,28 @@ func TestNoGatewayRefusesRebindHost(t *testing.T) {
 		t.Fatalf("configured host: %d", w.Code)
 	}
 }
+
+// The Whoop webhook path skips the identity check (its handler verifies
+// Whoop's signature); nothing near it does.
+func TestGatewayPublicWebhookPath(t *testing.T) {
+	f := newFakeOutpost(t)
+	h := gatewayFor(t, f, true)
+	for _, c := range []struct {
+		method, path string
+		code         int
+	}{
+		{"POST", WhoopWebhookPath, 200},
+		{"GET", WhoopWebhookPath, 401},
+		{"POST", WhoopWebhookPath + "/x", 401},
+		{"POST", "/v1/webhooks/wahoo", 401},
+		{"POST", "/v1/webhooks/whoop/../../v1/sets", 401},
+	} {
+		if w := do(h, c.method, c.path, nil); w.Code != c.code {
+			t.Errorf("%s %s = %d, want %d", c.method, c.path, w.Code, c.code)
+		}
+	}
+	// A webhook carrying a cross-site browser's marks is still refused.
+	if w := do(h, "POST", WhoopWebhookPath, map[string]string{"Origin": "https://evil.example", "Sec-Fetch-Site": "cross-site"}); w.Code != 403 {
+		t.Errorf("cross-site webhook = %d, want 403", w.Code)
+	}
+}

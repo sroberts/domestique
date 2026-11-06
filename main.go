@@ -210,7 +210,8 @@ func run() error {
 		whoop := provider.NewClient(whoopCfg, whoopFrom, s, log)
 		wahoo := provider.NewClient(wahooCfg, wahooFrom, s, log)
 		app.Providers["whoop"], app.Providers["wahoo"] = whoop, wahoo
-		w1 := &provider.Whoop{C: whoop, In: ing, Loc: loc}
+		w1 := &provider.Whoop{C: whoop, In: ing, Loc: loc, After: after}
+		app.Whoop = w1
 		w2 := &provider.Wahoo{C: wahoo, In: ing}
 		workers.Add(2)
 		go func() { defer workers.Done(); whoop.Loop(ctx, 30*time.Minute, w1.Sync, after) }()

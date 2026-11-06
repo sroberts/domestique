@@ -31,6 +31,10 @@ type Whoop struct {
 	In *ingest.Ingester
 	// Loc is the athlete's time zone, for assigning recoveries to days.
 	Loc *time.Location
+	// After runs when a webhook changed activities (training load recalc).
+	After func(context.Context)
+
+	hooks webhookState
 }
 
 type whoopPage[T any] struct {

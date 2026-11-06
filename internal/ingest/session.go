@@ -120,3 +120,21 @@ func (in *Ingester) RemoveSession(ctx context.Context, sessionID string) error {
 	}
 	return in.Rebuild(ctx, src.ActivityID)
 }
+
+// RemoveSource drops one source (a Whoop workout deleted at Whoop, say) and
+// rebuilds its activity from what's left, deleting the activity if nothing is.
+// A source that isn't stored is fine.
+func (in *Ingester) RemoveSource(ctx context.Context, srcID string) error {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	src, err := in.Store.GetSource(ctx, srcID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if err := in.Store.DeleteSource(ctx, srcID); err != nil {
+		return err
+	}
+	return in.Rebuild(ctx, src.ActivityID)
+}

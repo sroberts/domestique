@@ -511,3 +511,30 @@ func (s *Store) ClearSession(ctx context.Context, activityID string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE activities SET session_id = NULL WHERE id = ?`, activityID)
 	return err
 }
+
+// DeleteSleep removes a sleep and returns the date it was filed under ("" if
+// there was none).
+func (s *Store) DeleteSleep(ctx context.Context, id string) (string, error) {
+	var date string
+	err := s.db.QueryRowContext(ctx, `DELETE FROM sleep WHERE id = ? RETURNING date`, id).Scan(&date)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return date, err
+}
+
+// SleepDate is the date a sleep is filed under, or "" if it isn't stored.
+func (s *Store) SleepDate(ctx context.Context, id string) (string, error) {
+	var date string
+	err := s.db.QueryRowContext(ctx, `SELECT date FROM sleep WHERE id = ?`, id).Scan(&date)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return date, err
+}
+
+// DeleteRecovery removes a day's recovery if it came from source.
+func (s *Store) DeleteRecovery(ctx context.Context, date, source string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM recovery WHERE date = ? AND source = ?`, date, source)
+	return err
+}

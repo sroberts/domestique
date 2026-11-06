@@ -31,6 +31,8 @@ type API struct {
 	Log       *slog.Logger
 	Loc       *time.Location
 	Providers map[string]*provider.Client
+	// Whoop handles Whoop webhooks; nil until the store is open.
+	Whoop *provider.Whoop
 	// Recalc asks for training load to be recomputed soon (debounced).
 	Recalc  func()
 	Uploads *Uploads
@@ -81,6 +83,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
+	a.registerWebhooks(mux)
 	a.registerExport(mux)
 	a.registerGear(mux)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
