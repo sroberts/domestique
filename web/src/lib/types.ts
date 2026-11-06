@@ -319,4 +319,6 @@ export interface ProviderStatus {
   /** Where the app credentials came from; the secret itself is never sent. */
   credentials_from: '' | 'manifest' | 'settings';
   client_id?: string;
+  /** Token to give Wahoo for its webhooks. */
+  webhook_token?: string;
 }

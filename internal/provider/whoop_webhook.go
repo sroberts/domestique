@@ -8,7 +8,6 @@ import (
 	"errors"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -57,49 +56,12 @@ func VerifyWhoopSignature(secret, sig, ts string, body []byte, now time.Time) er
 	return nil
 }
 
-// webhookState is the per-process bookkeeping for Whoop events.
-type webhookState struct {
-	mu      sync.Mutex
-	seen    map[string]time.Time // trace_id -> when, for dropping redeliveries
-	pending bool                 // a sync is already scheduled
-}
-
-// Seen reports whether this trace ID was handled in the last day, and
-// remembers it if not.
-func (w *Whoop) Seen(traceID string, now time.Time) bool {
-	if traceID == "" {
-		return false
-	}
-	s := &w.hooks
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.seen == nil {
-		s.seen = map[string]time.Time{}
-	}
-	if t, ok := s.seen[traceID]; ok && now.Sub(t) < 24*time.Hour {
-		return true
-	}
-	if len(s.seen) > 2000 {
-		for k, t := range s.seen {
-			if now.Sub(t) >= 24*time.Hour {
-				delete(s.seen, k)
-			}
-		}
-	}
-	s.seen[traceID] = now
-	return false
-}
-
-// WebhookSyncDelay gathers a burst of events (a sleep brings sleep and
-// recovery together) into one sync.
-var WebhookSyncDelay = 10 * time.Second
-
 // HandleEvent applies one verified event.
 func (w *Whoop) HandleEvent(ctx context.Context, ev WhoopEvent) error {
-	_ = w.C.Store.SetSyncState(ctx, "whoop:last_webhook", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	w.C.MarkWebhook(ctx)
 	switch ev.Type {
 	case "workout.updated", "sleep.updated", "recovery.updated":
-		w.scheduleSync()
+		w.C.ScheduleSync()
 		return nil
 	case "workout.deleted":
 		if ev.ID == "" {
@@ -126,20 +88,4 @@ func (w *Whoop) HandleEvent(ctx context.Context, ev WhoopEvent) error {
 		return w.C.Store.DeleteRecovery(ctx, date, "whoop")
 	}
 	return nil // an event type we don't use
-}
-
-func (w *Whoop) scheduleSync() {
-	s := &w.hooks
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.pending {
-		return
-	}
-	s.pending = true
-	time.AfterFunc(WebhookSyncDelay, func() {
-		s.mu.Lock()
-		s.pending = false
-		s.mu.Unlock()
-		w.C.SyncNow()
-	})
 }

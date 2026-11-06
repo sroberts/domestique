@@ -251,7 +251,8 @@ func TestGatewayPublicWebhookPath(t *testing.T) {
 		{"POST", WhoopWebhookPath, 200},
 		{"GET", WhoopWebhookPath, 401},
 		{"POST", WhoopWebhookPath + "/x", 401},
-		{"POST", "/v1/webhooks/wahoo", 401},
+		{"POST", WahooWebhookPath, 200},
+		{"POST", "/v1/webhooks/strava", 401},
 		{"POST", "/v1/webhooks/whoop/../../v1/sets", 401},
 	} {
 		if w := do(h, c.method, c.path, nil); w.Code != c.code {

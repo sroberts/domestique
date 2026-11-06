@@ -210,6 +210,10 @@ func run() error {
 		whoop := provider.NewClient(whoopCfg, whoopFrom, s, log)
 		wahoo := provider.NewClient(wahooCfg, wahooFrom, s, log)
 		app.Providers["whoop"], app.Providers["wahoo"] = whoop, wahoo
+		// Wahoo webhooks carry a shared token; make one on first run.
+		if err := wahoo.LoadWebhookToken(provider.SecretsDir(storage), false); err != nil {
+			log.Error("wahoo webhook token", "err", err.Error())
+		}
 		w1 := &provider.Whoop{C: whoop, In: ing, Loc: loc, After: after}
 		app.Whoop = w1
 		w2 := &provider.Wahoo{C: wahoo, In: ing}

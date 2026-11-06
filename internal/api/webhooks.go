@@ -18,6 +18,8 @@ import (
 
 func (a *API) registerWebhooks(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+auth.WhoopWebhookPath, a.whoopWebhook)
+	mux.HandleFunc("POST "+auth.WahooWebhookPath, a.wahooWebhook)
+	mux.HandleFunc("POST /v1/connections/wahoo/webhook-token", a.regenerateWahooToken)
 }
 
 func (a *API) whoopWebhook(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +57,7 @@ func (a *API) whoopWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 	// Answer within Whoop's one second; the work happens after.
 	w.WriteHeader(http.StatusNoContent)
-	if a.Whoop.Seen(ev.TraceID, now) {
+	if c.Seen(ev.TraceID, now) {
 		return
 	}
 	ctx := a.background
@@ -69,4 +71,61 @@ func (a *API) whoopWebhook(w http.ResponseWriter, r *http.Request) {
 			a.Log.Warn("whoop webhook", "type", ev.Type, "err", err.Error())
 		}
 	}()
+}
+
+// wahooWebhook takes Wahoo's workout_summary webhooks
+// (https://cloud-api.wahooligan.com/#webhooks). Wahoo proves itself only by
+// echoing the webhook_token set in its developer portal, so the payload is
+// used as a nudge and nothing more: its FIT file URL is never fetched. The
+// regular Wahoo sync, over the authenticated API, picks the workout up.
+func (a *API) wahooWebhook(w http.ResponseWriter, r *http.Request) {
+	c := a.Providers["wahoo"]
+	if c == nil || !c.Config().Configured() {
+		writeErr(w, http.StatusNotFound, "wahoo isn't set up")
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 256<<10))
+	if err != nil {
+		writeErr(w, http.StatusRequestEntityTooLarge, "body too large")
+		return
+	}
+	var ev struct {
+		EventType      string `json:"event_type"`
+		WebhookToken   string `json:"webhook_token"`
+		WorkoutSummary struct {
+			ID        json.Number `json:"id"`
+			UpdatedAt string      `json:"updated_at"`
+		} `json:"workout_summary"`
+	}
+	if err := json.Unmarshal(body, &ev); err != nil || !c.CheckWebhookToken(ev.WebhookToken) {
+		a.Log.Warn("wahoo webhook rejected", "remote", r.RemoteAddr)
+		writeErr(w, http.StatusUnauthorized, "bad token")
+		return
+	}
+	// Wahoo wants a 200; anything else is retried for three days.
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	ctx := a.background
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	c.MarkWebhook(ctx)
+	if ev.EventType != "workout_summary" || c.Seen(ev.WorkoutSummary.ID.String()+"@"+ev.WorkoutSummary.UpdatedAt, time.Now()) {
+		return
+	}
+	c.ScheduleSync()
+}
+
+// regenerateWahooToken replaces the webhook token, for when it may have
+// leaked; the new one then has to be entered in Wahoo's portal.
+func (a *API) regenerateWahooToken(w http.ResponseWriter, r *http.Request) {
+	c := a.Providers["wahoo"]
+	if c == nil || a.Ingest == nil {
+		writeErr(w, http.StatusNotFound, "unknown provider")
+		return
+	}
+	if err := c.LoadWebhookToken(provider.SecretsDir(a.Ingest.StorageDir), true); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c.Status(r.Context()))
 }

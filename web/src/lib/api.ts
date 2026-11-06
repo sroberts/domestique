@@ -65,6 +65,13 @@ export async function putJSON(path: string, body: unknown): Promise<void> {
   });
 }
 
+export async function postJSON(path: string, body?: unknown): Promise<void> {
+  await request(path, {
+    method: 'POST',
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+}
+
 export async function deleteJSON(path: string): Promise<void> {
   try {
     await request(path, { method: 'DELETE' });

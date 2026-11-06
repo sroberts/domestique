@@ -51,24 +51,31 @@ IDs aren't secret and go in the manifest. OAuth access and refresh tokens are
 kept in the SQLite database under `OUTPOST_STORAGE_DIR` (mode `600`), are never
 returned by the API, MCP or exports, and are dropped by Settings → Disconnect.
 
-### Whoop webhooks (optional)
+### Webhooks (optional)
 
-Polling every 30 minutes always runs. Webhooks bring new recovery, sleep and
-workouts within seconds and pass deletions on, which polling can't. In the
-Whoop developer dashboard, add the webhook URL
-`<your Domestique address>/v1/webhooks/whoop` with model version **v2**.
+Polling always runs (Whoop every 30 minutes, Wahoo every 15). Webhooks bring
+new data within seconds; for Whoop they also pass deletions on, which polling
+can't. Settings → Connections → Webhooks shows what to enter for each.
 
-- `outpost.toml` lists that one path in `public_paths`, so the gateway lets
-  Whoop's unauthenticated POST through. Domestique accepts it only with a valid
-  `X-WHOOP-Signature` (HMAC-SHA256 of timestamp + body with the client secret,
-  timestamp within 2 hours); everything else under `/v1/` still needs a login.
-- Whoop calls from the public internet. A tailnet-only address
-  (`*.ts.net` without Funnel) can't receive webhooks; Outpost doesn't offer
-  Funnel yet, so this needs the gateway reachable at a public hostname.
-  Without that, leave the URL unset and polling carries on alone.
-- Updates trigger a sync (bursts are batched over 10 seconds); a deleted
-  workout, sleep or recovery is removed here too. Redeliveries are dropped by
-  `trace_id`. Settings shows when the last webhook arrived.
+- **Whoop**: in the developer dashboard add
+  `<your Domestique address>/v1/webhooks/whoop`, model version **v2**.
+  Requests must carry a valid `X-WHOOP-Signature` (HMAC-SHA256 of timestamp +
+  body with the client secret, timestamp within 2 hours). Updates trigger a
+  sync; a deleted workout, sleep or recovery is removed here too.
+- **Wahoo**: in the developer portal turn webhooks on with
+  `<your Domestique address>/v1/webhooks/wahoo` and the webhook token Settings
+  shows (Domestique makes one on first run, kept in
+  `OUTPOST_STORAGE_DIR/secrets/wahoo-webhook-token`; Settings can replace it).
+  Wahoo signs nothing, so a matching token only triggers a Wahoo sync over the
+  authenticated API; the FIT URL in the payload is never fetched.
+- `outpost.toml` lists exactly those two paths in `public_paths`, so the
+  gateway lets the providers' unauthenticated POSTs through; everything else
+  under `/v1/` still needs a login. Bursts are batched into one sync after 10
+  seconds and redeliveries are dropped.
+- Both call from the public internet. A tailnet-only address (`*.ts.net`
+  without Funnel) can't receive them; Outpost doesn't offer Funnel yet, so this
+  needs the gateway reachable at a public hostname. Without that, leave the
+  webhook URLs unset and polling carries on alone.
 
 OAuth redirect URIs to register: `<your Domestique address>/v1/oauth/whoop/callback`
 and `/v1/oauth/wahoo/callback`. Connect from Settings in the app.

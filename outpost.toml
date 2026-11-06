@@ -6,10 +6,11 @@ mcp         = true
 restart_policy = "on-failure"
 start_grace_seconds = 30
 
-# Whoop's servers can't sign in to Outpost, so its webhook path skips the
-# login. Domestique checks each request's HMAC signature (made with the Whoop
-# client secret) and rejects anything unsigned. Nothing else is public.
-public_paths = ["/v1/webhooks/whoop"]
+# Whoop's and Wahoo's servers can't sign in to Outpost, so their webhook paths
+# skip the login. Domestique checks each request itself (Whoop: HMAC signature
+# with the client secret; Wahoo: the webhook token) and a webhook can only ask
+# for a sync, never supply data. Nothing else is public.
+public_paths = ["/v1/webhooks/whoop", "/v1/webhooks/wahoo"]
 
 # Provider apps: the client IDs aren't secret; secrets are read only from the
 # files named here (mode 600; see README "Secrets"). Never put a secret in env:

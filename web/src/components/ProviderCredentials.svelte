@@ -2,7 +2,7 @@
   // The client ID and secret of the developer app Domestique signs in to a
   // provider with. They're saved on the Mac Mini as files only Domestique can
   // read; the secret goes up once and never comes back down.
-  import { AuthError, HTTPError, OfflineError, deleteJSON, putJSON } from '../lib/api';
+  import { AuthError, HTTPError, OfflineError, deleteJSON, postJSON, putJSON } from '../lib/api';
   import type { ProviderStatus } from '../lib/types';
 
   interface Props {
@@ -32,12 +32,12 @@
   let secret = $state('');
   let busy = $state(false);
   let error = $state('');
-  let copied = $state<'' | 'redirect' | 'webhook'>('');
+  let copied = $state<'' | 'redirect' | 'webhook' | 'token'>('');
 
   let name = $derived(cap(p.provider));
   let app = $derived(portal[p.provider]);
   let redirect = $derived(`${base || location.origin}/v1/oauth/${p.provider}/callback`);
-  let webhook = $derived(p.provider === 'whoop' ? `${base || location.origin}/v1/webhooks/whoop` : '');
+  let webhook = $derived(`${base || location.origin}/v1/webhooks/${p.provider}`);
   let showForm = $derived((p.credentials_from === '' && setup) || editing);
 
   function failText(err: unknown): string {
@@ -78,6 +78,20 @@
     }
   }
 
+  async function newToken() {
+    if (!confirm('Make a new webhook token? Wahoo keeps sending the old one until you paste the new one into its developer portal.')) return;
+    busy = true;
+    error = '';
+    try {
+      await postJSON(`/v1/connections/${p.provider}/webhook-token`);
+      await onchange();
+    } catch (err) {
+      error = failText(err);
+    } finally {
+      busy = false;
+    }
+  }
+
   function startEdit() {
     clientId = p.client_id ?? '';
     secret = '';
@@ -85,7 +99,7 @@
     editing = true;
   }
 
-  async function copy(text: string, which: 'redirect' | 'webhook') {
+  async function copy(text: string, which: 'redirect' | 'webhook' | 'token') {
     try {
       await navigator.clipboard.writeText(text);
       copied = which;
@@ -95,6 +109,22 @@
     }
   }
 </script>
+
+{#snippet hookSteps(manage: boolean)}
+  {#if p.provider === 'whoop'}
+    add this webhook URL, model version v2
+  {:else}
+    turn on webhooks with this URL and token
+  {/if}
+  <button type="button" class="link" onclick={() => copy(webhook, 'webhook')}>{copied === 'webhook' ? 'Copied' : 'Copy URL'}</button>
+  <code class="mono uri">{webhook}</code>
+  {#if p.webhook_token}
+    <button type="button" class="link" onclick={() => copy(p.webhook_token ?? '', 'token')}>{copied === 'token' ? 'Copied' : 'Copy token'}</button>
+    {#if manage}<button type="button" class="link" disabled={busy} onclick={newToken}>New token</button>{/if}
+    <code class="mono uri">{p.webhook_token}</code>
+  {/if}
+  <span class="muted hint">{cap(p.provider)} has to reach this address from the internet; until it can, Domestique checks on a timer.</span>
+{/snippet}
 
 {#if p.credentials_from === 'manifest'}
   <p class="muted small">App credentials are set in the Outpost manifest. Change them there.</p>
@@ -112,14 +142,9 @@
           <button type="button" class="link" onclick={() => copy(redirect, 'redirect')}>{copied === 'redirect' ? 'Copied' : 'Copy'}</button>
           <code class="mono uri">{redirect}</code>
         </li>
-        {#if webhook}
-          <li>
-            Optional, for updates within seconds: add this webhook URL, model version v2
-            <button type="button" class="link" onclick={() => copy(webhook, 'webhook')}>{copied === 'webhook' ? 'Copied' : 'Copy'}</button>
-            <code class="mono uri">{webhook}</code>
-            <span class="muted">Whoop must be able to reach this address from the internet.</span>
-          </li>
-        {/if}
+        <li>
+          Optional, for updates within seconds: {@render hookSteps(false)}
+        </li>
         <li>Paste the app's client ID and secret here.</li>
       </ol>
     {/if}
@@ -177,6 +202,14 @@
   </details>
 {/if}
 
+{#if p.configured}
+  <details class="setup">
+    <summary>Webhooks (optional)</summary>
+    <p class="small">For updates within seconds, in {app.name}, {@render hookSteps(true)}</p>
+    {#if error && !showForm}<p class="small err" role="alert">{error}</p>{/if}
+  </details>
+{/if}
+
 <style>
   .small {
     font-size: var(--size-small);
@@ -191,6 +224,10 @@
     gap: var(--space-2);
     margin: 0;
     padding-left: 1.25rem;
+  }
+  .hint {
+    display: block;
+    margin-top: var(--space-1);
   }
   .uri {
     display: block;

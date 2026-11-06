@@ -33,8 +33,6 @@ type Whoop struct {
 	Loc *time.Location
 	// After runs when a webhook changed activities (training load recalc).
 	After func(context.Context)
-
-	hooks webhookState
 }
 
 type whoopPage[T any] struct {

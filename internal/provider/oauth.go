@@ -119,6 +119,7 @@ type Client struct {
 	status Status
 	cfg    Config
 	from   string // FromManifest | FromSettings | FromNone
+	hooks  webhookState
 }
 
 // Config returns the provider's current OAuth application.
@@ -161,6 +162,9 @@ type Status struct {
 	// (none). The secret itself is never returned.
 	CredentialsFrom string `json:"credentials_from"`
 	ClientID        string `json:"client_id,omitempty"`
+	// WebhookToken is the token to give the provider for its webhooks
+	// (Wahoo). It only lets a caller ask for a sync, never supply data.
+	WebhookToken string `json:"webhook_token,omitempty"`
 }
 
 // NewClient makes a provider client; from says where cfg's credentials came
@@ -186,6 +190,7 @@ func (c *Client) Status(ctx context.Context) Status {
 	if v, err := c.Store.SyncState(ctx, c.cfg.Name+":last_sync"); err == nil {
 		s.LastSync, _ = strconv.ParseInt(v, 10, 64)
 	}
+	s.WebhookToken = c.WebhookToken()
 	if v, err := c.Store.SyncState(ctx, c.cfg.Name+":last_webhook"); err == nil {
 		s.LastWebhook, _ = strconv.ParseInt(v, 10, 64)
 	}

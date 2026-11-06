@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -105,5 +107,73 @@ func TestWhoopWebhook(t *testing.T) {
 	}
 	if code := whoopPost(t, h, "whoop-secret", `{"user_id":1,"id":1234,"type":"sleep.updated","trace_id":"t4"}`); code != http.StatusNoContent {
 		t.Fatalf("v1 body = %d", code)
+	}
+}
+
+func TestWahooWebhook(t *testing.T) {
+	a, h := newTestAPI(t)
+	ctx := context.Background()
+	dir := t.TempDir()
+	a.Ingest = &ingest.Ingester{Store: a.Store, StorageDir: dir, Log: a.Log}
+	post := func(body string) int {
+		r := httptest.NewRequest("POST", "/v1/webhooks/wahoo", bytes.NewBufferString(body))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	payload := func(tok string) string {
+		return fmt.Sprintf(`{"event_type":"workout_summary","webhook_token":%q,"user":{"id":1},
+			"workout_summary":{"id":42,"updated_at":"2026-11-05T10:00:00.000Z","file":{"url":"http://127.0.0.1:1/evil.fit"}}}`, tok)
+	}
+
+	cfg := provider.WahooConfig
+	c := provider.NewClient(cfg, provider.FromNone, a.Store, a.Log)
+	a.Providers = map[string]*provider.Client{"wahoo": c}
+	if code := post(payload("x")); code != http.StatusNotFound {
+		t.Fatalf("unconfigured = %d", code)
+	}
+	c.SetCredentials("id", "secret", provider.FromSettings)
+	// No token generated yet: nothing matches, not even an empty one.
+	if code := post(payload("")); code != http.StatusUnauthorized {
+		t.Fatalf("empty token = %d", code)
+	}
+	if err := c.LoadWebhookToken(provider.SecretsDir(dir), false); err != nil {
+		t.Fatal(err)
+	}
+	tok := c.WebhookToken()
+	if len(tok) < 32 {
+		t.Fatalf("token %q too short", tok)
+	}
+	// It persists, owner-only, and loads back unchanged.
+	if fi, err := os.Stat(filepath.Join(provider.SecretsDir(dir), "wahoo-webhook-token")); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("token file: %v %v", fi, err)
+	}
+	c2 := provider.NewClient(cfg, provider.FromNone, a.Store, a.Log)
+	_ = c2.LoadWebhookToken(provider.SecretsDir(dir), false)
+	if c2.WebhookToken() != tok {
+		t.Fatal("token changed on reload")
+	}
+
+	if code := post(payload("guess")); code != http.StatusUnauthorized {
+		t.Fatalf("wrong token = %d", code)
+	}
+	provider.WebhookSyncDelay = time.Millisecond
+	if code := post(payload(tok)); code != http.StatusOK {
+		t.Fatalf("genuine = %d", code)
+	}
+	if c.Status(ctx).LastWebhook == 0 {
+		t.Fatal("last webhook not recorded")
+	}
+
+	// Regenerating retires the old token.
+	if w := do(t, h, "POST", "/v1/connections/wahoo/webhook-token", nil); w.Code != http.StatusOK {
+		t.Fatalf("regenerate = %d", w.Code)
+	}
+	if c.WebhookToken() == tok {
+		t.Fatal("token not regenerated")
+	}
+	if code := post(payload(tok)); code != http.StatusUnauthorized {
+		t.Fatalf("old token after regenerate = %d", code)
 	}
 }

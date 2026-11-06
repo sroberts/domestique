@@ -173,10 +173,13 @@ func (g *Gateway) Middleware(next http.Handler) http.Handler {
 // handler verifies Whoop's HMAC signature instead.
 const WhoopWebhookPath = "/v1/webhooks/whoop"
 
+// WahooWebhookPath is the same for Wahoo, whose handler checks its token.
+const WahooWebhookPath = "/v1/webhooks/wahoo"
+
 // publicPath reports whether a request may skip the identity check. Only the
 // exact path and method count; anything else under /v1/ still needs one.
 func publicPath(r *http.Request) bool {
-	return r.Method == http.MethodPost && r.URL.Path == WhoopWebhookPath
+	return r.Method == http.MethodPost && (r.URL.Path == WhoopWebhookPath || r.URL.Path == WahooWebhookPath)
 }
 
 func dataPath(p string) bool {
