@@ -229,6 +229,7 @@ export interface ActivityDetail {
   stream: ChartStream;
   power_zones: number[];
   hr_zones: number[];
+  hr_zones_from?: 'whoop';
   max_hr: number;
   curve_durations: number[];
   best_curve: number[] | null;

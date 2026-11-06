@@ -14,7 +14,7 @@ const enc = encodeURIComponent;
 export function activityExports(d: ActivityDetail): ExportItem[] {
   const id = enc(d.activity.id);
   const items: ExportItem[] = [];
-  if (d.stream.t.length > 0) {
+  if ((d.stream.t?.length ?? 0) > 0) {
     items.push(
       { href: `/v1/activities/${id}/export?format=fit`, label: 'FIT file', hint: 'Merged from every recording' },
       { href: `/v1/activities/${id}/export?format=csv`, label: 'CSV', hint: 'One row per second' },

@@ -35,8 +35,8 @@
   let isRide = $derived(a?.sport === 'ride' || a?.sport === 'virtual_ride');
   let hrZoneBounds = $derived(d ? [0.5, 0.6, 0.7, 0.8, 0.9].map((p) => Math.round(p * d!.max_hr)) : undefined);
   let cursorLatLng = $derived.by((): [number, number] | null => {
-    if (cursor == null || !d?.stream.route?.length || !d.stream.t.length) return null;
-    const frac = cursor / Math.max(1, d.stream.t.length - 1);
+    if (cursor == null || !d?.stream.route?.length || !d.stream.t?.length) return null;
+    const frac = cursor / Math.max(1, (d.stream.t?.length ?? 0) - 1);
     return d.stream.route[Math.round(frac * (d.stream.route.length - 1))] ?? null;
   });
 
@@ -124,7 +124,7 @@
     <p class="note">{loadNote()}</p>
     {#if isRide && !stale}<BikePicker activityId={a.id} />{/if}
 
-    {#if d.stream.t.length > 1}
+    {#if (d.stream.t?.length ?? 0) > 1}
       <section class="block" aria-labelledby="streams-h">
         <h2 id="streams-h" class="block-h">Over the ride</h2>
         <StreamPanels stream={d.stream} hrZones={hrZoneBounds} {cursor} oncursor={(i) => (cursor = i)} />
@@ -155,6 +155,7 @@
     {#if d.hr_zones.slice(1).some((v) => v > 0)}
       <section class="block" aria-labelledby="hz-h">
         <h2 id="hz-h" class="block-h">Time in heart rate zones <span class="mono muted">max {d.max_hr}</span></h2>
+        {#if d.hr_zones_from === 'whoop'}<p class="muted small zone-src">As Whoop measured them; there's no second-by-second heart rate for this one.</p>{/if}
         <ZoneRows rows={d.hr_zones.slice(1).map((s, i) => ({ label: `Z${i + 1}`, hint: `${Math.round([0.5, 0.6, 0.7, 0.8, 0.9][i]! * d!.max_hr)}+`, seconds: s, color: `var(--zone-${i + 1})` }))} />
       </section>
     {/if}
@@ -296,5 +297,9 @@
   }
   .sources .mono {
     font-size: var(--size-label);
+  }
+  .zone-src {
+    margin: 0 0 var(--space-2);
+    font-size: var(--size-small);
   }
 </style>

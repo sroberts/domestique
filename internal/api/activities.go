@@ -171,10 +171,13 @@ type detailResp struct {
 	Stream     ChartStream       `json:"stream"`
 	PowerZones [7]int            `json:"power_zones"`
 	HRZones    [6]int            `json:"hr_zones"`
-	MaxHR      int               `json:"max_hr"`
-	Curve      []int             `json:"curve_durations"`
-	BestCurve  []int             `json:"best_curve"` // all-time best at each duration, before this ride
-	Strength   *strength.Summary `json:"strength,omitempty"`
+	// HRZonesFrom is "whoop" when there's no heart rate stream and the zone
+	// times are Whoop's own summary instead.
+	HRZonesFrom string            `json:"hr_zones_from,omitempty"`
+	MaxHR       int               `json:"max_hr"`
+	Curve       []int             `json:"curve_durations"`
+	BestCurve   []int             `json:"best_curve"` // all-time best at each duration, before this ride
+	Strength    *strength.Summary `json:"strength,omitempty"`
 }
 
 func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +204,11 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 	resp.PowerZones = activity.PowerZoneSeconds(&m.Stream, act.FTP)
 	resp.HRZones = activity.HRZoneSeconds(resp.Metrics.HRHist, ath.MaxHR)
 	resp.Metrics.HRHist = nil
+	if resp.HRZones == ([6]int{}) {
+		if z, ok := whoopZones(srcs); ok {
+			resp.HRZones, resp.HRZonesFrom = z, "whoop"
+		}
+	}
 	if activity.IsRide(act.Sport) && m.Stream.HasPower() {
 		best, err := a.bestCurve(r, 0, act.StartAt, act.ID)
 		if err != nil {
@@ -220,10 +228,37 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// whoopZones reads the zone times a Whoop workout reports (its zones are
+// the same 50/60/70/80/90 % of max HR bands, zone 0 below them), for
+// activities Whoop recorded without a heart rate stream.
+func whoopZones(srcs []store.Source) ([6]int, bool) {
+	for _, s := range srcs {
+		if s.Source != "whoop" || len(s.Extra) == 0 {
+			continue
+		}
+		var x struct {
+			ZonesMs []int64 `json:"zones_ms"`
+		}
+		if json.Unmarshal(s.Extra, &x) != nil || len(x.ZonesMs) != 6 {
+			continue
+		}
+		var z [6]int
+		any := false
+		for i, ms := range x.ZonesMs {
+			z[i] = int((ms + 500) / 1000)
+			any = any || z[i] > 0
+		}
+		if any {
+			return z, true
+		}
+	}
+	return [6]int{}, false
+}
+
 // downsample reduces a stream to at most n points by bucket means, and the
 // GPS route by stride, so the phone draws a 5-hour ride without stalling.
 func downsample(s *activity.Stream, n int) ChartStream {
-	var c ChartStream
+	c := ChartStream{T: []int32{}} // always a list: the page reads its length
 	total := s.Len()
 	if total == 0 {
 		return c
