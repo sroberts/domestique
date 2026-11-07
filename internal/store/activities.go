@@ -625,3 +625,22 @@ func (s *Store) ids(ctx context.Context, q string, args ...any) ([]string, error
 	}
 	return out, rows.Err()
 }
+
+// SyncStatePrefix returns every sync_state entry whose key starts with
+// prefix, keyed by the rest of the key.
+func (s *Store) SyncStatePrefix(ctx context.Context, prefix string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM sync_state WHERE substr(key, 1, ?) = ?`, len(prefix), prefix)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		out[k[len(prefix):]] = v
+	}
+	return out, rows.Err()
+}

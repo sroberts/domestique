@@ -264,6 +264,21 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 			a.Sport = activity.SportVirtualRide
 		}
 	}
+	// System 1's reading of a workout its own source only called "other",
+	// and of a ride with no GPS that was on a trainer (see internal/sweep).
+	for i := range ls {
+		var ex struct {
+			Sport  string `json:"ai_sport"`
+			Indoor bool   `json:"ai_indoor"`
+		}
+		_ = json.Unmarshal(ls[i].src.Extra, &ex)
+		if a.Sport == activity.SportOther && ex.Sport != "" {
+			a.Sport = ex.Sport
+		}
+		if ex.Indoor && a.Sport == activity.SportRide {
+			a.Sport = activity.SportVirtualRide
+		}
+	}
 	if app != nil {
 		a.Sport = activity.SportStrength
 		a.StartAt, a.ElapsedS, a.MovingS = app.StartAt, app.ElapsedS, app.ElapsedS
@@ -294,9 +309,7 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 	}
 	a.Route = ""
 	for _, l := range ls {
-		var ex map[string]any
-		_ = json.Unmarshal(l.src.Extra, &ex)
-		if r, ok := ex["route"].(string); ok && r != "" && a.Route == "" {
+		if r := routeOf(l.src.Extra); r != "" && a.Route == "" {
 			a.Route = r
 		}
 	}

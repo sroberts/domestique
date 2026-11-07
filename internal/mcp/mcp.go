@@ -102,7 +102,9 @@ var tools = []tool{
 		Name: "get_activity_detail",
 		Description: "One activity in depth: metrics (avg/normalized/max power, kJ, HR, cadence, ascent), power curve against " +
 			"the athlete's prior best, time in power and HR zones, per-source records, and for strength sessions per-set " +
-			"heart rate, peak and recovery. Streams are omitted unless include_stream is true (then ~120 points).",
+			"heart rate, peak and recovery. When Outpost provides AI models it also carries a short note on the workout, " +
+			"tags and a fact read from the athlete's own descriptions, and per-set effort with a session debrief. " +
+			"Streams are omitted unless include_stream is true (then ~120 points).",
 		InputSchema: obj(map[string]any{
 			"id":             str("Activity ID from get_recent_activities"),
 			"include_stream": map[string]any{"type": "boolean"},
@@ -127,6 +129,21 @@ var tools = []tool{
 				delete(sum, "hr") // the per-set stats carry the story
 			}
 			return m, nil
+		},
+	},
+	{
+		Name: "get_week_note",
+		Description: "The directeur sportif's note on one finished Monday-to-Sunday training week, written by the LLM Outpost " +
+			"provides from that week's load, lifting, recovery and sleep. note is null when no model is available or the week " +
+			"was empty; pending means it's being written, so ask again in a minute.",
+		InputSchema: obj(map[string]any{"week": str("The week's Monday, YYYY-MM-DD; defaults to last week")}),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			q := url.Values{}
+			if wk, ok := a["week"].(string); ok && wk != "" {
+				q.Set("week", wk)
+			}
+			return s.get(r, "/v1/week-note", q)
 		},
 	},
 	{
