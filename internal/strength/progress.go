@@ -15,6 +15,14 @@ type Readiness struct {
 	Level  string `json:"level"` // push | normal | hold | easy
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
+	// Source is "llm" when the operator's model wrote Title and Detail (the
+	// level is always the rules'), and Pending that it is writing them now.
+	Source  string `json:"source,omitempty"`
+	Pending bool   `json:"pending,omitempty"`
+}
+
+func call(level, title, detail string) Readiness {
+	return Readiness{Level: level, Title: title, Detail: detail}
 }
 
 // AssessReadiness combines the morning recovery score with training form.
@@ -26,25 +34,25 @@ func AssessReadiness(rec *store.Recovery, tsb float64, hasLoad bool) Readiness {
 	}
 	switch {
 	case score >= 0 && score < 34:
-		return Readiness{"easy", "Ease off today", fmt.Sprintf("Recovery is %d%%. Drop the last set of each lift and hold the weights, or swap the session for an easy spin in zone 1–2.", score)}
+		return call("easy", "Ease off today", fmt.Sprintf("Recovery is %d%%. Drop the last set of each lift and hold the weights, or swap the session for an easy spin in zone 1–2.", score))
 	case hasLoad && tsb < -30:
-		return Readiness{"easy", "Carrying a lot of fatigue", fmt.Sprintf("Form is %.0f. Keep today easy: hold the weights, no intervals.", tsb)}
+		return call("easy", "Carrying a lot of fatigue", fmt.Sprintf("Form is %.0f. Keep today easy: hold the weights, no intervals.", tsb))
 	case (score >= 34 && score < 67) || (hasLoad && tsb < -20):
 		detail := "Train as planned, but hold the weights rather than adding load."
 		if score >= 0 {
 			detail = fmt.Sprintf("Recovery is %d%%. ", score) + detail
 		}
-		return Readiness{"hold", "Train, but hold the weights", detail}
+		return call("hold", "Train, but hold the weights", detail)
 	case score >= 67 && hasLoad && tsb > 5:
-		return Readiness{"push", "Fresh and recovered", fmt.Sprintf("Recovery %d%%, form %+.0f. A good day for intensity or a heavier top set.", score, tsb)}
+		return call("push", "Fresh and recovered", fmt.Sprintf("Recovery %d%%, form %+.0f. A good day for intensity or a heavier top set.", score, tsb))
 	case score >= 67 && hasLoad:
-		return Readiness{"normal", "Train as planned", fmt.Sprintf("Recovery %d%% and form %+.0f: nothing in the way of today's plan.", score, tsb)}
+		return call("normal", "Train as planned", fmt.Sprintf("Recovery %d%% and form %+.0f: nothing in the way of today's plan.", score, tsb))
 	case score >= 67:
-		return Readiness{"normal", "Train as planned", fmt.Sprintf("Recovery is %d%%.", score)}
+		return call("normal", "Train as planned", fmt.Sprintf("Recovery is %d%%.", score))
 	case hasLoad:
-		return Readiness{"normal", "Train as planned", fmt.Sprintf("No recovery score yet; form is %+.0f.", tsb)}
+		return call("normal", "Train as planned", fmt.Sprintf("No recovery score yet; form is %+.0f.", tsb))
 	}
-	return Readiness{"normal", "Train as planned", "No recovery score yet."}
+	return call("normal", "Train as planned", "No recovery score yet.")
 }
 
 // increment is the load step for an exercise: bigger for lower-body compounds.
@@ -170,8 +178,8 @@ func Counted(sets []store.Set) []store.Set {
 
 // Progress is how much of a session's plan was actually lifted.
 type Progress struct {
-	Done    int `json:"done"`    // sets that were really lifted
-	Logged  int `json:"logged"`  // every set logged, taps included
+	Done    int `json:"done"`   // sets that were really lifted
+	Logged  int `json:"logged"` // every set logged, taps included
 	Planned int `json:"planned"`
 }
 
