@@ -62,9 +62,9 @@ func TestSetEffortsScale(t *testing.T) {
 		}
 		return map[string]coach.Answer{
 			"s1":    {Type: "score", Score: 2.89, Confidence: 0.8},
-			"s2":    {Type: "score", Score: 0.4, Confidence: 0.9},
-			"s3":    {Type: "score", Score: 1.5, Confidence: 0.3}, // unsure: left out
-			"ghost": {Type: "score", Score: 1},                    // never asked: ignored
+			"s2":    {Type: "score", Score: 0.4, Confidence: 0.33}, // a real model's usual
+			"s3":    {Type: "score", Score: 1.5, Confidence: 0.2},  // unsure: left out
+			"ghost": {Type: "score", Score: 1},                     // never asked: ignored
 		}
 	}}
 	sets := map[string]coach.SetState{"s1": {Exercise: "Back Squat", Reps: 5}, "s2": {}, "s3": {}}

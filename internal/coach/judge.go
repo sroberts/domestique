@@ -135,6 +135,11 @@ type SetState struct {
 	MaxHR      int     `json:"athlete_max_hr"`
 }
 
+// effortFloor is the confidence below which a set's effort isn't shown.
+// Confidence on a four-level scale runs low: d1 put correctly ranked sets at
+// 0.32 to 0.40. Only near-flat answers fall under this.
+const effortFloor = 0.25
+
 // SetEfforts places each set on EffortLevels, all in one request (at most
 // 64, the smallest any provider takes). Sets System 1 isn't sure of are left
 // out.
@@ -162,7 +167,7 @@ func (a *AI) SetEfforts(ctx context.Context, sets map[string]SetState) (map[stri
 			continue
 		}
 		i := int(an.Score + 0.5)
-		if i < 0 || i >= len(EffortLevels) || (an.Confidence > 0 && an.Confidence < 0.5) {
+		if i < 0 || i >= len(EffortLevels) || (an.Confidence > 0 && an.Confidence < effortFloor) {
 			continue
 		}
 		out[id] = SetEffort{Level: EffortLevels[i], Score: an.Score, Confidence: an.Confidence}
