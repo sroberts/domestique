@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
+  import CoachNote from '../components/CoachNote.svelte';
   import HrAlignment from '../components/HrAlignment.svelte';
   import ExportMenu from '../components/ExportMenu.svelte';
   import HrTrace from '../components/HrTrace.svelte';
@@ -112,8 +113,16 @@
     // would otherwise re-run this effect (a second fetch, a new interval).
     untrack(() => void load());
     // Poll while heart rate hasn't arrived, and only while the screen is visible.
+    // Also while Outpost's models write the debrief and set efforts, for a few
+    // minutes at most.
+    let aiPolls = 0;
     const t = setInterval(() => {
-      if (document.visibilityState === 'visible' && (summary?.hr_status === 'pending' || problem)) void load();
+      if (document.visibilityState !== 'visible') return;
+      const aiPending = !!(summary?.note?.pending || summary?.efforts_pending) && aiPolls < 18;
+      if (summary?.hr_status === 'pending' || problem || aiPending) {
+        if (aiPending && summary?.hr_status !== 'pending') aiPolls++;
+        void load();
+      }
     }, 10_000);
     return () => clearInterval(t);
   });
@@ -191,12 +200,15 @@
       <div><dt class="label">Strain</dt><dd>{#if summary.session.strain != null}<span class="num">{summary.session.strain.toFixed(1)}</span>{:else}<span class="num dim">–</span>{/if}</dd></div>
     </dl>
 
+    {#if summary.note?.text}<CoachNote text={summary.note.text} />{/if}
+
     <section class="hr" aria-labelledby="hr-h">
       <h2 id="hr-h" class="block-h">Heart rate by set</h2>
       <div class="readout" aria-live="polite">
         {#if sel}
           <p class="ro-main">
             <span>Set {sel.set_index + 1} · {sel.exercise_name}</span>
+            {#if summary.efforts?.[sel.id]}<span class="effort">looked {summary.efforts[sel.id]!.level}</span>{/if}
           </p>
           {#if selStat?.has_hr}
             <p class="ro-stats">
@@ -254,6 +266,7 @@
                   {#if s.reps !== s.target_reps || s.weight_kg !== s.target_weight_kg}
                     <span class="mono off"><span class="visually-hidden">target </span>/{s.weight_kg === s.target_weight_kg ? s.target_reps : `${s.target_reps}×${weight(s.target_weight_kg)}`}</span>
                   {/if}
+                  {#if summary.efforts?.[s.id]}<span class="effort"><span class="visually-hidden">effort </span>{summary.efforts[s.id]!.level}</span>{/if}
                 </span>
                 <span role="cell" class="r">
                   {#if st?.has_hr}
@@ -523,5 +536,13 @@
     margin-top: var(--space-4);
     font-size: var(--size-label);
     max-width: 60ch;
+  }
+  /* System 1's reading of a set: a word, never a colour (it's a guess, not
+     a measurement). */
+  .effort {
+    margin-left: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--size-small);
+    color: var(--text-muted);
   }
 </style>

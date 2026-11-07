@@ -26,21 +26,53 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 | `DOMESTIQUE_TZ` | Athlete's time zone for days and weeks (default: system) |
 | `DOMESTIQUE_MAX_HR` | Fallback max HR until one is detected (default 190) |
 | `DOMESTIQUE_DEMO=1` | Stand-in Whoop data until Whoop is connected |
-| `OUTPOST_AI_URL`, `OUTPOST_AI_TOKEN` | Set by Outpost when the operator has chosen models (service spec §15). With them, the LLM rewrites Today's readiness call in the background; without them, or when the model is unavailable, the rule-based call is shown |
+| `OUTPOST_AI_URL`, `OUTPOST_AI_TOKEN` | Set by Outpost when the operator has chosen models (service spec §15); see [Outpost's AI models](#outposts-ai-models) |
 
-### The readiness call and the LLM
+### Outpost's AI models
 
-Today's call ("Train, but hold the weights") is decided by rules from
-recovery and form, and those rules also set the day's prescribed weights. When
-Outpost provides an LLM, Domestique asks it to reword that call in a directeur
-sportif's voice from the same facts: recovery, HRV, sleep, fitness, fatigue,
-form, the planned session and the last three days' activities. The model never
-changes the decision. Its reply is rejected, and the rule-based wording kept,
-if it isn't the expected JSON, runs too long, or uses a number that isn't in
-the facts. The model is never called during a request: Today shows the rule
-call at once and the app looks again while the model writes. Written calls are
-kept per day and redone only when the facts change. After a failure, the same
-facts aren't retried for 15 minutes.
+When Outpost provides models (`OUTPOST_AI_URL`, `OUTPOST_AI_TOKEN`, service
+spec §15), Domestique uses them as an enhancement. Without them, or while a
+model is down, every screen shows what it showed before. No model call runs
+inside a request: a response carries `pending` while the work runs in the
+background, the app checks again shortly, and results are kept in
+`sync_state`. They're redone only when their facts (or the prompt) change,
+and after a failure the same work waits 15 minutes.
+
+**The LLM** writes, in a directeur sportif's voice:
+- **Today's readiness call:** a rewording of the rule-based call. The rules
+  still decide the level and the day's weights.
+- **A note on each workout** (activity page), and **a debrief of each lifting
+  session** (session summary), from their metrics and your own description.
+- **A note on last week** (Trends, and the `get_week_note` MCP tool).
+- **Tags and a lasting fact from your descriptions**, from a fixed list
+  (`ill`, `new gear`, `sore`, `rain`…). Lines apps write themselves (Zwift's
+  route and power-best lines, Whoop's strain sentence) are skipped.
+- **A workout from text** in the editor ("5x5 squat at 100, 3x8 RDL 80").
+  It fills in the draft for you to check, and saves nothing.
+
+Prose is rejected, and nothing shown, unless it is the expected JSON, short
+enough, free of `!`, and uses only numbers that appear in its facts, with no
+more than a couple of figures beyond small counts.
+
+**The System 1 model** answers typed questions, and Domestique changes data
+only on a confident answer (≥ 0.85):
+- the sport of a workout labelled "other";
+- whether a ride with no GPS was indoors;
+- whether two overlapping recordings that heart rate kept apart are one
+  workout (they're then merged);
+- whether a hand-typed Strava entry with no file is a stray. A stray is left
+  out of training load, says so on its page, and "It was real: count it"
+  restores it;
+- how hard each lifting set was (easy, working, hard, limit), shown as a word
+  beside the set.
+
+A background sweep asks these about stored workouts after each load
+recalculation, asking each question once per set of facts. The first sweep
+over a long history takes a while on a local model: hundreds of descriptions
+at tens of seconds each.
+
+Zwift's "🗺️ Route in World" line is read into the activity's route without
+any model. Earlier imports are backfilled once at startup.
 
 ### Secrets
 
