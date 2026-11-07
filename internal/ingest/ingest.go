@@ -166,6 +166,9 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 	if h.Description != "" {
 		extra["description"] = h.Description
 	}
+	if h.Route == "" {
+		h.Route = RouteFromDescription(h.Description)
+	}
 	if h.Route != "" {
 		extra["route"] = h.Route
 	}
