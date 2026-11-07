@@ -26,6 +26,7 @@ import (
 
 	"domestique/internal/api"
 	"domestique/internal/auth"
+	"domestique/internal/coach"
 	"domestique/internal/demo"
 	"domestique/internal/importer"
 	"domestique/internal/ingest"
@@ -155,6 +156,11 @@ func run() error {
 		ing := &ingest.Ingester{Store: s, StorageDir: storage, Log: log, Loc: loc}
 		app.Ingest = ing
 		app.SetBackground(ctx)
+		if ai := coach.FromEnv(); ai != nil {
+			// Outpost's models (service spec §15): the LLM rewrites the day's call.
+			app.Coach = &coach.Writer{AI: ai, KV: s, Log: log, Background: ctx}
+			log.Info("outpost AI models available; the LLM writes the readiness call")
+		}
 		if os.Getenv("DOMESTIQUE_DEMO") == "1" {
 			delay := time.Duration(envInt("DOMESTIQUE_DEMO_HR_DELAY", 15)) * time.Second
 			app.Demo = &demo.Demo{Store: s, MaxHR: maxHR, HRDelay: delay}
