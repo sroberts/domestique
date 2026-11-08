@@ -1,0 +1,20 @@
+[
+  {"name": "one walk on Strava and Whoop", "want": "yes",
+   "facts": {"a": {"name": "Evening Walk", "source": "strava", "local_start": "Thu 19:02", "minutes": 40, "distance_km": 3.4, "has_gps": true, "has_power": false, "has_heart_rate": true, "avg_hr": 98},
+             "b": {"name": "Walking", "source": "whoop", "local_start": "Thu 19:03", "minutes": 38, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 97}}},
+  {"name": "one ride on Wahoo and Whoop, HR strap dropped", "want": "yes",
+   "facts": {"a": {"name": "Morning Ride", "source": "wahoo", "local_start": "Sun 08:00", "minutes": 150, "distance_km": 70.0, "has_gps": true, "has_power": true, "has_heart_rate": false},
+             "b": {"name": "Cycling", "source": "whoop", "local_start": "Sun 08:02", "minutes": 146, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 136}}},
+  {"name": "one run, watch and phone", "want": "yes",
+   "facts": {"a": {"name": "Lunch Run", "source": "strava", "local_start": "Wed 12:05", "minutes": 31, "distance_km": 5.6, "has_gps": true, "has_power": false, "has_heart_rate": true, "avg_hr": 151},
+             "b": {"name": "Running", "source": "whoop", "local_start": "Wed 12:04", "minutes": 33, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 153}}},
+  {"name": "brick: bike, then a run", "want": "no",
+   "facts": {"a": {"name": "Brick: bike", "source": "wahoo", "local_start": "Sun 07:00", "minutes": 90, "distance_km": 45.0, "has_gps": true, "has_power": true, "has_heart_rate": true, "avg_hr": 140},
+             "b": {"name": "Brick: run", "source": "strava", "local_start": "Sun 08:29", "minutes": 25, "distance_km": 4.8, "has_gps": true, "has_power": false, "has_heart_rate": true, "avg_hr": 158, "avg_speed_kmh": 11.5}}},
+  {"name": "warm-up ride, then a lifting session", "want": "no",
+   "facts": {"a": {"name": "Warm-up spin", "source": "wahoo", "local_start": "Tue 17:00", "minutes": 15, "distance_km": 6.0, "has_gps": false, "has_power": true, "has_heart_rate": true, "avg_hr": 112},
+             "b": {"name": "Lower A", "source": "domestique", "local_start": "Tue 17:12", "minutes": 55, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 118}}},
+  {"name": "two Zwift races back to back", "want": "no",
+   "facts": {"a": {"name": "Zwift - Race: Crit City (B)", "source": "strava", "local_start": "Sat 16:00", "minutes": 32, "distance_km": 19.8, "has_gps": false, "has_power": true, "has_heart_rate": true, "avg_hr": 168},
+             "b": {"name": "Zwift - Race: Volcano Flat (B)", "source": "strava", "local_start": "Sat 16:31", "minutes": 35, "distance_km": 21.0, "has_gps": false, "has_power": true, "has_heart_rate": true, "avg_hr": 164}}}
+]

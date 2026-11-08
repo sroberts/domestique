@@ -1,0 +1,14 @@
+[
+  {"name": "squat session: warm-up to a failed last set", "want": "s1=easy,s2=working,s3=hard,s4=limit",
+   "facts": {
+     "s1": {"exercise": "Back Squat", "set_number": 1, "sets_of_exercise": 4, "reps": 8, "target_reps": 8, "kg": 40, "peak_hr": 104, "avg_hr_during": 98, "hr_drop_in_60s_after": 32, "rest_after_s": 90, "athlete_max_hr": 185},
+     "s2": {"exercise": "Back Squat", "set_number": 2, "sets_of_exercise": 4, "reps": 5, "target_reps": 5, "kg": 90, "previous_set_kg": 40, "peak_hr": 138, "avg_hr_during": 128, "hr_drop_in_60s_after": 22, "rest_after_s": 180, "athlete_max_hr": 185},
+     "s3": {"exercise": "Back Squat", "set_number": 3, "sets_of_exercise": 4, "reps": 5, "target_reps": 5, "kg": 105, "previous_set_kg": 90, "peak_hr": 158, "avg_hr_during": 148, "hr_drop_in_60s_after": 14, "rest_after_s": 240, "athlete_max_hr": 185},
+     "s4": {"exercise": "Back Squat", "set_number": 4, "sets_of_exercise": 4, "reps": 2, "target_reps": 5, "kg": 110, "previous_set_kg": 105, "peak_hr": 176, "avg_hr_during": 164, "hr_drop_in_60s_after": 6, "rest_after_s": 300, "athlete_max_hr": 185}}},
+  {"name": "upper session: easy accessories, hard bench", "want": "b1=working,b2=hard,c1=easy,c2=easy",
+   "facts": {
+     "b1": {"exercise": "Bench Press", "set_number": 1, "sets_of_exercise": 2, "reps": 8, "target_reps": 8, "kg": 60, "peak_hr": 132, "avg_hr_during": 122, "hr_drop_in_60s_after": 22, "rest_after_s": 150, "athlete_max_hr": 185},
+     "b2": {"exercise": "Bench Press", "set_number": 2, "sets_of_exercise": 2, "reps": 6, "target_reps": 8, "kg": 70, "previous_set_kg": 60, "peak_hr": 156, "avg_hr_during": 144, "hr_drop_in_60s_after": 12, "rest_after_s": 180, "athlete_max_hr": 185},
+     "c1": {"exercise": "Bicep Curl", "set_number": 1, "sets_of_exercise": 2, "reps": 12, "target_reps": 12, "kg": 8, "peak_hr": 104, "avg_hr_during": 99, "hr_drop_in_60s_after": 28, "rest_after_s": 60, "athlete_max_hr": 185},
+     "c2": {"exercise": "Bicep Curl", "set_number": 2, "sets_of_exercise": 2, "reps": 12, "target_reps": 12, "kg": 8, "previous_set_kg": 8, "peak_hr": 108, "avg_hr_during": 101, "hr_drop_in_60s_after": 26, "rest_after_s": 60, "athlete_max_hr": 185}}}
+]

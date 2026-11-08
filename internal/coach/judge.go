@@ -10,8 +10,29 @@ import (
 // anything nearer the middle, or a refusal, as "don't know".
 
 // Sure is the probability an answer must reach before Domestique changes
-// data on it.
+// data on it, for a question with no bar of its own in Bars.
 const Sure = 0.85
+
+// Bars are the per-question bars, where Sure doesn't fit. Each is set from
+// `make eval` runs: high enough that no case in the eval set is acted on
+// wrongly by the models tried.
+var Bars = map[string]float64{
+	// d1 put one walk on two devices at 0.85 and a brick at 0.27, Laya both
+	// at about 0.7. A merge is hard to undo, so it needs more than Sure.
+	"same": 0.9,
+	// Laya called a typed-in yoga class and a recovery spin strays at 0.90
+	// and 0.91; its true strays scored 0.92 to 1.00.
+	"stray": 0.93,
+}
+
+// Bar is the probability question q's answer must reach before Domestique
+// acts on it.
+func Bar(q string) float64 {
+	if b, ok := Bars[q]; ok {
+		return b
+	}
+	return Sure
+}
 
 // WorkoutFacts describes one recording or activity for System 1.
 type WorkoutFacts struct {
@@ -45,22 +66,32 @@ var sportCriteria = map[string]string{
 }
 
 // Sport asks which sport a workout labelled "other" was. ok is false unless
-// the answer clears Sure and names a sport other than "other".
+// the answer clears Bar("sport") and names a sport other than "other".
 func (a *AI) Sport(ctx context.Context, f WorkoutFacts) (sport string, ok bool, err error) {
+	s, p, err := a.SportGuess(ctx, f)
+	if err != nil || s == "" || p < Bar("sport") {
+		return "", false, err
+	}
+	return s, true, nil
+}
+
+// SportGuess is System 1's likeliest sport and its probability, with no
+// bar: "" when it leans to "other", refuses, or answers out of shape.
+func (a *AI) SportGuess(ctx context.Context, f WorkoutFacts) (string, float64, error) {
 	ans, _, err := a.SystemOne(ctx, f, map[string]Question{
 		"sport": {Type: "choice", Instructions: "Which sport was this workout?", Criteria: sportCriteria},
 	})
 	if err != nil {
-		return "", false, err
+		return "", 0, err
 	}
 	s := ans["sport"]
-	if s.Type != "choice" || s.Choice == "other" || s.Probabilities[s.Choice] < Sure {
-		return "", false, nil
+	if s.Type != "choice" || s.Choice == "other" {
+		return "", 0, nil
 	}
 	if _, known := sportCriteria[s.Choice]; !known {
-		return "", false, fmt.Errorf("system 1 answered an unknown sport %q", s.Choice)
+		return "", 0, fmt.Errorf("system 1 answered an unknown sport %q", s.Choice)
 	}
-	return s.Choice, true, nil
+	return s.Choice, s.Probabilities[s.Choice], nil
 }
 
 // Indoor asks whether a ride with no GPS was on a trainer. It returns the
@@ -135,15 +166,27 @@ type SetState struct {
 	MaxHR      int     `json:"athlete_max_hr"`
 }
 
-// effortFloor is the confidence below which a set's effort isn't shown.
-// Confidence on a four-level scale runs low: d1 put correctly ranked sets at
-// 0.32 to 0.40. Only near-flat answers fall under this.
-const effortFloor = 0.25
+// EffortFloor is the confidence below which a set's effort isn't shown;
+// an answer with no confidence isn't shown either. In the eval set, Laya
+// and d1 both graded easy curls "hard" or "working" at up to 0.43, so with
+// today's models effort mostly stays blank, which beats a wrong word.
+const EffortFloor = 0.5
 
 // SetEfforts places each set on EffortLevels, all in one request (at most
 // 64, the smallest any provider takes). Sets System 1 isn't sure of are left
 // out.
 func (a *AI) SetEfforts(ctx context.Context, sets map[string]SetState) (map[string]SetEffort, error) {
+	all, err := a.SetEffortsAll(ctx, sets)
+	for id, e := range all {
+		if e.Confidence < EffortFloor {
+			delete(all, id)
+		}
+	}
+	return all, err
+}
+
+// SetEffortsAll is SetEfforts with no confidence floor.
+func (a *AI) SetEffortsAll(ctx context.Context, sets map[string]SetState) (map[string]SetEffort, error) {
 	if len(sets) == 0 {
 		return nil, nil
 	}
@@ -167,7 +210,7 @@ func (a *AI) SetEfforts(ctx context.Context, sets map[string]SetState) (map[stri
 			continue
 		}
 		i := int(an.Score + 0.5)
-		if i < 0 || i >= len(EffortLevels) || (an.Confidence > 0 && an.Confidence < effortFloor) {
+		if i < 0 || i >= len(EffortLevels) {
 			continue
 		}
 		out[id] = SetEffort{Level: EffortLevels[i], Score: an.Score, Confidence: an.Confidence}

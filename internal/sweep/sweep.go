@@ -8,7 +8,7 @@
 //
 // Each question is asked once per set of facts and its answer kept in
 // sync_state, so a sweep after the first costs nothing until new workouts
-// arrive. Data changes only on a confident answer (coach.Sure).
+// arrive. Data changes only on a confident answer (coach.Bar).
 package sweep
 
 import (
@@ -233,7 +233,7 @@ func (s *Sweeper) indoor(ctx context.Context) (bool, error) {
 			}
 			continue
 		}
-		if !fresh || v.P < coach.Sure {
+		if !fresh || v.P < coach.Bar("indoor") {
 			continue
 		}
 		for _, src := range srcs[a.ID] {
@@ -282,7 +282,7 @@ func (s *Sweeper) sameWorkout(ctx context.Context) (bool, error) {
 			}
 			continue
 		}
-		if !fresh || v.P < coach.Sure {
+		if !fresh || v.P < coach.Bar("same") {
 			continue
 		}
 		to, err := s.Ingest.MergePair(ctx, x.ID, y.ID)
@@ -327,7 +327,7 @@ func (s *Sweeper) strays(ctx context.Context) (bool, error) {
 			}
 			continue
 		}
-		if !fresh || v.P < coach.Sure {
+		if !fresh || v.P < coach.Bar("stray") {
 			continue
 		}
 		if err := s.Store.SetSyncState(ctx, load.StrayPrefix+a.ID, "stray"); err != nil {
