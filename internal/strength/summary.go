@@ -64,6 +64,24 @@ type Summary struct {
 	SetStats    []SetStat `json:"set_stats"`
 	Progress    Progress  `json:"progress"`
 	Alignment   Alignment `json:"alignment"`
+
+	// Written by the operator's models when Outpost has them (internal/coach):
+	// how hard each set looked, by set ID, and a debrief of the session.
+	Efforts        map[string]Effort `json:"efforts,omitempty"`
+	EffortsPending bool              `json:"efforts_pending,omitempty"`
+	Note           *AINote           `json:"note,omitempty"`
+}
+
+// Effort is System 1's reading of how hard one set was.
+type Effort struct {
+	Level string  `json:"level"` // easy | working | hard | limit
+	Score float64 `json:"score"` // 0..3
+}
+
+// AINote is prose the LLM wrote, or the promise of it.
+type AINote struct {
+	Text    string `json:"text,omitempty"`
+	Pending bool   `json:"pending,omitempty"`
 }
 
 // HRPadding is how much stream to include either side of the session.

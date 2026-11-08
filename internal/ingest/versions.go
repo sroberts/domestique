@@ -78,6 +78,64 @@ func (in *Ingester) Remerge(ctx context.Context) ([]string, error) {
 	return changed, nil
 }
 
+// Pair is two activities whose recordings overlap enough to be one workout
+// by the time rule, but which the matcher kept apart (heart rate disagreed).
+type Pair struct{ A, B store.Source }
+
+// Unmerged lists those pairs, one per pair of activities, for a second
+// opinion (internal/sweep asks System 1).
+func (in *Ingester) Unmerged(ctx context.Context) ([]Pair, error) {
+	srcs, err := in.Store.AllSources(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[[2]string]bool{}
+	var out []Pair
+	for i, a := range srcs {
+		for _, b := range srcs[i+1:] {
+			if b.StartAt >= a.StartAt+int64(a.ElapsedS)*1000 {
+				break // sorted by start: nothing later overlaps a
+			}
+			if a.ActivityID == b.ActivityID || !compatible(a.Sport, b.Sport) ||
+				overlap(a.StartAt, a.ElapsedS, b.StartAt, b.ElapsedS) < MatchOverlap {
+				continue
+			}
+			k := [2]string{min(a.ActivityID, b.ActivityID), max(a.ActivityID, b.ActivityID)}
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, Pair{a, b})
+			}
+		}
+	}
+	return out, nil
+}
+
+// MergePair folds two activities into one, keeping the one a logged lifting
+// session hangs off. It refuses two sessions, which can't share an activity.
+func (in *Ingester) MergePair(ctx context.Context, x, y string) (string, error) {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	from, to := x, y
+	a, err := in.Store.GetActivity(ctx, from)
+	if err != nil {
+		return "", err
+	}
+	b, err := in.Store.GetActivity(ctx, to)
+	if err != nil {
+		return "", err
+	}
+	if a.SessionID != nil && b.SessionID != nil {
+		return "", errors.New("both activities have a logged session")
+	}
+	if a.SessionID != nil {
+		from, to = to, from
+	}
+	if err := in.Store.MergeActivities(ctx, from, to); err != nil {
+		return "", err
+	}
+	return to, in.Rebuild(ctx, to)
+}
+
 // Version is one source's own account of an activity, before merging.
 type Version struct {
 	Source  store.Source

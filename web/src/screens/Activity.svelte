@@ -1,13 +1,16 @@
 <script lang="ts">
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import BikePicker from '../components/BikePicker.svelte';
+  import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
   import ExportMenu from '../components/ExportMenu.svelte';
   import RouteMap from '../components/RouteMap.svelte';
   import Sources from '../components/Sources.svelte';
   import StreamPanels from '../components/StreamPanels.svelte';
   import ZoneRows from '../components/ZoneRows.svelte';
+  import { HTTPError, postJSON } from '../lib/api';
   import { fetchActivity } from '../lib/data';
+  import { Recheck } from '../lib/recheck';
   import { activityExports } from '../lib/export';
   import { SOURCE_LABEL, SPORT_LABEL, day, duration, km, thousands, time } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
@@ -22,13 +25,19 @@
   // The recording shown alone, or '' for everything merged.
   let view = $state('');
   let loading = $state(false);
+  // Bumped to fetch again while the note is being written.
+  let tick = $state(0);
+  const recheck = new Recheck(() => tick++);
+  $effect(() => () => recheck.stop());
 
   $effect(() => {
     const want = view;
+    void tick;
     loading = true;
     fetchActivity(id, want || undefined).then((res) => {
       if (want !== view) return; // switched again before this arrived
       loading = false;
+      recheck.after(!!res.data?.note?.pending && !res.stale);
       if (!res.data && d) return; // keep what's on screen; the switch just didn't load
       d = res.data;
       stale = res.stale;
@@ -40,6 +49,23 @@
       if (sid && !want && !res.data?.versions) router.go(`/session/${sid}/summary`, { replace: true });
     });
   });
+
+  let keeping = $state(false);
+  let keepError = $state('');
+  /** Overrule System 1: this was a real workout, so count its load. */
+  async function keep() {
+    if (!d || keeping) return;
+    keeping = true;
+    keepError = '';
+    try {
+      await postJSON(`/v1/activities/${encodeURIComponent(d.activity.id)}/keep`);
+      d.stray = false;
+    } catch (err) {
+      keepError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
+    } finally {
+      keeping = false;
+    }
+  }
 
   // Names for each recording, told apart when one app recorded twice (Whoop's
   // own record and the copy it posted to Strava, or a ride Whoop split).
@@ -189,7 +215,22 @@
         <div><dt class="label">Strain</dt><dd><span class="num">{a.strain.toFixed(1)}</span></dd></div>
       {/if}
     </dl>
-    <p class="note">{loadNote()}</p>
+    {#if d.stray}
+      <div class="notice stray" role="status">
+        <p>This looks like a stray entry rather than a workout, so it isn't counted in training load.</p>
+        <button class="btn" onclick={keep} disabled={keeping}>It was real: count it</button>
+        {#if keepError}<p class="small">{keepError}</p>{/if}
+      </div>
+    {:else}
+      <p class="note">{loadNote()}</p>
+    {/if}
+    {#if d.note?.text}<CoachNote text={d.note.text} />{/if}
+    {#if d.tags?.length || d.tag_note}
+      <p class="tags" aria-label="From your description">
+        {#each d.tags ?? [] as t (t)}<span class="tag">{t}</span>{/each}
+        {#if d.tag_note}<span class="tag-note">{d.tag_note}</span>{/if}
+      </p>
+    {/if}
     {#if isRide && !stale && !d.view}<BikePicker activityId={a.id} />{/if}
 
     {#if d.strength && a.session_id}
@@ -398,6 +439,31 @@
   }
   .block {
     margin-top: var(--space-6);
+  }
+  .stray {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .stray p {
+    margin: 0;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+  }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: var(--size-small);
+    padding: 0.0625rem 0.375rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+  }
+  .tag-note {
+    font-size: var(--size-small);
+    color: var(--text-muted);
   }
   .block-h {
     display: flex;

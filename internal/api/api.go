@@ -90,6 +90,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerWebhooks(mux)
 	a.registerExport(mux)
 	a.registerGear(mux)
+	a.registerAI(mux)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such endpoint")
 	})
@@ -111,7 +112,8 @@ func validDate(s string) bool {
 // me tells the app who is signed in, so it can offer Outpost's sign-out.
 func (a *API) me(w http.ResponseWriter, r *http.Request) {
 	u, ok := auth.UserFrom(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{"gateway": a.Gateway, "user": map[bool]any{true: u, false: nil}[ok]})
+	writeJSON(w, http.StatusOK, map[string]any{"gateway": a.Gateway, "user": map[bool]any{true: u, false: nil}[ok],
+		"ai": a.aiOn(r)})
 }
 
 // ---- Today ----------------------------------------------------------------------
@@ -478,6 +480,7 @@ func (a *API) strengthSummary(r *http.Request, id string) (*strength.Summary, er
 			sum.HRStatus = "none"
 		}
 	}
+	a.aiSession(r, &sum)
 	return &sum, nil
 }
 

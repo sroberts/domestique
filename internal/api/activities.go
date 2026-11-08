@@ -186,6 +186,15 @@ type detailResp struct {
 	Versions []versionResp `json:"versions,omitempty"`
 	// View is the source shown alone (?source=), or "" for the merged view.
 	View string `json:"view,omitempty"`
+
+	// From the operator's models (internal/coach, internal/sweep), merged view
+	// only: a note on the workout, tags and a fact read from the athlete's
+	// own descriptions, and whether System 1 judged it a stray entry that
+	// carries no load.
+	Note    *strength.AINote `json:"note,omitempty"`
+	Tags    []string         `json:"tags,omitempty"`
+	TagNote string           `json:"tag_note,omitempty"`
+	Stray   bool             `json:"stray,omitempty"`
 }
 
 // versionResp is one source's own account of a workout, before merging.
@@ -326,6 +335,9 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 	// The lifting itself belongs to the merged view and to Domestique's own.
 	if sum != nil && (only == "" || shown[0].Source == "app") {
 		resp.Strength = sum
+	}
+	if only == "" {
+		a.aiDetail(r, &resp)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

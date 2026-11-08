@@ -133,6 +133,19 @@ export interface Summary {
   set_stats: SetStat[];
   progress: Progress;
   alignment?: Alignment;
+  /** System 1's reading of how hard each set was, by set id (Outpost AI). */
+  efforts?: Record<string, { level: EffortLevel; score: number }>;
+  efforts_pending?: boolean;
+  /** The LLM's debrief of the session (Outpost AI). */
+  note?: AINote;
+}
+
+export type EffortLevel = 'easy' | 'working' | 'hard' | 'limit';
+
+/** Prose from Outpost's LLM, or the promise of it. */
+export interface AINote {
+  text?: string;
+  pending?: boolean;
 }
 
 export interface Today {
@@ -242,6 +255,18 @@ export interface ActivityDetail {
   versions?: Version[];
   /** The source shown alone, or absent for the merged view. */
   view?: string;
+  /** From Outpost's models, merged view only. */
+  note?: AINote;
+  tags?: string[];
+  tag_note?: string;
+  /** System 1 judged this a stray entry; it carries no load until kept. */
+  stray?: boolean;
+}
+
+export interface WeekNote {
+  week: string;
+  ai: boolean;
+  note: AINote | null;
 }
 
 /** One recording's own account of a workout, before merging. */

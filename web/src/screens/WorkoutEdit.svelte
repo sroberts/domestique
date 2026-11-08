@@ -9,7 +9,7 @@
   import X from '@lucide/svelte/icons/x';
   import ActionBar from '../components/ActionBar.svelte';
   import Stepper from '../components/Stepper.svelte';
-  import { AuthError, HTTPError, OfflineError, localDate } from '../lib/api';
+  import { AuthError, HTTPError, OfflineError, getJSON, localDate, postForJSON } from '../lib/api';
   import { setText } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
   import { sync } from '../lib/sync.svelte';
@@ -87,6 +87,44 @@
   let deleteToday = $state(false);
 
   const kgText = (kg: number) => (kg === 0 ? '' : String(kg));
+
+  // "Write it out": Outpost's LLM turns "5x5 squat at 100, 3x8 RDL 80" into
+  // exercises, shown only when Outpost provides a model. Nothing is saved
+  // until the athlete has looked it over and pressed Save.
+  let aiOn = $state(false);
+  let typed = $state('');
+  let reading = $state(false);
+  let readError = $state('');
+  $effect(() => {
+    getJSON<{ ai?: boolean }>('/v1/me').then(
+      (m) => (aiOn = !!m.ai),
+      () => (aiOn = false),
+    );
+  });
+
+  async function fillFromText() {
+    if (!typed.trim() || reading) return;
+    reading = true;
+    readError = '';
+    try {
+      const t = await postForJSON<{ name: string; exercises: Template['exercises'] }>('/v1/templates/parse', { text: typed });
+      const read = t.exercises.map(draftOf);
+      // Empty, untouched exercises give way; anything typed in is kept.
+      const keep = exercises.filter((e) => !(e.fresh && !e.name.trim()));
+      exercises = [...keep, ...read];
+      if (!name.trim() && t.name) name = t.name;
+      typed = '';
+      say(`${read.length} ${read.length === 1 ? 'exercise' : 'exercises'} added from your text. Check them, then save.`);
+      if (read[0]) void focus(`ex${read[0].key}-name`);
+    } catch (err) {
+      readError =
+        err instanceof HTTPError ? err.message
+        : err instanceof OfflineError ? 'No connection. Reading a workout needs the Mac Mini.'
+        : "Couldn't read that. Try again, or add the exercises below.";
+    } finally {
+      reading = false;
+    }
+  }
 
   function draftOf(e: Template['exercises'][number]): DraftEx {
     return {
@@ -683,6 +721,19 @@
       {#each suggestions as s (s.name)}<option value={s.name}></option>{/each}
     </datalist>
 
+    {#if aiOn}
+      <details class="write-out">
+        <summary>Write it out instead</summary>
+        <label class="fl" for="wk-text">Type the workout the way you'd jot it down</label>
+        <textarea id="wk-text" class="text" rows="3" maxlength="4000" bind:value={typed}
+          placeholder="5x5 back squat at 100, 3x8 RDL 80, 3x10 split squat 20s, rest 2 min"></textarea>
+        <button class="btn" onclick={fillFromText} disabled={reading || !typed.trim()} aria-busy={reading}>
+          {reading ? 'Reading…' : 'Fill in the exercises'}
+        </button>
+        {#if readError}<p class="err" role="alert">{readError}</p>{/if}
+      </details>
+    {/if}
+
     <ol class="exercises" aria-label="Exercises">
       {#each exercises as e, i (e.key)}
         {@const label = exLabel(e, i)}
@@ -1262,5 +1313,28 @@
   .sheet-btn {
     min-height: var(--tap-min);
     width: 100%;
+  }
+  .write-out {
+    margin: var(--space-4) 0;
+    display: grid;
+    gap: var(--space-2);
+  }
+  .write-out[open] {
+    padding-bottom: var(--space-2);
+  }
+  .write-out summary {
+    cursor: pointer;
+    min-height: var(--tap-min);
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+  }
+  .write-out textarea {
+    width: 100%;
+    resize: vertical;
+    font: inherit;
+  }
+  .write-out .btn {
+    justify-self: start;
   }
 </style>
