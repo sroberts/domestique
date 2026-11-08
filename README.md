@@ -30,6 +30,21 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 | `DOMESTIQUE_TZ` | Athlete's time zone for days and weeks (default: system) |
 | `DOMESTIQUE_MAX_HR` | Fallback max HR until one is detected (default 190) |
 | `DOMESTIQUE_DEMO=1` | Stand-in Whoop data until Whoop is connected |
+| `OUTPOST_AI_URL`, `OUTPOST_AI_TOKEN` | Set by Outpost when the operator has chosen models (service spec §15). With them, the LLM rewrites Today's readiness call in the background; without them, or when the model is unavailable, the rule-based call is shown |
+
+### The readiness call and the LLM
+
+Today's call ("Train, but hold the weights") is decided by rules from
+recovery and form, and those rules also set the day's prescribed weights. When
+Outpost provides an LLM, Domestique asks it to reword that call in a directeur
+sportif's voice from the same facts: recovery, HRV, sleep, fitness, fatigue,
+form, the planned session and the last three days' activities. The model never
+changes the decision. Its reply is rejected, and the rule-based wording kept,
+if it isn't the expected JSON, runs too long, or uses a number that isn't in
+the facts. The model is never called during a request: Today shows the rule
+call at once and the app looks again while the model writes. Written calls are
+kept per day and redone only when the facts change. After a failure, the same
+facts aren't retried for 15 minutes.
 
 ### Secrets
 

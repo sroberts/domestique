@@ -23,10 +23,20 @@
   let starting = $state(false);
   let slow = $state(false);
 
+  // While Outpost's LLM writes today's call, look again a few times; the
+  // rule-based call stands meanwhile, and for good if the model never answers.
+  const RECHECK_MS = 20_000;
+  const RECHECKS = 9;
+  let rechecks = 0;
+  let recheck: ReturnType<typeof setTimeout> | undefined;
+
   $effect(() => {
     const t = setTimeout(() => (slow = true), 400);
     void refresh();
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(recheck);
+    };
   });
 
   async function refresh() {
@@ -36,6 +46,11 @@
     try {
       today = await fetchToday(date);
       load = 'fresh';
+      clearTimeout(recheck);
+      if (today.readiness.pending && rechecks < RECHECKS) {
+        rechecks++;
+        recheck = setTimeout(() => void refresh(), RECHECK_MS);
+      }
       await cacheToday($state.snapshot(today) as Today);
       void fetchTemplates(); // keep the workout list on the phone for offline starts
     } catch (err) {

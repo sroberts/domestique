@@ -294,6 +294,10 @@ export interface Readiness {
   level: 'push' | 'normal' | 'hold' | 'easy';
   title: string;
   detail: string;
+  /** "llm" when the operator's model wrote title and detail; the level is always the rules'. */
+  source?: 'llm';
+  /** The model is writing today's call now; ask again shortly. */
+  pending?: boolean;
 }
 
 export interface SleepRecord {

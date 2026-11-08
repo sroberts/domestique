@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"domestique/internal/auth"
+	"domestique/internal/coach"
 	"domestique/internal/demo"
 	"domestique/internal/ingest"
 	"domestique/internal/load"
@@ -36,6 +37,9 @@ type API struct {
 	// Recalc asks for training load to be recomputed soon (debounced).
 	Recalc  func()
 	Uploads *Uploads
+	// Coach writes the day's call with the operator's LLM; nil when Outpost
+	// gave no model, and the rule-based call is shown alone.
+	Coach *coach.Writer
 	// Gateway is true when the Outpost login gateway is in front (OUTPOST_AUTH=gateway).
 	Gateway bool
 	// background outlives requests (imports); cancelled on shutdown.
@@ -205,6 +209,15 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Athlete = load.Current(ctx, a.Store, a.MaxHR)
+	if a.Coach != nil && !a.demoOn(r) {
+		// The level, and so the prescription above, stays the rules'; only
+		// the wording is the model's.
+		c, ok, pending := a.Coach.Readiness(ctx, a.coachFacts(&resp, day))
+		if ok {
+			resp.Readiness.Title, resp.Readiness.Detail, resp.Readiness.Source = c.Title, c.Detail, "llm"
+		}
+		resp.Readiness.Pending = pending
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
