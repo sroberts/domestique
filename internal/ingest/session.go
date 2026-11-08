@@ -8,6 +8,7 @@ import (
 
 	"domestique/internal/activity"
 	"domestique/internal/store"
+	"domestique/internal/strength"
 )
 
 // UpsertSession mirrors a finished strength session from the app into the
@@ -41,6 +42,9 @@ func (in *Ingester) UpsertSession(ctx context.Context, sessionID string) error {
 		volume += float64(s.Reps) * s.WeightKg
 	}
 	extra["volume_kg"] = volume
+	if share := strength.CircuitShare(sess.Plan, sets); share > 0 {
+		extra["circuit_share"] = share
+	}
 	if sess.Strain != nil {
 		extra["strain"] = *sess.Strain
 	}

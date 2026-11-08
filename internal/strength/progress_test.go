@@ -3,6 +3,7 @@ package strength
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"domestique/internal/store"
@@ -106,5 +107,90 @@ func TestProgressComplete(t *testing.T) {
 	p = ProgressOf(plan, []store.Set{real, real, real, real})
 	if !p.Complete() {
 		t.Fatalf("4 of 8 should count as done: %+v", p)
+	}
+}
+
+// A circuit where every exercise hit all its sets gets a round suggestion on
+// its first exercise; weights still go up per exercise. One short exercise
+// holds the suggestion back.
+func TestPrescribeSuggestsCircuitRound(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	fin := int64(2_000_000)
+	plan := []store.Exercise{{Name: "Row", Circuit: "a"}, {Name: "Press", Circuit: "a"}}
+	if err := st.PutSession(ctx, store.Session{ID: "s1", TemplateID: "t", Name: "A", Plan: plan,
+		StartedAt: 1000, FinishedAt: &fin, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	// Two rounds, alternating Row and Press; Press's last set fell short.
+	at := int64(100_000)
+	for round := 0; round < 2; round++ {
+		for _, name := range []string{"Row", "Press"} {
+			reps := 10
+			if name == "Press" && round == 1 {
+				reps = 8
+			}
+			if err := st.PutSet(ctx, store.Set{ID: fmt.Sprint(name, round), SessionID: "s1", ExerciseName: name, SetIndex: round,
+				TargetReps: 10, Reps: reps, WeightKg: 40, StartedAt: at, EndedAt: at + 30_000, UpdatedAt: 1}); err != nil {
+				t.Fatal(err)
+			}
+			at += 60_000
+		}
+	}
+	sets := []store.TargetSet{{Reps: 10, WeightKg: 40}, {Reps: 10, WeightKg: 40}}
+	tpl := store.Template{ID: "t", Name: "A", Exercises: []store.Exercise{
+		{Name: "Row", Circuit: "a", Sets: sets}, {Name: "Press", Circuit: "a", Sets: sets}}}
+
+	out, err := Prescribe(ctx, st, tpl, Readiness{Level: "normal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := out.Exercises[0].Change; strings.Contains(c, "add a round") {
+		t.Fatalf("suggested a round after a miss: %q", c)
+	}
+
+	// Fix the miss: now both hit, so Row goes up and the circuit gets the note.
+	if err := st.PutSet(ctx, store.Set{ID: "Press1", SessionID: "s1", ExerciseName: "Press", SetIndex: 1,
+		TargetReps: 10, Reps: 10, WeightKg: 40, StartedAt: 280_000, EndedAt: 310_000, UpdatedAt: 2}); err != nil {
+		t.Fatal(err)
+	}
+	out, err = Prescribe(ctx, st, tpl, Readiness{Level: "normal"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := out.Exercises[0].Change; !strings.HasPrefix(c, "Up 2.5 kg") || !strings.Contains(c, "add a round") {
+		t.Fatalf("row change %q", c)
+	}
+	if out.Exercises[0].Sets[0].WeightKg != 42.5 || strings.Contains(out.Exercises[1].Change, "add a round") {
+		t.Fatalf("got %+v", out.Exercises)
+	}
+	// Recovery says hold: no round suggestion.
+	out, _ = Prescribe(ctx, st, tpl, Readiness{Level: "hold"})
+	if strings.Contains(out.Exercises[0].Change, "add a round") {
+		t.Fatalf("suggested a round on a hold day: %q", out.Exercises[0].Change)
+	}
+}
+
+// CircuitShare is the circuit's span over the session's working span; quick
+// taps don't stretch either.
+func TestCircuitShare(t *testing.T) {
+	plan := []store.Exercise{{Name: "Squat"}, {Name: "Row", Circuit: "a"}, {Name: "Press", Circuit: "a"}}
+	set := func(ex int, from, to int64) store.Set {
+		return store.Set{ExerciseIndex: ex, Reps: 5, StartedAt: from * 1000, EndedAt: to * 1000}
+	}
+	sets := []store.Set{
+		set(0, 0, 30), set(0, 150, 180), // squats: 0-180 s
+		set(1, 300, 330), set(2, 340, 370), set(1, 460, 490), set(2, 500, 530), // circuit: 300-530 s
+		set(0, 900, 901), // a tap, ignored
+	}
+	if got := CircuitShare(plan, sets); got != 0.43 { // 230 of 530 s
+		t.Fatalf("share %v, want 0.43", got)
+	}
+	if got := CircuitShare(plan[:1], sets[:2]); got != 0 {
+		t.Fatalf("no circuits: %v", got)
 	}
 }

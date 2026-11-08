@@ -26,6 +26,9 @@ type Metrics struct {
 	HRHist []int32 `json:"hr_hist"`
 	// PowerSeconds is the recorded time with a power meter.
 	PowerSeconds int `json:"power_seconds"`
+	// CircuitShare is the fraction of a strength session's working time
+	// spent in circuits (0-1), which lifts its load cap.
+	CircuitShare float64 `json:"circuit_share,omitempty"`
 }
 
 // dense is a 1Hz resampling split into contiguous segments.
@@ -245,16 +248,28 @@ func HRTSS(hist []int32, restHR, lthr int) float64 {
 // strain 14 is about a 100 TSS hour at threshold. Strain doesn't scale with
 // duration, so the result is capped at an hour at threshold per hour (IF 1.0):
 // a 45-minute workout can't score more than 75.
-func StrainLoad(strain float64, secs int) float64 {
+//
+// Circuits pack the same work into less time, so that cap would clip them
+// for being dense. The circuitShare of the session (0-1) is capped at IF 1.25
+// instead, the ceiling heart rate load uses too: an all-circuit hour can
+// score up to 156. Strain itself already rises with a circuit's heart rate,
+// so nothing is multiplied on top.
+func StrainLoad(strain float64, secs int, circuitShare float64) float64 {
 	if strain <= 0 {
 		return 0
 	}
-	tss := 100 * math.Pow(strain/14, 2)
+	r := strain / 14
+	tss := 100 * r * r
 	if secs > 0 {
-		tss = math.Min(tss, 100*float64(secs)/3600)
+		share := math.Max(0, math.Min(1, circuitShare))
+		perHour := 100 * ((1 - share) + share*circuitIF*circuitIF)
+		tss = math.Min(tss, perHour*float64(secs)/3600)
 	}
 	return round1(tss)
 }
+
+// circuitIF is the highest intensity factor circuit time can score at.
+const circuitIF = 1.25
 
 // whoopZoneMid is the middle of each Whoop heart rate zone, as a share of
 // heart rate reserve.

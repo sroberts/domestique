@@ -5,21 +5,115 @@ import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSe
 import { sync } from './sync.svelte';
 import type { Exercise, LocalSession, Progress, SetRecord, TargetSet, Template } from './types';
 
+/** A run of adjacent exercises sharing a circuit key: plan[start, end). */
+export interface Circuit {
+  key: string;
+  start: number;
+  end: number;
+  rounds: number;
+}
+
 export interface Slot {
   index: number;
   exerciseIndex: number;
+  /** Set number within the exercise; in a circuit, also the round. */
   setIndex: number;
   exercise: Exercise;
   target: TargetSet;
+  circuit?: Circuit;
 }
 
-export function slotsOf(plan: Exercise[]): Slot[] {
-  const out: Slot[] = [];
-  plan.forEach((exercise, exerciseIndex) =>
-    exercise.sets.forEach((target, setIndex) => out.push({ index: out.length, exerciseIndex, setIndex, exercise, target })),
-  );
+/** Mirrors store.Circuits on the server. */
+export function circuitsOf(plan: Exercise[]): Circuit[] {
+  const out: Circuit[] = [];
+  for (let i = 0; i < plan.length; ) {
+    const key = plan[i]!.circuit;
+    if (!key) {
+      i++;
+      continue;
+    }
+    let j = i + 1;
+    while (j < plan.length && plan[j]!.circuit === key) j++;
+    out.push({ key, start: i, end: j, rounds: plan[i]!.sets.length });
+    i = j;
+  }
   return out;
 }
+
+/** The planned sets in the order they're done: straight sets exercise by
+ * exercise, circuits round by round (A1 B1 C1, A2 B2 C2). */
+export function slotsOf(plan: Exercise[]): Slot[] {
+  const out: Slot[] = [];
+  const push = (exerciseIndex: number, setIndex: number, circuit?: Circuit) => {
+    const exercise = plan[exerciseIndex]!;
+    const target = exercise.sets[setIndex];
+    if (target) out.push({ index: out.length, exerciseIndex, setIndex, exercise, target, circuit });
+  };
+  const circuits = circuitsOf(plan);
+  for (let i = 0; i < plan.length; ) {
+    const c = circuits.find((x) => x.start === i);
+    if (c) {
+      // Rounds from the longest member, so a plan cut short on an easy day
+      // (or an older plan) still covers every set.
+      const rounds = Math.max(...plan.slice(c.start, c.end).map((e) => e.sets.length));
+      for (let r = 0; r < rounds; r++) for (let e = c.start; e < c.end; e++) push(e, r, c);
+      i = c.end;
+    } else {
+      plan[i]!.sets.forEach((_, setIndex) => push(i, setIndex));
+      i++;
+    }
+  }
+  return out;
+}
+
+/** Where a logged set sits in a circuit: "A2", round 3 of 4. */
+export interface CircuitPlace {
+  letter: string;
+  pos: string;
+  round: number;
+  rounds: number;
+}
+
+/** One round of a circuit as it was done: from its first set's start to its
+ * last set's end. */
+export interface Round {
+  letter: string;
+  round: number;
+  rounds: number;
+  from: number;
+  to: number;
+  ids: string[];
+}
+
+/** Places each logged set in its circuit and groups circuit sets into the
+ * rounds actually done, in time order. Straight sets are left out. */
+export function roundsOf(plan: Exercise[], sets: SetRecord[]): { places: Map<string, CircuitPlace>; rounds: Round[] } {
+  const circuits = circuitsOf(plan);
+  const places = new Map<string, CircuitPlace>();
+  const byKey = new Map<string, Round>();
+  const rounds: Round[] = [];
+  for (const s of [...sets].sort((a, b) => a.started_at - b.started_at)) {
+    const ci = circuits.findIndex((c) => s.exercise_index >= c.start && s.exercise_index < c.end);
+    const c = circuits[ci];
+    if (!c) continue;
+    const letter = String.fromCharCode(65 + (ci % 26));
+    places.set(s.id, { letter, pos: `${letter}${s.exercise_index - c.start + 1}`, round: s.set_index + 1, rounds: c.rounds });
+    const key = `${ci}:${s.set_index}`;
+    let r = byKey.get(key);
+    if (!r) {
+      r = { letter, round: s.set_index + 1, rounds: c.rounds, from: s.started_at, to: s.ended_at, ids: [] };
+      byKey.set(key, r);
+      rounds.push(r);
+    }
+    r.from = Math.min(r.from, s.started_at);
+    r.to = Math.max(r.to, s.ended_at);
+    r.ids.push(s.id);
+  }
+  return { places, rounds };
+}
+
+/** True when b follows a in the same round of the same circuit. */
+const sameRound = (a: Slot, b: Slot) => !!a.circuit && b.circuit?.start === a.circuit.start && b.setIndex === a.setIndex;
 
 export function newId(): string {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -27,10 +121,17 @@ export function newId(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** Estimated minutes for a plan: ~40s per set plus planned rest. */
+/** Estimated minutes for a plan: ~40s per set, the planned rest between
+ * sets of an exercise or circuit, and 90s to move on to the next. */
 export function estimateMinutes(plan: Exercise[]): number {
-  let s = 0;
-  for (const e of plan) s += e.sets.length * 40 + Math.max(0, e.sets.length - 1) * e.rest_seconds + 90;
+  const slots = slotsOf(plan);
+  let s = slots.length * 40 + 90;
+  for (let i = 1; i < slots.length; i++) {
+    const a = slots[i - 1]!;
+    const b = slots[i]!;
+    const together = a.exerciseIndex === b.exerciseIndex || (!!a.circuit && b.circuit?.start === a.circuit.start);
+    s += together ? a.exercise.rest_seconds : 90;
+  }
   return Math.round(s / 60 / 5) * 5;
 }
 
@@ -70,6 +171,19 @@ export class Workout {
     const s = await getSession(id);
     if (!s) return null;
     return new Workout(s, await sessionSets(id));
+  }
+
+  /** The next planned set after index that wasn't skipped. */
+  nextAfter(index: number): Slot | null {
+    const skipped = this.session.cursor.skipped;
+    for (let i = index + 1; i < this.slots.length; i++) if (!skipped.includes(i)) return this.slots[i]!;
+    return null;
+  }
+
+  /** Move the cursor past skipped sets. */
+  private skipForward(): void {
+    const c = this.session.cursor;
+    while (c.index < this.slots.length && c.skipped.includes(c.index)) c.index += 1;
   }
 
   /** Target for a slot, with any carried-forward weight applied. */
@@ -116,10 +230,18 @@ export class Workout {
     this.sets.push(rec);
     c.last_set_id = rec.id;
     c.index += 1;
+    this.skipForward();
     c.phase_started_at = now;
-    if (c.index < this.slots.length) {
-      c.phase = 'rest';
-      c.rest_s = slot.exercise.rest_seconds;
+    const next = this.slots[c.index];
+    if (next) {
+      // In a circuit the rest is this exercise's, until the round ends (even
+      // when the rest of it was skipped): then it's the circuit's last
+      // exercise's, the rest between rounds.
+      let rest = slot.exercise.rest_seconds;
+      if (slot.circuit && !sameRound(slot, next)) rest = this.session.plan[slot.circuit.end - 1]!.rest_seconds;
+      c.rest_s = rest;
+      // No rest means straight on to the next exercise of the round.
+      c.phase = rest > 0 ? 'rest' : 'ready';
     } else {
       c.phase = 'last';
     }
@@ -159,15 +281,16 @@ export class Workout {
     await saveCursor($state.snapshot(this.session) as LocalSession);
   }
 
-  /** Skip what's left of the current exercise. */
+  /** Skip what's left of the current exercise. In a circuit the rounds
+   * carry on without it. */
   async skipExercise(): Promise<void> {
     const c = this.session.cursor;
     const slot = this.current;
     if (!slot || c.phase === 'active') return;
-    while (this.current && this.current.exerciseIndex === slot.exerciseIndex) {
-      c.skipped.push(c.index);
-      c.index += 1;
+    for (const s of this.slots.slice(c.index)) {
+      if (s.exerciseIndex === slot.exerciseIndex && !c.skipped.includes(s.index)) c.skipped.push(s.index);
     }
+    this.skipForward();
     if (c.index >= this.slots.length) {
       if (this.sets.length > 0) c.phase = 'last';
       else return this.finish();

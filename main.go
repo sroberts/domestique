@@ -108,6 +108,9 @@ func run() error {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+	// /.outpost/ belongs to Outpost's login gateway (spec §11). Without this
+	// the PWA's deep-link fallback would answer it with index.html.
+	root.Handle("/.outpost/", http.NotFoundHandler())
 	root.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !ready.Load() {
 			http.Error(w, "starting", http.StatusServiceUnavailable)
@@ -282,7 +285,7 @@ func runImport(args []string) error {
 		return errors.New("set OUTPOST_STORAGE_DIR to the service's storage directory")
 	}
 	if len(args) == 0 {
-		return errors.New("usage: domestique import <file.fit|folder|strava-export.zip>...")
+		return errors.New("usage: domestique import <file.fit|folder|strava-export.zip> [more]")
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)

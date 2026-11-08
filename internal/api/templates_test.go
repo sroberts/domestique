@@ -213,3 +213,43 @@ func TestPrescribedTemplate(t *testing.T) {
 		t.Fatalf("exercises: %+v", ex)
 	}
 }
+
+func TestPutTemplateCircuits(t *testing.T) {
+	_, _, h := testAPI(t)
+	set := `{"reps":10,"weight_kg":20}`
+	ex := func(name, circuit string, sets int) string {
+		s := strings.TrimSuffix(strings.Repeat(set+",", sets), ",")
+		return `{"name":"` + name + `","circuit":"` + circuit + `","rest_seconds":0,"sets":[` + s + `]}`
+	}
+	tpl := func(exs ...string) string {
+		return `{"name":"Circuit","exercises":[` + strings.Join(exs, ",") + `]}`
+	}
+	cases := []struct {
+		name, body, want string
+	}{
+		{"alone", tpl(ex("Row", "a", 3), ex("Squat", "", 3)), "circuit a needs at least two exercises"},
+		{"split", tpl(ex("Row", "a", 3), ex("Press", "a", 3), ex("Squat", "", 3), ex("Curl", "a", 3)), "next to each other"},
+		{"uneven", tpl(ex("Row", "a", 3), ex("Press", "a", 2)), "same number of sets"},
+		{"bad key", tpl(ex("Row", "a b", 3), ex("Press", "a b", 3)), "circuit must be"},
+	}
+	for _, c := range cases {
+		w := call(t, h, "PUT", "/v1/templates/c1", c.body)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), c.want) {
+			t.Errorf("%s: %d %s, want 400 with %q", c.name, w.Code, w.Body.String(), c.want)
+		}
+	}
+
+	body := tpl(ex("Row", "a", 3), ex("Press", " a ", 3), ex("Squat", "", 5), ex("Curl", "b", 2), ex("Dip", "b", 2))
+	if w := call(t, h, "PUT", "/v1/templates/c1", body); w.Code != http.StatusOK {
+		t.Fatalf("good circuit template: %d %s", w.Code, w.Body.String())
+	}
+	var got store.Template
+	_ = json.Unmarshal(call(t, h, "GET", "/v1/templates/c1", "").Body.Bytes(), &got)
+	cs := store.Circuits(got.Exercises)
+	if len(cs) != 2 || cs[0] != (store.Circuit{Key: "a", Start: 0, End: 2}) || cs[1] != (store.Circuit{Key: "b", Start: 3, End: 5}) {
+		t.Fatalf("circuits %+v", cs)
+	}
+	if cs[0].Rounds(got.Exercises) != 3 {
+		t.Fatalf("rounds %d", cs[0].Rounds(got.Exercises))
+	}
+}

@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The release binary stays cgo-free (modernc.org/sqlite is pure Go), so it
+  # is statically linked. Only the race step opts back in.
+  CGO_ENABLED: "0"
+
+# Every step is a make target, so `make check` locally runs what CI runs.
+jobs:
+  test:
+    # Domestique ships for macOS (the Mac Mini), but nothing in it is
+    # platform-specific; Linux keeps it that way and is the only place it
+    # gets coverage.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: make vet
+
+      # Coverage runs the whole suite once; a drop below the Makefile's
+      # COVER_MIN fails the build.
+      - name: Test (coverage gate)
+        run: make cover
+
+      # Separate from the plain run so a race failure is legible rather than
+      # buried in a rerun of everything.
+      - name: Test (race)
+        run: make test-race
+
+      # The real binary against the Outpost service checklist.
+      - name: Conformance
+        run: make conformance
+
+      - name: Upload coverage
+        if: always() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: ignore
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: make fmt-check
+
+      - name: go.mod is tidy
+        run: make tidy
+
+      # Installed by the official action, pinned to a commit, rather than by
+      # piping a remote script into sh. Install only: the run below is the
+      # same command `make lint` uses.
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          install-only: true
+
+      - name: golangci-lint
+        run: make lint
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # npm ci, svelte-check, then the Vite build the binary embeds.
+      - name: Install, type-check and build
+        run: make web

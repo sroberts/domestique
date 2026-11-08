@@ -28,7 +28,7 @@ func newFakeOutpost(t *testing.T) *fakeOutpost {
 	f.jwks = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cur := f.priv.Public().(ed25519.PublicKey)
 		_ = pub
-		json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
 			"kty": "OKP", "crv": "Ed25519", "kid": f.kid, "x": base64.RawURLEncoding.EncodeToString(cur),
 		}}})
 	}))

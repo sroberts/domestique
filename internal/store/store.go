@@ -75,10 +75,17 @@ type TargetSet struct {
 
 // Exercise is one planned exercise inside a template.
 type Exercise struct {
-	Name        string      `json:"name"`
-	Sets        []TargetSet `json:"sets"`
-	RestSeconds int         `json:"rest_seconds"`
-	Notes       string      `json:"notes,omitempty"`
+	Name string      `json:"name"`
+	Sets []TargetSet `json:"sets"`
+	// RestSeconds is the rest after each set. In a circuit it is the rest
+	// after this exercise before the next one, so the last exercise's rest
+	// is the rest between rounds.
+	RestSeconds int    `json:"rest_seconds"`
+	Notes       string `json:"notes,omitempty"`
+	// Circuit groups adjacent exercises that share it into a circuit: one
+	// set of each in turn, repeated for as many rounds as each has sets.
+	// Empty means straight sets.
+	Circuit string `json:"circuit,omitempty"`
 	// Change explains how today's targets differ from the template, when a
 	// prescription adjusted them ("Up 2.5 kg: every set hit 6 on Sat").
 	Change string `json:"change,omitempty"`
@@ -417,7 +424,7 @@ func (s *Store) PutHR(ctx context.Context, source string, samples []HRSample) er
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO hr_samples (source, ts, bpm) VALUES (?, ?, ?)`)
 	if err != nil {
 		return err
@@ -494,7 +501,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	for _, q := range []string{`DELETE FROM sets WHERE session_id = ?`, `DELETE FROM sessions WHERE id = ?`} {
 		if _, err := tx.ExecContext(ctx, q, id); err != nil {
 			return err

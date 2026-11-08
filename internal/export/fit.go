@@ -155,7 +155,6 @@ func fitSport(s string) (sport, sub uint8) {
 type summary struct {
 	startIdx, endIdx   int // [startIdx, endIdx) into the stream
 	start, end         int32
-	timer              float64
 	dist               float64
 	avgSpeed, maxSpeed float64
 	avgHR, maxHR       float64
