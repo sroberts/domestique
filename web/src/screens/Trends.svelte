@@ -1,6 +1,7 @@
 <script lang="ts">
   import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
+  import ExerciseAliases from '../components/ExerciseAliases.svelte';
   import LoadChart from '../components/LoadChart.svelte';
   import AskLink from '../components/AskLink.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
@@ -164,6 +165,7 @@
               </li>
             {/each}
           </ul>
+          <ExerciseAliases onchange={() => fetchTrends().then((r) => (trends = r.data ?? trends))} />
         </section>
       {/if}
     {/if}

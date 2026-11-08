@@ -5,7 +5,8 @@
 //     no GPS was indoors; whether two overlapping recordings the matcher kept
 //     apart are one workout; whether an entry typed in by hand is a stray;
 //     whether a recording's heart rate or power is broken, and what kind of
-//     ride each ride was (quality.go).
+//     ride each ride was (quality.go); whether a new exercise name is one
+//     the athlete already logs.
 //   - The LLM: tags and a note from the athlete's own descriptions.
 //
 // Each question is asked once per set of facts and its answer kept in
@@ -63,6 +64,7 @@ func (s *Sweeper) Run(ctx context.Context) {
 		{"tags", s.tags},
 		{"bad data", s.badData},
 		{"ride type", s.rideTypes},
+		{"exercise names", s.exerciseNames},
 	} {
 		c, err := pass.run(ctx)
 		changed = changed || c

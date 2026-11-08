@@ -31,6 +31,7 @@ func (a *API) registerAI(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /v1/plans/{date}/ease", a.unEaseDay)
 	mux.HandleFunc("POST /v1/run-down/{date}/dismiss", a.dismissRunDown)
 	mux.HandleFunc("POST /v1/activities/{id}/data-ok", a.dataOK)
+	a.registerStrengthAI(mux)
 }
 
 func (a *API) aiOn(r *http.Request) bool { return a.Coach != nil && !a.demoOn(r) }

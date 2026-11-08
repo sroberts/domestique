@@ -1,7 +1,7 @@
 <script lang="ts">
   import ActionBar from '../components/ActionBar.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
-  import { AuthError, OfflineError, localDate } from '../lib/api';
+  import { AuthError, OfflineError, getJSON, localDate } from '../lib/api';
   import { activeSession } from '../lib/db';
   import { relDay, time } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
@@ -34,6 +34,15 @@
 
   $effect(() => {
     void load();
+  });
+
+  // Logging a finished workout from text needs Outpost's LLM.
+  let aiOn = $state(false);
+  $effect(() => {
+    getJSON<{ ai?: boolean }>('/v1/me').then(
+      (m) => (aiOn = !!m.ai),
+      () => (aiOn = false),
+    );
   });
 
   async function load() {
@@ -171,6 +180,12 @@
       </li>
     {/each}
   </ul>
+
+  {#if aiOn}
+    <p class="log-done">
+      Lifted without the app? <a href="/workouts/log" use:link>Log a finished workout from text</a>
+    </p>
+  {/if}
 </main>
 
 <ActionBar>
@@ -264,6 +279,15 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-3);
+  }
+  .log-done {
+    margin-top: var(--space-5);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
+  .log-done a {
+    color: var(--text);
+    font-weight: 600;
   }
   @media (min-width: 900px) {
     .page {

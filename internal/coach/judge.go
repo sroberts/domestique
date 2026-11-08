@@ -37,6 +37,11 @@ var Bars = map[string]float64{
 	// d1 leaned to the right type on 8 of 11 cases, with tempo at 0.92,
 	// intervals 0.77 and endurance 0.68. Display only, and in the week note.
 	"ride_type": 0.65,
+	// d1 merged incline bench into bench at 0.87 and chin-up into pull-up
+	// at 0.93; its true matches scored 0.65 to 0.96 (RDL, OHP pass). Laya
+	// answers "new exercise" to everything. As a yes/no per name instead,
+	// Laya said yes to nonsense pairs at up to 0.95, so it stays a choice.
+	"exercise": 0.94,
 }
 
 // Bar is the probability question q's answer must reach before Domestique

@@ -65,6 +65,11 @@ and after a failure the same work waits 15 minutes.
   prescription: "Use the easier version" or "Keep the plan". It must keep
   every exercise and only drop sets, reps or weight, and taking it changes
   that day's plan, never the workout.
+- **A finished workout from text** (Workouts → "Log a finished workout"):
+  "this morning: 3x10 push-ups, squats 5x5 at 80, last set only 3" becomes
+  a draft with the sets as done, the day and the time. You check it, and
+  Save stores it as a finished session like one logged live. Walks, runs
+  and other cardio it mentions are listed as not logged, never invented.
 
 Prose is rejected, and nothing shown, unless it is the expected JSON, short
 enough, free of `!`, and uses only numbers that appear in its facts, with no
@@ -94,7 +99,13 @@ only on a confident answer: 0.85 by default, 0.9 to merge two recordings,
   back;
 - what kind of ride each ride was (endurance, tempo, intervals, race,
   commute, recovery), shown on the activity and given to the week's note as
-  minutes per type.
+  minutes per type;
+- whether an exercise name you haven't used before is one you already log,
+  written another way ("BB bench" as Bench Press, "RDL" as Romanian
+  Deadlift). A match counts its sets with the older name's, for history,
+  weight progression and PRs; Trends lists each under "Counted together"
+  with an Undo. Variations that train differently (front and back squat,
+  incline and flat bench) are kept apart.
 
 A background sweep asks these about stored workouts after each load
 recalculation, asking each question once per set of facts. The first sweep
