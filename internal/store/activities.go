@@ -271,7 +271,7 @@ func (s *Store) MergeActivities(ctx context.Context, from, to string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	for _, q := range []string{
 		`UPDATE activity_sources SET activity_id = ?2 WHERE activity_id = ?1`,
 		`UPDATE activities SET session_id = (SELECT session_id FROM activities WHERE id = ?1)
@@ -507,7 +507,7 @@ func (s *Store) ExecBatch(ctx context.Context, stmts []string, args [][]any) err
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	for i, q := range stmts {
 		if _, err := tx.ExecContext(ctx, q, args[i]...); err != nil {
 			return err
@@ -528,7 +528,7 @@ func (s *Store) DeleteSource(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	for _, q := range []string{`DELETE FROM streams WHERE source_id = ?`, `DELETE FROM activity_sources WHERE id = ?`} {
 		if _, err := tx.ExecContext(ctx, q, id); err != nil {
 			return err

@@ -61,8 +61,12 @@ func TestBadData(t *testing.T) {
 		}
 		markChannels(t, st, id)
 	}
-	sw.Ingest.Rebuild(ctx, "a_bad")
-	sw.Ingest.Rebuild(ctx, "a_ok")
+	if err := sw.Ingest.Rebuild(ctx, "a_bad"); err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Ingest.Rebuild(ctx, "a_ok"); err != nil {
+		t.Fatal(err)
+	}
 
 	sw.Run(ctx)
 

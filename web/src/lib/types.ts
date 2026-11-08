@@ -8,9 +8,12 @@ export interface TargetSet {
 export interface Exercise {
   name: string;
   sets: TargetSet[];
+  /** Rest after each set; in a circuit, rest after this exercise (the last one's is the rest between rounds). */
   rest_seconds: number;
   notes?: string;
   change?: string;
+  /** Adjacent exercises sharing a key form a circuit: one set of each in turn, a round per set. */
+  circuit?: string;
 }
 
 export interface Template {

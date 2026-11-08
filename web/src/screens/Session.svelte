@@ -47,6 +47,28 @@
   let restFraction = $derived(c && c.phase === 'rest' && c.rest_s > 0 ? Math.max(0, Math.min(1, restLeft / c.rest_s)) : 0);
   let restOver = $derived(c?.phase === 'rest' && restLeft <= 0);
   let newExercise = $derived(!!(w?.lastSet && slot && w.lastSet.exercise_index !== slot.exerciseIndex));
+  // Circuits count rounds, not sets, and say what comes after this exercise.
+  let unit = $derived<'Set' | 'Round'>(slot?.circuit ? 'Round' : 'Set');
+  let then = $derived(w && slot?.circuit ? w.nextAfter(slot.index) : null);
+  /** Where a circuit goes after this exercise: the next one in the round,
+   * rest before the next round, or whatever follows the circuit. */
+  let thenText = $derived.by(() => {
+    if (!slot?.circuit || !then) return '';
+    if (then.circuit?.start !== slot.circuit.start) return then.exercise.name;
+    return then.setIndex === slot.setIndex ? then.exercise.name : 'rest';
+  });
+  let posText = $derived(
+    !w || !slot ? ''
+    : slot.circuit
+      ? [`Circuit · ${slot.exerciseIndex - slot.circuit.start + 1} of ${slot.circuit.end - slot.circuit.start}`, thenText && `then ${thenText}`, slot.exercise.notes].filter(Boolean).join(' · ')
+      : [`Lift ${slot.exerciseIndex + 1} of ${w.session.plan.length}`, slot.exercise.notes].filter(Boolean).join(' · '),
+  );
+  /** "set 2", or "round 2" for a set done in a circuit. */
+  const setWord = (exerciseIndex: number, setIndex: number) =>
+    `${w?.slots.find((s) => s.exerciseIndex === exerciseIndex)?.circuit ? 'round' : 'set'} ${setIndex + 1}`;
+  // Moving straight on in a circuit (no rest) skips the rest screen, so the
+  // set just logged can still be corrected from the ready screen.
+  let correctable = $derived(c?.phase === 'rest' || c?.phase === 'last' || (c?.phase === 'ready' && !!slot?.circuit && newExercise));
 
   // Signal the end of rest once per rest period: haptics where the platform
   // allows, and a screen-reader announcement everywhere.
@@ -56,7 +78,7 @@
       alerted = c.phase_started_at;
       buzz();
       chime();
-      announce = slot ? `Rest over. ${slot.exercise.name}, set ${slot.setIndex + 1} of ${exerciseSlots.length}.` : 'Rest over.';
+      announce = slot ? `Rest over. ${slot.exercise.name}, ${unit.toLowerCase()} ${slot.setIndex + 1} of ${exerciseSlots.length}.` : 'Rest over.';
     }
   });
 
@@ -144,7 +166,9 @@
     {#if slot && c.phase !== 'last'}
       <section class="exercise" aria-label="Current exercise">
         <h1 class="ex-name">{slot.exercise.name}</h1>
-        <p class="mono ex-pos">Lift {slot.exerciseIndex + 1} of {w.session.plan.length}{#if slot.exercise.notes} · {slot.exercise.notes}{/if}</p>
+        <p class="mono ex-pos">
+          {posText}
+        </p>
         <ol class="ladder" aria-label="Sets" style:--n={exerciseSlots.length}>
           {#each exerciseSlots as s (s.index)}
             {@const st = ladderState(s)}
@@ -160,14 +184,14 @@
     {#key `${c.phase}:${c.index}`}
       <section class="hero" in:fly={{ y: 8, duration: 150, easing: quintOut }}>
         {#if c.phase === 'ready' && slot && target}
-          <Plate n={slot.setIndex + 1} of={exerciseSlots.length} />
+          <Plate n={slot.setIndex + 1} of={exerciseSlots.length} {unit} />
           <div class="target-big" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
             <div class="tb"><span class="num live">{target.reps}</span><span class="label">Reps</span></div>
             <span class="times num" aria-hidden="true">×</span>
             <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
           </div>
         {:else if c.phase === 'active' && slot && target}
-          <Plate n={slot.setIndex + 1} of={exerciseSlots.length} active />
+          <Plate n={slot.setIndex + 1} of={exerciseSlots.length} {unit} active />
           <div class="in-set">
             <p class="in-set-clock"><span class="label signal-label"><span class="live-dot" aria-hidden="true"></span>In set</span>
               <span class="num set-clock" aria-label={`${Math.floor(phaseElapsed)} seconds`}>{fmtClock(phaseElapsed)}</span></p>
@@ -203,12 +227,12 @@
       </section>
     {/key}
 
-    {#if (c.phase === 'rest' || c.phase === 'last') && w.lastSet}
+    {#if correctable && w.lastSet}
       {@const ls = w.lastSet}
       <section class="logged" aria-labelledby="logged-h">
         <h2 id="logged-h" class="logged-h">
           <span>Logged</span>
-          <span class="mono muted">{ls.exercise_name} · set {ls.set_index + 1}</span>
+          <span class="mono muted">{ls.exercise_name} · {setWord(ls.exercise_index, ls.set_index)}</span>
         </h2>
         <div class="steppers">
           <Stepper label="Reps" value={String(ls.reps)} canDecrease={ls.reps > 0} onstep={(d) => w!.adjustLast('reps', d)} />
@@ -232,7 +256,7 @@
         <p class="label">Next</p>
         {#if newExercise}
           <p class="next-main">{slot.exercise.name}</p>
-          <p class="mono muted">Set 1 of {exerciseSlots.length} · {setText(target.reps, target.weight_kg)}</p>
+          <p class="mono muted">{unit} {slot.setIndex + 1} of {exerciseSlots.length} · {setText(target.reps, target.weight_kg)}</p>
         {:else}
           <p class="next-main">Set {slot.setIndex + 1} of {exerciseSlots.length} · <span class="num next-num">{setText(target.reps, target.weight_kg)}</span></p>
         {/if}
@@ -269,7 +293,7 @@
         </button>
         {#if discardable}
           <button class="btn btn-danger sheet-btn" onclick={discard}>
-            Discard session{w.sets.length ? ` (${w.sets.length} set)` : ''}
+            Discard session{w.sets.length ? ` (${w.sets.length} ${w.sets.length === 1 ? "set" : "sets"})` : ''}
           </button>
           <p class="muted discard-note">Discarding removes it from history and training load.</p>
         {/if}

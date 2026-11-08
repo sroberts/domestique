@@ -79,14 +79,18 @@ func TestGearEndToEnd(t *testing.T) {
 	}
 	w := h.do("GET", "/v1/activities/"+rideID+"/bike", nil)
 	var ab activityBikeResp
-	json.Unmarshal(w.Body.Bytes(), &ab)
+	if err := json.Unmarshal(w.Body.Bytes(), &ab); err != nil {
+		t.Fatalf("%d %s: %v", w.Code, w.Body.String(), err)
+	}
 	if ab.How != "strava" || ab.Bike == nil || ab.Bike.ID != "tarmac" || ab.StravaGear != "Specialized  Tarmac" {
 		t.Fatalf("activity bike: %+v", ab)
 	}
 
 	// Manual "no bike" overrides Strava; totals recompute.
 	w = h.do("PUT", "/v1/activities/"+rideID+"/bike", map[string]any{"bike_id": nil})
-	json.Unmarshal(w.Body.Bytes(), &ab)
+	if err := json.Unmarshal(w.Body.Bytes(), &ab); err != nil {
+		t.Fatalf("%d %s: %v", w.Code, w.Body.String(), err)
+	}
 	if w.Code != 200 || ab.How != "manual" || ab.Bike != nil {
 		t.Fatalf("override: %d %+v", w.Code, ab)
 	}
@@ -94,7 +98,9 @@ func TestGearEndToEnd(t *testing.T) {
 		t.Fatalf("after override: %+v", g.Bikes[0])
 	}
 	w = h.do("DELETE", "/v1/activities/"+rideID+"/bike", nil)
-	json.Unmarshal(w.Body.Bytes(), &ab)
+	if err := json.Unmarshal(w.Body.Bytes(), &ab); err != nil {
+		t.Fatalf("%d %s: %v", w.Code, w.Body.String(), err)
+	}
 	if ab.How != "strava" {
 		t.Fatalf("back to automatic: %+v", ab)
 	}

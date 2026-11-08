@@ -5,12 +5,14 @@
     n: number;
     of: number;
     active?: boolean;
+    /** What's being counted: sets, or rounds of a circuit. */
+    unit?: 'Set' | 'Round';
   }
-  let { n, of, active = false }: Props = $props();
+  let { n, of, active = false, unit = 'Set' }: Props = $props();
 </script>
 
 <p class="plate-row">
-  <span class="visually-hidden">Set {n} of {of}</span>
+  <span class="visually-hidden">{unit} {n} of {of}</span>
   <span class="plate num" class:active aria-hidden="true">{n}</span>
   <span class="num total" aria-hidden="true">of {of}</span>
 </p>

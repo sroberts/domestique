@@ -63,8 +63,12 @@ func stravaZip(t *testing.T, gz []byte, withGear bool) string {
 	fmt.Fprintf(csvw, "111,\"Aug 16, 2013, 6:05:10 PM\",Hilly loop with Ray,Ride,,4700,41.34,activities/111.fit.gz,%s,41339.0\n", gear("Specialized  Tarmac"))
 	fmt.Fprintf(csvw, "333,\"Aug 22, 2013, 7:00:00 AM\",Café ride,Ride,,3600,30.0,,%s,30000.0\n", gear("Hire bike"))
 	f, _ := z.Create("activities/111.fit.gz")
-	f.Write(gz)
-	z.Close()
+	if _, err := f.Write(gz); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
 	p := filepath.Join(t.TempDir(), "export.zip")
 	if err := os.WriteFile(p, zbuf.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
@@ -89,8 +93,12 @@ func newHarness(t *testing.T) *harness {
 
 	var gz bytes.Buffer
 	zw := gzip.NewWriter(&gz)
-	zw.Write(fixtureFIT(t))
-	zw.Close()
+	if _, err := zw.Write(fixtureFIT(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	h.gz = gz.Bytes()
 
 	// First an export from before gear was kept, then a newer one with gear:

@@ -37,7 +37,7 @@ func (s *Sweeper) badData(ctx context.Context) (bool, error) {
 	for _, a := range acts {
 		touched := false
 		for _, src := range srcs[a.ID] {
-			if kept[src.ID] != "" || !(src.HasHR || src.HasPower) {
+			if kept[src.ID] != "" || (!src.HasHR && !src.HasPower) {
 				continue
 			}
 			type verdict struct {

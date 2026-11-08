@@ -354,6 +354,16 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 		}
 	}
 
+	// Circuit share comes from the app's sets.
+	metrics.CircuitShare = 0
+	if app != nil {
+		var ex struct {
+			Share float64 `json:"circuit_share"`
+		}
+		_ = json.Unmarshal(app.Extra, &ex)
+		metrics.CircuitShare = ex.Share
+	}
+
 	// With no HR stream anywhere, fall back to Whoop's own summary.
 	if metrics.AvgHR == 0 && whoop != nil && BadChannels(whoop.Extra)["hr"] == "" {
 		var ex struct {

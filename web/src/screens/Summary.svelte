@@ -13,7 +13,7 @@
   import { sessionExports } from '../lib/export';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link } from '../lib/router.svelte';
-  import { Workout, earlyText, endedEarly, progressOf } from '../lib/workout.svelte';
+  import { Workout, earlyText, endedEarly, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
   import type { SetRecord, SetStat, Summary } from '../lib/types';
 
   let { id }: { id: string } = $props();
@@ -128,10 +128,14 @@
   });
 
   let stats = $derived(new Map<string, SetStat>((summary?.set_stats ?? []).map((s) => [s.set_id, s])));
+  let places = $derived(summary ? roundsOf(summary.session.plan, summary.sets).places : new Map<string, CircuitPlace>());
+  // Straight sets group by lift; a circuit groups by round, as it was done.
   let groups = $derived.by(() => {
     const out: { name: string; sets: SetRecord[] }[] = [];
     for (const s of summary?.sets ?? []) {
-      if (!out.length || out.at(-1)!.name !== s.exercise_name) out.push({ name: s.exercise_name, sets: [] });
+      const p = places.get(s.id);
+      const name = p ? `Circuit ${p.letter} · Round ${p.round} of ${p.rounds}` : s.exercise_name;
+      if (!out.length || out.at(-1)!.name !== name) out.push({ name, sets: [] });
       out.at(-1)!.sets.push(s);
     }
     return out;
@@ -206,8 +210,9 @@
       <h2 id="hr-h" class="block-h">Heart rate by set</h2>
       <div class="readout" aria-live="polite">
         {#if sel}
+          {@const p = places.get(sel.id)}
           <p class="ro-main">
-            <span>Set {sel.set_index + 1} · {sel.exercise_name}</span>
+            <span>{p ? `Round ${p.round} · ${p.pos} ${sel.exercise_name}` : `Set ${sel.set_index + 1} · ${sel.exercise_name}`}</span>
             {#if summary.efforts?.[sel.id]}<span class="effort">looked {summary.efforts[sel.id]!.level}</span>{/if}
           </p>
           {#if selStat?.has_hr}
@@ -220,7 +225,7 @@
             <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
           {/if}
         {:else}
-          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order. Touch one to read it.'}</p>
+          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order. Touch one to read it.'}{places.size ? ' Wider, fainter bands are circuit rounds.' : ''}</p>
         {/if}
       </div>
       <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
@@ -251,6 +256,7 @@
             <p class="g-name">{g.name}</p>
             {#each g.sets as s (s.id)}
               {@const st = stats.get(s.id)}
+              {@const p = places.get(s.id)}
               <div
                 class="tr"
                 class:selected={s.id === selected}
@@ -260,13 +266,14 @@
                 onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), (selected = s.id))}
                 onfocus={() => (selected = s.id)}
               >
-                <span role="cell" class="mono">{s.set_index + 1}</span>
+                <span role="cell" class="mono">{p ? p.pos : s.set_index + 1}</span>
                 <span role="cell" class="done">
                   <span class="num">{s.reps} × {weight(s.weight_kg)}</span>{#if s.weight_kg}<span class="unit"> kg</span>{/if}
                   {#if s.reps !== s.target_reps || s.weight_kg !== s.target_weight_kg}
                     <span class="mono off"><span class="visually-hidden">target </span>/{s.weight_kg === s.target_weight_kg ? s.target_reps : `${s.target_reps}×${weight(s.target_weight_kg)}`}</span>
                   {/if}
                   {#if summary.efforts?.[s.id]}<span class="effort"><span class="visually-hidden">effort </span>{summary.efforts[s.id]!.level}</span>{/if}
+                  {#if p}<span class="ex-in">{s.exercise_name}</span>{/if}
                 </span>
                 <span role="cell" class="r">
                   {#if st?.has_hr}
@@ -285,7 +292,7 @@
                   </div>
                 {:else}
                   <div class="edit-row">
-                    <button class="btn btn-quiet" onclick={() => (editing = s.id)}>Edit set {s.set_index + 1}</button>
+                    <button class="btn btn-quiet" onclick={() => (editing = s.id)}>{p ? `Edit ${s.exercise_name}, round ${p.round}` : `Edit set ${s.set_index + 1}`}</button>
                   </div>
                 {/if}
               {/if}
@@ -503,6 +510,13 @@
     padding: var(--space-3) 0 var(--space-1);
     border-bottom: 1px solid var(--line);
     margin-bottom: var(--space-1);
+  }
+  .ex-in {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--size-small);
+    color: var(--text-muted);
   }
   .done {
     white-space: nowrap;

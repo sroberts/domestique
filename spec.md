@@ -76,7 +76,36 @@ A live logging screen, delivered as a progressive web app served by Outpost, rec
 - Each set stores start and end timestamps, so the merge step slices the Whoop heart rate stream per set and per rest period
 - Post-workout summary: heart rate peak and recovery per set, total volume, strain
 
-## Interfaces
+## Circuits
+
+A circuit is a group of exercises done back to back, one set of each, then repeated for a number of rounds. Supersets are circuits of two.
+
+- In a template, adjacent exercises can be grouped into a circuit. The group has a round count, a short rest between exercises (often zero), and a longer rest after each round
+- The Live Set screen rotates through the group: A1, B1, C1, rest, A2, B2, C2. It shows round X of Y and the next exercise, not just set X of Y
+- Each logged set keeps its own exercise and set index, so history, progression, PRs and per-set heart rate bands work unchanged; round N is set N of each exercise
+- Session Summary shades each round as one band over the heart rate trace, with the sets inside it marked
+- Exercises outside a group behave exactly as today
+- REST, MCP and template seed files accept the grouping; Claude can build circuit templates
+
+**Shape:** each exercise has an optional `circuit` key; adjacent exercises sharing it form one circuit. Rounds are the set count, which every exercise in the circuit shares. In a circuit, an exercise's `rest_seconds` is the rest after it, so the last exercise's rest is the rest between rounds. Template and session plans carry the key with the exercises, so no new tables are needed.
+
+**Decisions:**
+
+- Strength only for now. Timed work (intervals, EMOM) can come later
+- Every exercise in a circuit does the same number of rounds
+- Skipping an exercise moves on to the next exercise in the round; the circuit carries on
+- Progression suggests increases per exercise, as now, and can also suggest adding a round once every exercise has hit its targets
+- Training load: circuits count for more, but not through a fixed multiplier at first (see below)
+
+**Circuits and training load.** Studies of supersets and circuits agree that they feel harder and produce more metabolic stress and muscle damage per set than straight sets, while the session is shorter and total volume is about the same. None of them gives a factor to multiply load by, and session load can go up or down depending on whether it is measured per minute or per session.
+
+Two things already capture part of the extra cost. Strength load comes from Whoop strain, which is built from heart rate, so a circuit's higher heart rate already raises its score. The load per hour is also capped (strain cannot score more than an hour at threshold per hour), and since circuits pack the same work into less time, that cap is what is most likely to undercount them.
+
+- Lift the per-hour cap for the circuit portion of a session, so dense work is not clipped by its own shortness: circuit time is capped at IF 1.25 (the ceiling heart rate load already uses) instead of 1.0
+- Do not add a multiplier at launch. A guessed factor on top of strain would count the heart rate twice
+- Record each session's circuit share (fraction of working time spent in circuits), then compare next-morning Whoop recovery against sessions of similar strain. If circuits leave recovery consistently lower, add an uplift sized to that gap, starting no higher than 10%
+
+## Interfaces## Interfaces
 
 - REST: list and query activities, streams, recovery, and training load
 - MCP tools: get\_recent\_activities, get\_training\_load, get\_recovery, get\_activity\_detail

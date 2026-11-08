@@ -74,6 +74,7 @@ type metricsLite struct {
 	PowerCurve   []int   `json:"power_curve"`
 	HRHist       []int32 `json:"hr_hist"`
 	PowerSeconds int     `json:"power_seconds"`
+	CircuitShare float64 `json:"circuit_share"`
 }
 
 // Recalc re-derives thresholds from all data and rescores every activity.
@@ -210,7 +211,7 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 // its own metrics: TSS, intensity factor, and how it was scored.
 func Score(a store.Activity, m activity.Metrics, ath Athlete) (float64, float64, string) {
 	return score(a, metricsLite{NP: m.NP, MaxHR: m.MaxHR, PowerCurve: m.PowerCurve, HRHist: m.HRHist,
-		PowerSeconds: m.PowerSeconds}, a.FTP, ath)
+		PowerSeconds: m.PowerSeconds, CircuitShare: m.CircuitShare}, a.FTP, ath)
 }
 
 func score(a store.Activity, m metricsLite, ftp int, ath Athlete) (float64, float64, string) {
@@ -223,11 +224,11 @@ func score(a store.Activity, m metricsLite, ftp int, ath Athlete) (float64, floa
 		tss, ifv := activity.PowerTSS(m.NP, moving, ftp)
 		return tss, ifv, "power"
 	case a.Sport == activity.SportStrength && a.Strain != nil:
-		return activity.StrainLoad(*a.Strain, moving), 0, "strain"
+		return activity.StrainLoad(*a.Strain, moving, m.CircuitShare), 0, "strain"
 	case len(m.HRHist) > 0:
 		return activity.HRTSS(m.HRHist, ath.RestHR, ath.LTHR), 0, "hr"
 	case a.Strain != nil:
-		return activity.StrainLoad(*a.Strain, moving), 0, "strain"
+		return activity.StrainLoad(*a.Strain, moving, 0), 0, "strain"
 	}
 	return 0, 0, "none"
 }

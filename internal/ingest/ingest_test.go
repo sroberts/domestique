@@ -70,11 +70,13 @@ func TestIngestMergeAndStravaExport(t *testing.T) {
 
 	// 1. The head unit file arrives through a watched folder.
 	watchDir := filepath.Join(t.TempDir(), "wahoo")
-	os.MkdirAll(watchDir, 0o755)
 	fp := filepath.Join(watchDir, "ride.fit")
-	os.WriteFile(fp, ride, 0o644)
 	old := time.Now().Add(-time.Minute)
-	os.Chtimes(fp, old, old)
+	for _, err := range []error{os.MkdirAll(watchDir, 0o755), os.WriteFile(fp, ride, 0o644), os.Chtimes(fp, old, old)} {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 	w := &importer.Watcher{In: in, Dirs: []string{watchDir}}
 	if n := w.Scan(ctx); n != 1 {
 		t.Fatalf("watch imported %d, want 1", n)
@@ -105,8 +107,12 @@ func TestIngestMergeAndStravaExport(t *testing.T) {
 	//    hand-logged lift with no file.
 	var gz bytes.Buffer
 	zw := gzip.NewWriter(&gz)
-	zw.Write(ride)
-	zw.Close()
+	if _, err := zw.Write(ride); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
 	var zbuf bytes.Buffer
 	z := zip.NewWriter(&zbuf)
 	csvw, _ := z.Create("activities.csv")
@@ -114,10 +120,16 @@ func TestIngestMergeAndStravaExport(t *testing.T) {
 	fmt.Fprint(csvw, "111,\"Aug 16, 2013, 6:05:10 PM\",Hilly loop with Ray,Ride,,4700,41.34,activities/111.fit.gz,41339.0\n")
 	fmt.Fprint(csvw, "222,\"Aug 18, 2013, 7:00:00 AM\",Gym,Weight Training,,2700,0,,0\n")
 	f, _ := z.Create("activities/111.fit.gz")
-	f.Write(gz.Bytes())
-	z.Close()
+	if _, err := f.Write(gz.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
 	zipPath := filepath.Join(t.TempDir(), "export.zip")
-	os.WriteFile(zipPath, zbuf.Bytes(), 0o644)
+	if err := os.WriteFile(zipPath, zbuf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	prog, err := importer.StravaExport(ctx, in, zipPath, nil)
 	if err != nil {
