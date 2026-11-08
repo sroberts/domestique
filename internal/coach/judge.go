@@ -23,6 +23,16 @@ var Bars = map[string]float64{
 	// Laya called a typed-in yoga class and a recovery spin strays at 0.90
 	// and 0.91; its true strays scored 0.92 to 1.00.
 	"stray": 0.93,
+	// Neither model can judge broken data: on clear cases (strap dropouts,
+	// 230 bpm, zeros while pedalling) Laya gave 0.08 to 0.38 and d1 0.06 to
+	// 0.63, and Laya put a trainer's steady ERG power at 0.90. Only channels
+	// Go finds suspect are asked about (Suspect); this bar keeps a margin
+	// over that 0.90 too.
+	"bad_data": 0.92,
+	// Laya leans "endurance" for nearly every ride, up to 0.56 when wrong;
+	// d1 leaned to the right type on 8 of 11 cases, with tempo at 0.92,
+	// intervals 0.77 and endurance 0.68. Display only, and in the week note.
+	"ride_type": 0.65,
 }
 
 // Bar is the probability question q's answer must reach before Domestique

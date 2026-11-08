@@ -67,6 +67,29 @@
     }
   }
 
+  let restoring = $state(false);
+  let restoreError = $state('');
+  /** Overrule System 1: the data it left out was fine, so put it back. */
+  async function dataOK() {
+    if (!d || restoring) return;
+    restoring = true;
+    restoreError = '';
+    try {
+      await postJSON(`/v1/activities/${encodeURIComponent(d.activity.id)}/data-ok`);
+      tick++; // zones, charts and load change: fetch again
+    } catch (err) {
+      restoreError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
+    } finally {
+      restoring = false;
+    }
+  }
+
+  const CHANNEL: Record<string, string> = { hr: 'Heart rate', power: 'Power' };
+  /** "Heart rate looked wrong (strap dropouts)", one line per channel. */
+  const badLines = $derived(
+    Object.entries(d?.bad_data ?? {}).map(([ch, why]) => `${CHANNEL[ch] ?? ch} looked wrong${why ? ` (${why})` : ''}`)
+  );
+
   // Names for each recording, told apart when one app recorded twice (Whoop's
   // own record and the copy it posted to Strava, or a ride Whoop split).
   // In time order; at the same minute, bike computers before wrist bands and
@@ -222,7 +245,14 @@
         {#if keepError}<p class="small">{keepError}</p>{/if}
       </div>
     {:else}
-      <p class="note">{loadNote()}</p>
+      <p class="note">{#if d.ride_type}<span class="tag ride-type" title="What kind of ride, by System 1">{d.ride_type}</span> {/if}{loadNote()}</p>
+    {/if}
+    {#if badLines.length && !d.view}
+      <div class="notice stray" role="status">
+        <p>{badLines.join('. ')}, so it's left out of load and zones.</p>
+        <button class="btn" onclick={dataOK} disabled={restoring}>It's fine: use it</button>
+        {#if restoreError}<p class="small">{restoreError}</p>{/if}
+      </div>
     {/if}
     {#if d.note?.text}<CoachNote text={d.note.text} />{/if}
     {#if d.tags?.length || d.tag_note}
@@ -460,6 +490,9 @@
     padding: 0.0625rem 0.375rem;
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-s);
+  }
+  .ride-type {
+    color: var(--text);
   }
   .tag-note {
     font-size: var(--size-small);

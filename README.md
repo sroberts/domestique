@@ -55,7 +55,7 @@ enough, free of `!`, and uses only numbers that appear in its facts, with no
 more than a couple of figures beyond small counts.
 
 **The System 1 model** answers typed questions, and Domestique changes data
-only on a confident answer (≥ 0.85):
+only on a confident answer (0.85 unless the question has its own bar):
 - the sport of a workout labelled "other";
 - whether a ride with no GPS was indoors;
 - whether two overlapping recordings that heart rate kept apart are one
@@ -64,7 +64,18 @@ only on a confident answer (≥ 0.85):
   out of training load, says so on its page, and "It was real: count it"
   restores it;
 - how hard each lifting set was (easy, working, hard, limit), shown as a word
-  beside the set.
+  beside the set;
+- whether a recording's heart rate or power is broken (strap dropouts, a
+  sensor reading cadence, impossible spikes, zeros while pedalling). Go works
+  out the numbers and only asks about channels that already look off. A
+  broken channel is left out of the merged view, zones and load, another
+  recording's is used where there is one, and "It's fine: use it" puts it
+  back;
+- what kind of ride each ride was (endurance, tempo, intervals, race,
+  commute, recovery), shown on the activity and given to the week's note as
+  minutes per type.
+
+Each question has its own bar (`coach.Bars`), set from `make eval` runs.
 
 A background sweep asks these about stored workouts after each load
 recalculation, asking each question once per set of facts. The first sweep
