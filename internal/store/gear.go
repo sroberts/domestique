@@ -111,7 +111,7 @@ func (s *Store) PutBike(ctx context.Context, b Bike) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	if b.DefaultRide {
 		if _, err := tx.ExecContext(ctx, `UPDATE bikes SET default_ride = 0 WHERE id != ?`, b.ID); err != nil {
 			return err
@@ -141,7 +141,7 @@ func (s *Store) DeleteBike(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	for _, q := range []string{
 		`DELETE FROM components WHERE bike_id = ?`,
 		`DELETE FROM activity_bikes WHERE bike_id = ?`,
@@ -225,7 +225,7 @@ func (s *Store) PutComponent(ctx context.Context, c Component, replaces string) 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	if replaces != "" {
 		old, err := scanComponent(tx.QueryRowContext(ctx, `SELECT `+componentCols+` FROM components WHERE id = ?`, replaces))
 		if errors.Is(err, sql.ErrNoRows) {
@@ -254,7 +254,7 @@ func (s *Store) DeleteComponent(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	if _, err := tx.ExecContext(ctx, `UPDATE components SET removed_at = NULL, replaced_by = NULL WHERE replaced_by = ?`, id); err != nil {
 		return err
 	}

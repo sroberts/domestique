@@ -200,14 +200,19 @@ var tools = []tool{
 		Name: "save_template",
 		Description: "Create or replace a strength template. Weights are the starting point; the app adds load " +
 			"automatically when every set hits its reps. Limits: 1-30 exercises, 1-20 sets each, reps 1-100, " +
-			"weight_kg 0-1000 in 0.25 kg steps (0 is bodyweight), rest_seconds 0-900.",
+			"weight_kg 0-1000 in 0.25 kg steps (0 is bodyweight), rest_seconds 0-900. " +
+			"Circuits and supersets: give adjacent exercises the same circuit key; the athlete does one set of each in turn, " +
+			"one round per set. Every exercise in a circuit needs the same number of sets (at least two exercises). " +
+			"In a circuit, rest_seconds is the rest after that exercise, so set it low (often 0) on all but the last, " +
+			"whose rest_seconds is the rest between rounds.",
 		InputSchema: obj(map[string]any{
 			"id":   str("Stable ID: letters, digits, dashes"),
 			"name": str("Display name, e.g. 'Lower B'"),
 			"exercises": map[string]any{"type": "array", "items": obj(map[string]any{
 				"name":         str("Exercise name"),
-				"rest_seconds": num("Rest after each set"),
+				"rest_seconds": num("Rest after each set; in a circuit, rest after this exercise"),
 				"notes":        str("Optional cue"),
+				"circuit":      str("Optional circuit key, e.g. 'a': adjacent exercises sharing it form a circuit"),
 				"sets": map[string]any{"type": "array", "items": obj(map[string]any{
 					"reps": num("Target reps"), "weight_kg": num("Target weight; 0 for bodyweight"),
 				}, "reps", "weight_kg")},

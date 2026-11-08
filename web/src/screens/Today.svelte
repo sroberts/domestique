@@ -8,7 +8,7 @@
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
   import { day, duration, recoveryBand, time, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
-  import { fetchTemplates } from '../lib/templates';
+  import { fetchTemplates, shapeText } from '../lib/templates';
   import { beginSession, complete, estimateMinutes } from '../lib/workout.svelte';
   import type { LocalSession, Today } from '../lib/types';
 
@@ -184,7 +184,7 @@
           <h2 id="plan-h" class="plan-name">{plan.name}</h2>
           <a class="more" href="/workouts" use:link aria-label="Change today's workout">Change</a>
         </div>
-        <p class="mono plan-meta">{plan.exercises.length} lifts · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
+        <p class="mono plan-meta">{shapeText(plan.exercises)} · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
         <ol class="sheet">
           {#each plan.exercises as ex, i (i)}
             {@const s = summarizeSets(ex.sets)}

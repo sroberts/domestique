@@ -157,7 +157,7 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 		if sp := activity.TextSport(h.Sport, src.HasGPS); sp != activity.SportOther {
 			// The athlete's own label wins over the device's guess, except
 			// that an indoor file stays indoor.
-			if !(sp == activity.SportRide && p.Sport == activity.SportVirtualRide) {
+			if sp != activity.SportRide || p.Sport != activity.SportVirtualRide {
 				src.Sport = sp
 			}
 		}

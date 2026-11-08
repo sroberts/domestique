@@ -130,7 +130,7 @@ func (g *Gateway) hostAllowed(host string) bool {
 // The healthcheck must be mounted outside it.
 func (g *Gateway) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		unsafe := !(r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions)
+		unsafe := r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions
 
 		if !g.Enabled && !g.hostAllowed(r.Host) {
 			g.log.Warn("rejected unknown host", "host", r.Host, "path", r.URL.Path)

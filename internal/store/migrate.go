@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -212,12 +213,10 @@ func (s *Store) migrate(ctx context.Context) error {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration %d: %w", i+1, err)
+			return errors.Join(fmt.Errorf("migration %d: %w", i+1, err), tx.Rollback())
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, i+1)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration %d version: %w", i+1, err)
+			return errors.Join(fmt.Errorf("migration %d version: %w", i+1, err), tx.Rollback())
 		}
 		if err := tx.Commit(); err != nil {
 			return fmt.Errorf("migration %d commit: %w", i+1, err)

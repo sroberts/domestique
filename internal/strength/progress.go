@@ -73,6 +73,9 @@ func increment(name string) float64 {
 func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readiness) (store.Template, error) {
 	out := t
 	out.Exercises = make([]store.Exercise, len(t.Exercises))
+	// hitWhen marks exercises whose last session hit every planned set, with
+	// that session's day, for the circuit round suggestion below.
+	hitWhen := make([]string, len(t.Exercises))
 	for i, ex := range t.Exercises {
 		ex.Sets = append([]store.TargetSet(nil), ex.Sets...)
 		raw, err := st.ExerciseHistory(ctx, ex.Name, 6)
@@ -99,6 +102,9 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 			hit := hitAll(last) && len(last) >= len(ex.Sets)
 			short := hitAll(last) && len(last) < len(ex.Sets)
 			missedTwice := !hit && !short && len(hist) > 1 && !hitAll(hist[1])
+			if hit {
+				hitWhen[i] = when
+			}
 			bodyweight := lastW == 0
 			// Bodyweight progression adds reps, so build on last session's
 			// target, not the template's, or it never gets past template+1.
@@ -148,7 +154,34 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 		ex.Change = change
 		out.Exercises[i] = ex
 	}
+	if r.Level != "hold" && r.Level != "easy" {
+		suggestRounds(out.Exercises, hitWhen)
+	}
 	return out, nil
+}
+
+// suggestRounds notes on the first exercise of a circuit that a round could
+// be added when every exercise in it hit all its sets last time. It only
+// suggests: the weights still go up per exercise, and adding a round is the
+// athlete's call in the editor.
+func suggestRounds(ex []store.Exercise, hitWhen []string) {
+	for _, c := range store.Circuits(ex) {
+		if c.Rounds(ex) >= store.MaxSetsPerLift {
+			continue
+		}
+		all := true
+		for i := c.Start; i < c.End; i++ {
+			all = all && hitWhen[i] != ""
+		}
+		if !all {
+			continue
+		}
+		note := "Every exercise in the circuit hit last time: add a round if it felt easy"
+		if ex[c.Start].Change != "" {
+			note = ex[c.Start].Change + ". " + note
+		}
+		ex[c.Start].Change = note
+	}
 }
 
 // MinSetSeconds is the shortest set that counts as lifting. Anything quicker
@@ -194,6 +227,40 @@ func ProgressOf(plan []store.Exercise, sets []store.Set) Progress {
 		p.Planned += len(e.Sets)
 	}
 	return p
+}
+
+// CircuitShare is the fraction of a session's working time (first set's
+// start to last set's end) spent in circuits: from each circuit's first set
+// to its last. Sets too short to be real don't count.
+func CircuitShare(plan []store.Exercise, sets []store.Set) float64 {
+	real := Counted(sets)
+	if len(real) == 0 {
+		return 0
+	}
+	from, to := real[0].StartedAt, real[0].EndedAt
+	for _, s := range real {
+		from, to = min(from, s.StartedAt), max(to, s.EndedAt)
+	}
+	if to <= from {
+		return 0
+	}
+	var in int64
+	for _, c := range store.Circuits(plan) {
+		var cf, ct int64
+		for _, s := range real {
+			if s.ExerciseIndex < c.Start || s.ExerciseIndex >= c.End {
+				continue
+			}
+			if cf == 0 || s.StartedAt < cf {
+				cf = s.StartedAt
+			}
+			ct = max(ct, s.EndedAt)
+		}
+		if ct > cf {
+			in += ct - cf
+		}
+	}
+	return math.Round(math.Min(1, float64(in)/float64(to-from))*100) / 100
 }
 
 func hitAll(sets []store.Set) bool {
