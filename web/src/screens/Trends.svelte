@@ -74,6 +74,9 @@
   </header>
   {#if stale}<p class="notice">No connection. Showing trends as of {time(stale)}.</p>{/if}
   {#if week?.note?.text}<CoachNote label={`Week of ${day(new Date(`${week.week}T12:00:00`).getTime())}`} text={week.note.text} />{/if}
+  {#if week?.keeps_coming_up?.length}
+    <p class="recurring"><span class="label">Keeps coming up in your notes</span> {week.keeps_coming_up.join('; ')}</p>
+  {/if}
 
   {#if empty}
     <section class="empty">
@@ -187,6 +190,14 @@
   }
   h1 {
     font-size: var(--size-heading);
+  }
+  .recurring {
+    margin: var(--space-2) 0 0;
+    font-size: var(--size-small);
+    max-width: 62ch;
+  }
+  .recurring .label {
+    display: block;
   }
   .notice {
     margin-top: var(--space-3);

@@ -195,6 +195,9 @@ type detailResp struct {
 	Tags    []string         `json:"tags,omitempty"`
 	TagNote string           `json:"tag_note,omitempty"`
 	Stray   bool             `json:"stray,omitempty"`
+	// NameSuggestion is the LLM's name for an activity still called by its
+	// default ("Afternoon Ride"); see names.go.
+	NameSuggestion *strength.AINote `json:"name_suggestion,omitempty"`
 }
 
 // versionResp is one source's own account of a workout, before merging.

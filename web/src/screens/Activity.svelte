@@ -8,7 +8,7 @@
   import Sources from '../components/Sources.svelte';
   import StreamPanels from '../components/StreamPanels.svelte';
   import ZoneRows from '../components/ZoneRows.svelte';
-  import { HTTPError, postJSON } from '../lib/api';
+  import { HTTPError, postJSON, putJSON } from '../lib/api';
   import { fetchActivity } from '../lib/data';
   import { Recheck } from '../lib/recheck';
   import { activityExports } from '../lib/export';
@@ -37,7 +37,7 @@
     fetchActivity(id, want || undefined).then((res) => {
       if (want !== view) return; // switched again before this arrived
       loading = false;
-      recheck.after(!!res.data?.note?.pending && !res.stale);
+      recheck.after((!!res.data?.note?.pending || !!res.data?.name_suggestion?.pending) && !res.stale);
       if (!res.data && d) return; // keep what's on screen; the switch just didn't load
       d = res.data;
       stale = res.stale;
@@ -64,6 +64,30 @@
       keepError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
     } finally {
       keeping = false;
+    }
+  }
+
+  let naming = $state(false);
+  let nameError = $state('');
+  /** Take the suggested name (in Domestique only), or hide it for good. */
+  async function useName(take: boolean) {
+    const s = d?.name_suggestion?.text;
+    if (!d || !s || naming) return;
+    naming = true;
+    nameError = '';
+    const path = `/v1/activities/${encodeURIComponent(d.activity.id)}`;
+    try {
+      if (take) {
+        await putJSON(`${path}/name`, { name: s });
+        d.activity.name = s;
+      } else {
+        await postJSON(`${path}/name-suggestion/dismiss`);
+      }
+      d.name_suggestion = undefined;
+    } catch (err) {
+      nameError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
+    } finally {
+      naming = false;
     }
   }
 
@@ -168,6 +192,16 @@
       <span class="sport-tag sport-{kind}">{SPORT_LABEL[a.sport] ?? a.sport}</span>
       {day(a.start_at)} · {time(a.start_at)}{#if a.route} · {a.route}{/if}
     </p>
+    {#if d.name_suggestion?.text && !d.view}
+      <div class="rename" role="group" aria-label="Suggested name">
+        <p>Call it <strong>{d.name_suggestion.text}</strong>?</p>
+        <div class="rename-actions">
+          <button type="button" class="btn" onclick={() => useName(true)} disabled={naming}>Use this name</button>
+          <button type="button" class="btn btn-quiet" onclick={() => useName(false)} disabled={naming}>Dismiss</button>
+        </div>
+        {#if nameError}<p class="small">{nameError}</p>{/if}
+      </div>
+    {/if}
     {#if d.versions}
       <div class="versions-switch" role="group" aria-label="Show this workout as" aria-busy={loading}>
         <button type="button" class="vbtn" aria-pressed={!view} onclick={() => (view = '')}>Combined</button>
@@ -439,6 +473,23 @@
   }
   .block {
     margin-top: var(--space-6);
+  }
+  .rename {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+  }
+  .rename p {
+    margin: 0;
+  }
+  .rename-actions {
+    display: flex;
+    gap: var(--space-2);
   }
   .stray {
     display: grid;

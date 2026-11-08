@@ -26,6 +26,11 @@ func (a *API) registerAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/week-note", a.weekNote)
 	mux.HandleFunc("POST /v1/templates/parse", a.parseTemplate)
 	mux.HandleFunc("POST /v1/activities/{id}/keep", a.keepActivity)
+	mux.HandleFunc("PUT /v1/activities/{id}/name", a.putActivityName)
+	mux.HandleFunc("POST /v1/activities/{id}/name-suggestion/dismiss", a.dismissNameSuggestion)
+	mux.HandleFunc("GET /v1/gear/suggestions", a.getGearSuggestions)
+	mux.HandleFunc("POST /v1/gear/suggestions/{id}/accept", a.acceptGearSuggestion)
+	mux.HandleFunc("POST /v1/gear/suggestions/{id}/dismiss", a.dismissGearSuggestion)
 }
 
 func (a *API) aiOn(r *http.Request) bool { return a.Coach != nil && !a.demoOn(r) }
@@ -58,6 +63,7 @@ func (a *API) aiDetail(r *http.Request, resp *detailResp) {
 			}
 		}
 	}
+	a.aiName(r, resp)
 	// A logged lifting session gets its own debrief in Strength instead.
 	if resp.Strength != nil || resp.Activity.ElapsedS < 5*60 {
 		return
@@ -250,6 +256,9 @@ type weekNoteResp struct {
 	Week string           `json:"week"` // the Monday
 	AI   bool             `json:"ai"`   // models are available at all
 	Note *strength.AINote `json:"note"`
+	// KeepsComingUp is what the athlete kept writing about in the three
+	// weeks to the week's end: "knee, 4 times in 3 weeks".
+	KeepsComingUp []string `json:"keeps_coming_up,omitempty"`
 }
 
 // weekNote is the LLM's note on a finished Monday-to-Sunday week: ?week=
@@ -283,6 +292,7 @@ func (a *API) weekNote(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	resp.KeepsComingUp = f.Recurring
 	if f.Hours == 0 && f.Sessions == 0 {
 		writeJSON(w, http.StatusOK, resp) // nothing happened; nothing to say
 		return
@@ -392,6 +402,9 @@ func (a *API) weekFacts(ctx context.Context, mon time.Time) (coach.WeekFacts, er
 			t += x.AsleepS
 		}
 		f.SleepH = r1p(float64(t) / float64(len(sl)) / 3600)
+	}
+	if f.Recurring, err = a.complaints(ctx, end); err != nil {
+		return f, err
 	}
 	return f, nil
 }

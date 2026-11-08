@@ -258,12 +258,16 @@ export interface ActivityDetail {
   tag_note?: string;
   /** System 1 judged this a stray entry; it carries no load until kept. */
   stray?: boolean;
+  /** A name the LLM suggests for one still called "Afternoon Ride". */
+  name_suggestion?: AINote;
 }
 
 export interface WeekNote {
   week: string;
   ai: boolean;
   note: AINote | null;
+  /** What the athlete kept writing about: "knee, 4 times in 3 weeks". */
+  keeps_coming_up?: string[];
 }
 
 /** One recording's own account of a workout, before merging. */

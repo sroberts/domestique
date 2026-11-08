@@ -49,6 +49,21 @@ and after a failure the same work waits 15 minutes.
   route and power-best lines, Whoop's strain sentence) are skipped.
 - **A workout from text** in the editor ("5x5 squat at 100, 3x8 RDL 80").
   It fills in the draft for you to check, and saves nothing.
+- **Parts you wrote about fitting** ("new chain on the Tarmac today"),
+  offered on the Gear page as "Add it" or "Dismiss". Only descriptions that
+  name a part are read; each suggestion quotes your words, goes on the bike
+  you named (or the ride's bike), and replaces the part fitted at the time.
+  Nothing changes until you add it, and a part already logged near that date
+  isn't offered.
+- **A better name** for a workout still called "Afternoon Ride", "Zwift" or
+  the like, from its route and your description, on the activity page. "Use
+  this name" renames it in Domestique only (never on Strava), and it stays
+  through merges and rebuilds; "Dismiss" hides the suggestion for good.
+
+**What keeps coming up** needs no model: a body part (or illness) named in
+your notes on three or more different days in three weeks shows under the
+week note on Trends ("knee, 4 times in 3 weeks"), and the week note may
+mention it.
 
 Prose is rejected, and nothing shown, unless it is the expected JSON, short
 enough, free of `!`, and uses only numbers that appear in its facts, with no
