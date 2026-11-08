@@ -49,6 +49,17 @@ and after a failure the same work waits 15 minutes.
   route and power-best lines, Whoop's strain sentence) are skipped.
 - **A workout from text** in the editor ("5x5 squat at 100, 3x8 RDL 80").
   It fills in the draft for you to check, and saves nothing.
+- **Answers about your own data** (Ask, linked from Today and Trends, and
+  `POST /v1/ask`): "how has my threshold moved since June?" The LLM looks
+  things up with the MCP server's read-only tools (today, activities,
+  load, recovery, trends, gear, workouts, the week note), which run through
+  the same handlers as the app; it's never offered a tool that changes
+  anything. Up to 6 rounds, 150 seconds at most, and the last few turns are
+  kept for follow-ups. This one runs inside the request, since there's
+  nothing to show until it's done. Every number in the answer must appear in
+  what the tools returned or in the conversation; otherwise the answer is
+  retried once, then replaced with a plain "couldn't answer without
+  guessing".
 
 Prose is rejected, and nothing shown, unless it is the expected JSON, short
 enough, free of `!`, and uses only numbers that appear in its facts, with no

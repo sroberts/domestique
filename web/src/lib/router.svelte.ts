@@ -11,6 +11,7 @@ export type Route =
   | { name: 'summary'; id: string }
   | { name: 'workouts' }
   | { name: 'workout'; id: string } // id 'new' for a new workout
+  | { name: 'ask' }
   | { name: 'notfound' };
 
 function parse(path: string): Route {
@@ -19,6 +20,7 @@ function parse(path: string): Route {
   if (path === '/trends') return { name: 'trends' };
   if (path === '/settings') return { name: 'settings' };
   if (path === '/workouts') return { name: 'workouts' };
+  if (path === '/ask') return { name: 'ask' };
   const wk = /^\/workouts\/([A-Za-z0-9_-]+)\/?$/.exec(path);
   if (wk?.[1]) return { name: 'workout', id: wk[1] };
   if (path === '/gear') return { name: 'gear' };
@@ -84,6 +86,7 @@ export function backTarget(fallback: { href: string; label: string }): { href: s
   if (p === '/activities') return { href: p, label: 'Activities' };
   if (p === '/trends') return { href: p, label: 'Trends' };
   if (p === '/') return { href: p, label: 'Today' };
+  if (p === '/ask') return { href: p, label: 'Ask' };
   return fallback;
 }
 

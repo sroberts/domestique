@@ -26,6 +26,7 @@ func (a *API) registerAI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/week-note", a.weekNote)
 	mux.HandleFunc("POST /v1/templates/parse", a.parseTemplate)
 	mux.HandleFunc("POST /v1/activities/{id}/keep", a.keepActivity)
+	mux.HandleFunc("POST /v1/ask", a.ask)
 }
 
 func (a *API) aiOn(r *http.Request) bool { return a.Coach != nil && !a.demoOn(r) }

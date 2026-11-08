@@ -40,6 +40,8 @@ type API struct {
 	// Coach writes the day's call with the operator's LLM; nil when Outpost
 	// gave no model, and the rule-based call is shown alone.
 	Coach *coach.Writer
+	// Tools answer the LLM's lookups for POST /v1/ask (the MCP server).
+	Tools AskTools
 	// Gateway is true when the Outpost login gateway is in front (OUTPOST_AUTH=gateway).
 	Gateway bool
 	// background outlives requests (imports); cancelled on shutdown.

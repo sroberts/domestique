@@ -3,6 +3,7 @@
   import ActionBar from '../components/ActionBar.svelte';
   import ActivityRow from '../components/ActivityRow.svelte';
   import GearReminder from '../components/GearReminder.svelte';
+  import AskLink from '../components/AskLink.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, fetchToday, localDate } from '../lib/api';
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
@@ -126,6 +127,7 @@
 <main class="today">
   <header class="top">
     <span class="wordmark">Domestique</span>
+    <AskLink />
     <SyncStatus />
   </header>
 
