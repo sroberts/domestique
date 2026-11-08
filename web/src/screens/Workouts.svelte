@@ -5,7 +5,7 @@
   import { activeSession } from '../lib/db';
   import { relDay, time } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
-  import { clearToday, fetchPlan, fetchTemplates, planToday, setCount, startTemplate, type TemplateRow } from '../lib/templates';
+  import { clearToday, fetchPlan, fetchTemplates, planToday, setCount, shapeText, startTemplate, type TemplateRow } from '../lib/templates';
   import { estimateMinutes } from '../lib/workout.svelte';
   import type { LocalSession } from '../lib/types';
 
@@ -152,7 +152,7 @@
           {#if isPlan}<span class="tag">Today's plan</span>{/if}
         </div>
         <p class="meta">
-          <span class="mono">{t.exercises.length} {t.exercises.length === 1 ? 'lift' : 'lifts'} · {setCount(t.exercises)} sets · about {estimateMinutes(t.exercises)} min</span>
+          <span class="mono">{shapeText(t.exercises)} · {setCount(t.exercises)} sets · about {estimateMinutes(t.exercises)} min</span>
         </p>
         <p class="lifts muted">{lastDone(t.last_done_at)}</p>
         <p class="lifts muted">{t.exercises.map((e) => e.name).join(', ')}</p>

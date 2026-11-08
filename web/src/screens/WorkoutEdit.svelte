@@ -3,6 +3,8 @@
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import ArrowUp from '@lucide/svelte/icons/arrow-up';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+  import Link2 from '@lucide/svelte/icons/link-2';
+  import Unlink2 from '@lucide/svelte/icons/unlink-2';
   import Plus from '@lucide/svelte/icons/plus';
   import X from '@lucide/svelte/icons/x';
   import ActionBar from '../components/ActionBar.svelte';
@@ -41,6 +43,16 @@
     sets: DraftSet[];
     /** Untouched since it was added: picking a known name may fill it in. */
     fresh: boolean;
+    /** Circuit token shared with adjacent exercises; '' is straight sets.
+     * Tokens are internal; saving renames them a, b, c in order. */
+    circuit: string;
+  }
+  /** A run of adjacent drafts sharing a circuit token: exercises[start, end). */
+  interface Group {
+    token: string;
+    letter: string;
+    start: number;
+    end: number;
   }
   type Load = 'loading' | 'ready' | 'offline' | 'auth' | 'missing' | 'error';
 
@@ -60,7 +72,7 @@
   let saving = $state(false);
   let saveError = $state('');
   let announce = $state('');
-  let removed = $state<{ ex: DraftEx; index: number } | null>(null);
+  let removed = $state<{ ex: DraftEx; index: number; before: Map<number, [string, number]> } | null>(null);
   let leaving = false;
   let pendingTo = '/workouts';
   let keySeq = 0;
@@ -84,6 +96,7 @@
       notes: e.notes ?? '',
       sets: e.sets.map((s) => ({ key: ++keySeq, reps: String(s.reps), weight: kgText(s.weight_kg) })),
       fresh: false,
+      circuit: e.circuit ? `c${e.circuit}` : '',
     };
   }
 
@@ -95,11 +108,12 @@
       notes: '',
       sets: [0, 1, 2].map(() => ({ key: ++keySeq, reps: '8', weight: '' })),
       fresh: true,
+      circuit: '',
     };
   }
 
   function snapshot(): string {
-    return JSON.stringify([name, exercises.map((e) => [e.name, e.rest, e.notes, e.sets.map((s) => [s.reps, s.weight])])]);
+    return JSON.stringify([name, exercises.map((e) => [e.name, e.rest, e.notes, e.circuit, e.sets.map((s) => [s.reps, s.weight])])]);
   }
 
   let dirty = $derived(load === 'ready' && snapshot() !== initial);
@@ -203,6 +217,116 @@
 
   const exLabel = (e: DraftEx, i: number) => e.name.trim() || `Exercise ${i + 1}`;
 
+  // ---- Circuits ----
+
+  /** The circuits in order, lettered A, B, C. */
+  let groups = $derived.by(() => {
+    const out: Group[] = [];
+    for (let i = 0; i < exercises.length; ) {
+      const token = exercises[i]!.circuit;
+      let j = i + 1;
+      while (token && j < exercises.length && exercises[j]!.circuit === token) j++;
+      if (token) out.push({ token, letter: String.fromCharCode(65 + (out.length % 26)), start: i, end: j });
+      i = j;
+    }
+    return out;
+  });
+  const groupAt = (i: number) => groups.find((g) => i >= g.start && i < g.end);
+  /** "A2" in a circuit, else the plain position. */
+  const posOf = (i: number) => {
+    const g = groupAt(i);
+    return g ? `${g.letter}${i - g.start + 1}` : String(i + 1);
+  };
+  const linked = (i: number) => !!exercises[i]?.circuit && exercises[i]!.circuit === exercises[i + 1]?.circuit;
+
+  let tokenSeq = 0;
+  const newToken = () => `n${++tokenSeq}`;
+
+  /** Pad (copying the last set) or trim an exercise to n sets. */
+  function resize(e: DraftEx, n: number) {
+    while (e.sets.length < n) {
+      const last = e.sets.at(-1);
+      e.sets.push({ key: ++keySeq, reps: last?.reps ?? '8', weight: last?.weight ?? '' });
+    }
+    if (e.sets.length > n) e.sets.splice(n);
+  }
+
+  /** Repair circuits after a move or removal: a token split into two runs
+   * becomes two circuits, and a circuit of one goes back to straight sets
+   * (with a real rest, if it had none as a link in the chain). */
+  function normalize() {
+    const seen = new Set<string>();
+    for (let i = 0; i < exercises.length; ) {
+      const token = exercises[i]!.circuit;
+      let j = i + 1;
+      while (token && j < exercises.length && exercises[j]!.circuit === token) j++;
+      if (token) {
+        const fresh = seen.has(token) ? newToken() : token;
+        seen.add(fresh);
+        for (let k = i; k < j; k++) exercises[k]!.circuit = j - i > 1 ? fresh : '';
+        if (j - i === 1 && exercises[i]!.rest === 0) exercises[i]!.rest = 120;
+      }
+      i = j;
+    }
+  }
+
+  /** Join exercise i and the one after it into a circuit, or into the
+   * circuit either is already in. The newcomer takes the circuit's rounds;
+   * the rest between rounds stays with whichever exercise ends the circuit. */
+  function linkNext(i: number) {
+    const a = exercises[i];
+    const b = exercises[i + 1];
+    if (!a || !b || linked(i)) return;
+    const ga = groupAt(i);
+    const gb = groupAt(i + 1);
+    const rounds = ga ? a.sets.length : gb ? b.sets.length : a.sets.length;
+    const token = a.circuit || b.circuit || newToken();
+    const roundRest = a.rest;
+    // Merge b's circuit (or b alone) into a's.
+    const end = gb ? gb.end : i + 2;
+    const start = ga ? ga.start : i;
+    for (let k = start; k < end; k++) exercises[k]!.circuit = token;
+    a.rest = 0;
+    if (ga && !gb) b.rest = roundRest; // extending a circuit: its round rest moves to the new end
+    const changed: string[] = [];
+    for (let k = start; k < end; k++) {
+      const e = exercises[k]!;
+      if (e.sets.length !== rounds) {
+        resize(e, rounds);
+        changed.push(exLabel(e, k));
+      }
+      e.fresh = false;
+    }
+    const letter = String.fromCharCode(65 + groups.filter((g) => g.start < start).length);
+    say(
+      `${exLabel(a, i)} and ${exLabel(b, i + 1)} linked in circuit ${letter}, ${rounds} ${rounds === 1 ? 'round' : 'rounds'}.` +
+        (changed.length ? ` ${changed.join(' and ')} now ${rounds} ${rounds === 1 ? 'round' : 'rounds'}, to match.` : ''),
+    );
+    void focus(`ex${a.key}-join`);
+  }
+
+  /** Split the circuit between exercise i and the next. */
+  function unlink(i: number) {
+    const g = groupAt(i);
+    if (!g || !linked(i)) return;
+    const roundRest = exercises[g.end - 1]!.rest;
+    const token = newToken();
+    for (let k = i + 1; k < g.end; k++) exercises[k]!.circuit = token;
+    exercises[i]!.rest = roundRest; // the left part now ends here
+    normalize();
+    say(`Unlinked ${exLabel(exercises[i]!, i)} from ${exLabel(exercises[i + 1]!, i + 1)}.`);
+    void focus(`ex${exercises[i]!.key}-join`);
+  }
+
+  function setRounds(g: Group, n: number) {
+    if (n < 1 || n > 20) return;
+    for (let k = g.start; k < g.end; k++) {
+      resize(exercises[k]!, n);
+      exercises[k]!.fresh = false;
+    }
+    say(`Circuit ${g.letter}: ${n} ${n === 1 ? 'round' : 'rounds'}.`);
+  }
+
   function validate(): Record<string, string> {
     const err: Record<string, string> = {};
     if (!name.trim()) err['wk-name'] = 'Give the workout a name.';
@@ -244,10 +368,11 @@
       id: tid,
       name: name.trim(),
       updated_at: 0,
-      exercises: exercises.map((e) => ({
+      exercises: exercises.map((e, i) => ({
         name: e.name.trim(),
         rest_seconds: e.rest,
         ...(e.notes.trim() ? { notes: e.notes.trim() } : {}),
+        ...(groupAt(i) ? { circuit: groupAt(i)!.letter.toLowerCase() } : {}),
         sets: e.sets.map((s) => ({ reps: parseReps(s.reps) ?? 0, weight_kg: parseWeight(s.weight) ?? 0 })),
       })),
     };
@@ -325,8 +450,15 @@
     const sug = suggestions.find((x) => x.name.toLowerCase() === e.name.trim().toLowerCase());
     if (!sug || sug.sets.length === 0) return;
     e.sets = sug.sets.map((s) => ({ key: ++keySeq, reps: String(s.reps), weight: kgText(s.weight_kg) }));
-    e.rest = sug.rest_seconds;
     e.fresh = false;
+    const i = exercises.indexOf(e);
+    const g = groupAt(i);
+    if (g) {
+      // In a circuit the rounds and rest belong to the circuit.
+      resize(e, exercises[g.start === i ? i + 1 : g.start]!.sets.length);
+    } else {
+      e.rest = sug.rest_seconds;
+    }
     const s0 = sug.sets[0]!;
     say(`Filled in from ${sug.last_at ? 'last time' : 'your other workouts'}: ${sug.sets.length} × ${setText(s0.reps, s0.weight_kg).replace(/^\d+ × /, `${s0.reps} at `)}.`);
   }
@@ -353,14 +485,38 @@
     void focus(`ex${e.key}-name`);
   }
 
+  /** Move an exercise one place. Inside a circuit it swaps with its
+   * neighbour; at the circuit's edge it steps out to straight sets. A
+   * straight exercise hops over a whole circuit rather than into it. */
   function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
     const a = exercises[i];
-    const b = exercises[j];
-    if (!a || !b) return;
-    exercises[i] = b;
-    exercises[j] = a;
-    say(`${exLabel(a, j)} moved to ${j + 1} of ${exercises.length}.`);
+    if (!a) return;
+    const g = groupAt(i);
+    const edge = g && (dir === -1 ? i === g.start : i === g.end - 1);
+    let j = i;
+    if (g && edge) {
+      // Leaving: the round rest stays with the circuit's end.
+      if (i === g.end - 1 && g.end - g.start > 2) exercises[i - 1]!.rest = a.rest;
+      a.circuit = '';
+      if (a.rest === 0) a.rest = 120;
+      normalize();
+      say(`${exLabel(a, i)} moved out of circuit ${g.letter}.`);
+    } else if (g) {
+      j = i + dir;
+      const b = exercises[j]!;
+      // The last exercise's rest is the circuit's round rest: it stays put.
+      if (j === g.end - 1 || i === g.end - 1) [a.rest, b.rest] = [b.rest, a.rest];
+      exercises[i] = b;
+      exercises[j] = a;
+      say(`${exLabel(a, j)} moved to ${posOf(j)}.`);
+    } else {
+      const ng = groupAt(i + dir);
+      if (!exercises[i + dir]) return;
+      j = ng ? (dir === -1 ? ng.start : ng.end - 1) : i + dir;
+      exercises.splice(i, 1);
+      exercises.splice(j, 0, a);
+      say(`${exLabel(a, j)} moved to ${j + 1} of ${exercises.length}.`);
+    }
     const canKeep = dir === -1 ? j > 0 : j < exercises.length - 1;
     void focus(`ex${a.key}-${(dir === -1) === canKeep ? 'up' : 'down'}`);
   }
@@ -368,8 +524,13 @@
   function removeExercise(i: number) {
     const e = exercises[i];
     if (!e) return;
+    // Removing can dissolve a circuit; undo puts every link back as it was.
+    const before = new Map(exercises.map((x) => [x.key, [x.circuit, x.rest] as [string, number]]));
+    const g = groupAt(i);
+    if (g && i === g.end - 1 && g.end - g.start > 2) exercises[i - 1]!.rest = e.rest;
     exercises.splice(i, 1);
-    removed = { ex: e, index: i };
+    normalize();
+    removed = { ex: e, index: i, before };
     say(`${exLabel(e, i)} removed.`);
     const next = exercises[i] ?? exercises[i - 1];
     void focus(next ? `ex${next.key}-name` : 'add-ex');
@@ -377,8 +538,12 @@
 
   function undoRemove() {
     if (!removed) return;
-    const { ex, index } = removed;
+    const { ex, index, before } = removed;
     exercises.splice(Math.min(index, exercises.length), 0, ex);
+    for (const x of exercises) {
+      const b = before.get(x.key);
+      if (b) [x.circuit, x.rest] = b;
+    }
     removed = null;
     say(`${exLabel(ex, index)} is back.`);
     void focus(`ex${ex.key}-name`);
@@ -521,9 +686,29 @@
     <ol class="exercises" aria-label="Exercises">
       {#each exercises as e, i (e.key)}
         {@const label = exLabel(e, i)}
-        <li class="ex" aria-labelledby={`ex${e.key}-n ex${e.key}-name`}>
+        {@const g = groupAt(i)}
+        {@const inG = !!g}
+        <li
+          class="ex"
+          class:in-circuit={inG}
+          class:c-first={g?.start === i}
+          class:c-last={g && g.end - 1 === i}
+          aria-labelledby={`ex${e.key}-n ex${e.key}-name`}
+        >
+          {#if g && g.start === i}
+            {@const rounds = e.sets.length}
+            <div class="c-head" role="group" aria-label={`Circuit ${g.letter}, ${g.end - g.start} exercises, ${rounds} ${rounds === 1 ? 'round' : 'rounds'}`}>
+              <div class="c-title">
+                <span class="c-name">Circuit {g.letter}</span>
+                <span class="muted c-sub">{g.end - g.start} exercises, one set of each per round</span>
+              </div>
+              <div class="c-rounds">
+                <Stepper label="Rounds" value={String(rounds)} canDecrease={rounds > 1} onstep={(d) => setRounds(g, rounds + d)} />
+              </div>
+            </div>
+          {/if}
           <div class="ex-head">
-            <span class="num ex-n" id={`ex${e.key}-n`} aria-hidden="true">{i + 1}</span>
+            <span class="num ex-n" id={`ex${e.key}-n`} aria-hidden="true">{posOf(i)}</span>
             <div class="ex-name">
               <label class="visually-hidden" for={`ex${e.key}-name`}>Exercise {i + 1} name</label>
               <input
@@ -546,7 +731,7 @@
           <div class="ex-body">
             <div class="sets" role="group" aria-label={`Sets for ${label}`}>
               <div class="set-row set-head" aria-hidden="true">
-                <span class="label">Set</span><span class="label">Reps</span><span></span><span class="label">Kg</span><span></span>
+                <span class="label">{inG ? 'Rnd' : 'Set'}</span><span class="label">Reps</span><span></span><span class="label">Kg</span><span></span>
               </div>
               {#each e.sets as s, j (s.key)}
                 {@const se = setErrors(e, s)}
@@ -561,7 +746,7 @@
                     autocomplete="off"
                     value={s.reps}
                     oninput={(ev) => setField(e, j, 'reps', ev.currentTarget.value)}
-                    aria-label={`${label}, set ${j + 1} reps`}
+                    aria-label={`${label}, ${inG ? 'round' : 'set'} ${j + 1} reps`}
                     aria-invalid={!!errors[`ex${e.key}-s${s.key}-reps`]}
                     aria-describedby={errors[`ex${e.key}-s${s.key}-reps`] ? eid : undefined}
                   />
@@ -575,27 +760,31 @@
                     value={s.weight}
                     oninput={(ev) => setField(e, j, 'weight', ev.currentTarget.value)}
                     onblur={() => tidyWeight(s)}
-                    aria-label={`${label}, set ${j + 1} weight in kg, empty for bodyweight`}
+                    aria-label={`${label}, ${inG ? 'round' : 'set'} ${j + 1} weight in kg, empty for bodyweight`}
                     aria-invalid={!!errors[`ex${e.key}-s${s.key}-kg`]}
                     aria-describedby={errors[`ex${e.key}-s${s.key}-kg`] ? eid : undefined}
                   />
-                  <button class="icon" onclick={() => removeSet(e, j)} disabled={e.sets.length <= 1} aria-label={`Remove set ${j + 1} of ${label}`}>
-                    <X size={20} aria-hidden="true" />
-                  </button>
+                  {#if !inG}
+                    <button class="icon" onclick={() => removeSet(e, j)} disabled={e.sets.length <= 1} aria-label={`Remove set ${j + 1} of ${label}`}>
+                      <X size={20} aria-hidden="true" />
+                    </button>
+                  {/if}
                 </div>
                 {#if se}<p id={eid} class="err set-err">{se}</p>{/if}
               {/each}
-              <button class="btn add-set" id={`ex${e.key}-add`} onclick={() => addSet(e)} aria-label={`Add a set to ${label}`}>
-                <Plus size={18} aria-hidden="true" /> Add set
-              </button>
+              {#if !inG}
+                <button class="btn add-set" id={`ex${e.key}-add`} onclick={() => addSet(e)} aria-label={`Add a set to ${label}`}>
+                  <Plus size={18} aria-hidden="true" /> Add set
+                </button>
+              {/if}
               {#if e.sets.length > 1 && i === 0}
-                <p class="hint muted">While every set matches, editing set 1 changes them all.</p>
+                <p class="hint muted">While every {inG ? 'round' : 'set'} matches, editing {inG ? 'round' : 'set'} 1 changes them all.</p>
               {/if}
             </div>
 
             <div class="ex-side">
               <Stepper
-                label="Rest seconds"
+                label={!g ? 'Rest seconds' : g.end - 1 === i ? 'Rest between rounds, seconds' : 'Rest after, seconds'}
                 value={String(e.rest)}
                 canDecrease={e.rest > 0}
                 onstep={(d) => (e.rest = Math.max(0, Math.min(900, e.rest + d * 15)))}
@@ -608,14 +797,29 @@
           </div>
 
           <div class="ex-tools">
-            <button class="btn btn-quiet" id={`ex${e.key}-up`} onclick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${label} up`}>
+            <button class="btn btn-quiet" id={`ex${e.key}-up`} onclick={() => move(i, -1)} disabled={i === 0} aria-label={g?.start === i ? `Move ${label} up, out of circuit ${g.letter}` : `Move ${label} up`}>
               <ArrowUp size={18} aria-hidden="true" /> Up
             </button>
-            <button class="btn btn-quiet" id={`ex${e.key}-down`} onclick={() => move(i, 1)} disabled={i === exercises.length - 1} aria-label={`Move ${label} down`}>
+            <button class="btn btn-quiet" id={`ex${e.key}-down`} onclick={() => move(i, 1)} disabled={i === exercises.length - 1} aria-label={g && g.end - 1 === i ? `Move ${label} down, out of circuit ${g.letter}` : `Move ${label} down`}>
               <ArrowDown size={18} aria-hidden="true" /> Down
             </button>
             <button class="btn btn-quiet remove" onclick={() => removeExercise(i)} aria-label={`Remove ${label}`}>Remove</button>
           </div>
+
+          {#if i < exercises.length - 1}
+            {@const next = exLabel(exercises[i + 1]!, i + 1)}
+            <div class="join" class:joined={linked(i)}>
+              {#if linked(i)}
+                <button class="btn btn-quiet join-btn" id={`ex${e.key}-join`} onclick={() => unlink(i)} aria-label={`Unlink ${label} from ${next}, splitting circuit ${g?.letter}`}>
+                  <Unlink2 size={18} aria-hidden="true" /> Unlink
+                </button>
+              {:else}
+                <button class="btn btn-quiet join-btn" id={`ex${e.key}-join`} onclick={() => linkNext(i)} aria-label={`Link ${label} with ${next} as a circuit`}>
+                  <Link2 size={18} aria-hidden="true" /> Link with next
+                </button>
+              {/if}
+            </div>
+          {/if}
         </li>
       {/each}
     </ol>
@@ -815,9 +1019,63 @@
     padding: var(--space-4) 0 var(--space-2);
     border-bottom: 1px solid var(--line-strong);
   }
+  /* Straight exercises are divided by the link row's rule, so only the
+     last exercise draws its own. */
+  .ex:not(:last-child) {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  /* A circuit is bracketed by one neutral rule down its left side. */
+  .ex.in-circuit {
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--line-strong);
+  }
+  .c-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+  .c-title {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .c-name {
+    font-size: var(--size-lead);
+    font-weight: 600;
+  }
+  .c-sub {
+    font-size: var(--size-small);
+  }
+  .c-rounds {
+    width: min(100%, 13rem);
+  }
+  .join {
+    display: grid;
+    grid-template-columns: minmax(var(--space-4), 1fr) auto minmax(var(--space-4), 1fr);
+    align-items: center;
+    margin-top: var(--space-2);
+  }
+  .join::before,
+  .join::after {
+    content: '';
+    border-top: 1px solid var(--line-strong);
+  }
+  /* Inside a circuit the rule between exercises steps back. */
+  .join.joined::before,
+  .join.joined::after {
+    border-top-style: dashed;
+    border-top-color: var(--line);
+  }
+  .join-btn {
+    gap: var(--space-2);
+    font-size: var(--size-small);
+  }
   .ex-head {
     display: grid;
-    grid-template-columns: 2rem minmax(0, 1fr);
+    grid-template-columns: 2.75rem minmax(0, 1fr);
     align-items: start;
     gap: var(--space-2);
   }

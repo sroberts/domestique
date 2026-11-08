@@ -70,3 +70,13 @@ export async function startTemplate(t: Template): Promise<LocalSession> {
 }
 
 export const setCount = (ex: Exercise[]) => ex.reduce((n, e) => n + e.sets.length, 0);
+
+/** "4 lifts · 1 circuit": the shape of a workout before you open it. */
+export function shapeText(ex: Exercise[]): string {
+  const circuits = new Set<string>();
+  ex.forEach((e, i) => {
+    if (e.circuit && (ex[i - 1]?.circuit === e.circuit || ex[i + 1]?.circuit === e.circuit)) circuits.add(`${e.circuit}`);
+  });
+  const lifts = `${ex.length} ${ex.length === 1 ? 'lift' : 'lifts'}`;
+  return circuits.size ? `${lifts} · ${circuits.size} ${circuits.size === 1 ? 'circuit' : 'circuits'}` : lifts;
+}

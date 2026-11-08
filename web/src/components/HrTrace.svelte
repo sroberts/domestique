@@ -1,8 +1,11 @@
 <script lang="ts">
   // The Session Summary trace: heart rate over time with every set shaded as a
   // band, like a stage profile with its climbs marked. Lifts are labelled along
-  // the foot like towns on the route.
+  // the foot like towns on the route. A circuit's rounds sit behind its sets
+  // as wider, fainter bands, so a round reads as one climb with its sets
+  // marked inside it.
   import { link } from '../lib/router.svelte';
+  import { roundsOf } from '../lib/workout.svelte';
   import type { Summary } from '../lib/types';
 
   interface Props {
@@ -17,6 +20,8 @@
   const PAD = { top: 22, right: 28, bottom: 46, left: 0 };
 
   let sets = $derived(summary.sets);
+  let circ = $derived(roundsOf(summary.session.plan, sets));
+  let selRound = $derived(circ.rounds.find((r) => selected && r.ids.includes(selected)));
   let start = $derived(summary.session.started_at);
   let end = $derived(summary.session.finished_at ?? sets.at(-1)?.ended_at ?? start);
   let t0 = $derived(start - 60_000);
@@ -73,7 +78,10 @@
   let lifts = $derived.by(() => {
     const groups: { name: string; from: number }[] = [];
     for (const s of sets) {
-      if (!groups.length || groups.at(-1)!.name !== s.exercise_name) groups.push({ name: s.exercise_name, from: s.started_at });
+      // A circuit is one stretch of the route, however many lifts it rotates.
+      const p = circ.places.get(s.id);
+      const name = p ? `Circuit ${p.letter}` : s.exercise_name;
+      if (!groups.length || groups.at(-1)!.name !== name) groups.push({ name, from: s.started_at });
     }
     const plotEnd = PAD.left + plotW;
     const free = [-Infinity, -Infinity]; // x where each row is next free
@@ -109,10 +117,14 @@
 
   const onmove = (e: PointerEvent) => pick(e.clientX, (e.currentTarget as SVGElement).getBoundingClientRect());
 
+  let bandsText = $derived(
+    `${sets.length} sets shown as shaded bands` +
+      (circ.rounds.length ? `, with ${circ.rounds.length} circuit ${circ.rounds.length === 1 ? 'round' : 'rounds'} shaded behind them` : ''),
+  );
   let label = $derived(
     summary.hr_status === 'ready'
-      ? `Heart rate across the session, peaking at ${summary.peak_bpm} bpm. ${sets.length} sets shown as shaded bands. The table below lists each set.`
-      : summary.hr_status === 'pending' ? `${sets.length} sets shown as bands. Heart rate not available yet.` : `${sets.length} sets shown as bands. No heart rate was recorded.`,
+      ? `Heart rate across the session, peaking at ${summary.peak_bpm} bpm. ${bandsText}. The table below lists each set.`
+      : summary.hr_status === 'pending' ? `${bandsText}. Heart rate not available yet.` : `${bandsText}. No heart rate was recorded.`,
   );
 </script>
 
@@ -125,6 +137,19 @@
         <text class="guide-label" x={PAD.left + plotW + 6} y={y(z.bpm) + 4}>Z{z.zone}</text>
       {/each}
 
+      <!-- circuit rounds: one climb each, behind the sets done in it -->
+      {#each circ.rounds as r, i (`${r.letter}${r.round}`)}
+        {@const rx = x(r.from)}
+        {@const rw = Math.max(2, x(r.to) - rx)}
+        {@const prev = circ.rounds[i - 1]}
+        {@const active = r === selRound}
+        <rect class="round" class:active x={rx} y={PAD.top} width={rw} height={plotH} />
+        <line class="round-cap" class:active x1={rx} x2={rx + rw} y1={PAD.top - 0.5} y2={PAD.top - 0.5} />
+        {#if !prev || rx + rw / 2 - (x(prev.from) + x(prev.to)) / 2 >= 24 || active}
+          <text class="set-n" class:active x={rx + rw / 2} y={PAD.top - 8}>R{r.round}</text>
+        {/if}
+      {/each}
+
       <!-- set bands: the climbs -->
       {#each sets as s, i (s.id)}
         {@const bx = x(s.started_at)}
@@ -134,7 +159,7 @@
         {#if s.id === selected}
           <rect class="band-cap" x={bx} y={PAD.top - 3} width={bw} height="3" />
         {/if}
-        {#if bx - prevX >= 16 || s.id === selected}
+        {#if !circ.places.has(s.id) && (bx - prevX >= 16 || s.id === selected)}
           <text class="set-n" class:active={s.id === selected} x={bx + bw / 2} y={PAD.top - 8}>{s.set_index + 1}</text>
         {/if}
       {/each}
@@ -204,6 +229,15 @@
   .set-n.active {
     fill: var(--text);
     font-weight: 500;
+  }
+  .round {
+    fill: var(--round-band);
+  }
+  .round-cap {
+    stroke: var(--line-strong);
+  }
+  .round-cap.active {
+    stroke: var(--text-muted);
   }
   .band {
     fill: var(--set-band);

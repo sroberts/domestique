@@ -75,10 +75,17 @@ type TargetSet struct {
 
 // Exercise is one planned exercise inside a template.
 type Exercise struct {
-	Name        string      `json:"name"`
-	Sets        []TargetSet `json:"sets"`
-	RestSeconds int         `json:"rest_seconds"`
-	Notes       string      `json:"notes,omitempty"`
+	Name string      `json:"name"`
+	Sets []TargetSet `json:"sets"`
+	// RestSeconds is the rest after each set. In a circuit it is the rest
+	// after this exercise before the next one, so the last exercise's rest
+	// is the rest between rounds.
+	RestSeconds int    `json:"rest_seconds"`
+	Notes       string `json:"notes,omitempty"`
+	// Circuit groups adjacent exercises that share it into a circuit: one
+	// set of each in turn, repeated for as many rounds as each has sets.
+	// Empty means straight sets.
+	Circuit string `json:"circuit,omitempty"`
 	// Change explains how today's targets differ from the template, when a
 	// prescription adjusted them ("Up 2.5 kg: every set hit 6 on Sat").
 	Change string `json:"change,omitempty"`

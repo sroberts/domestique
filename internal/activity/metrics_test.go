@@ -54,14 +54,35 @@ func TestParseTCXFractionalSpeed(t *testing.T) {
 // Strain doesn't scale with duration: a short, hard workout must not score
 // more than an hour at threshold per hour.
 func TestStrainLoadCappedByDuration(t *testing.T) {
-	if got := StrainLoad(14.3, 45*60); got != 75 {
+	if got := StrainLoad(14.3, 45*60, 0); got != 75 {
 		t.Errorf("45 min at strain 14.3 = %v, want capped at 75", got)
 	}
-	if got := StrainLoad(14, 2*3600); got != 100 {
+	if got := StrainLoad(14, 2*3600, 0); got != 100 {
 		t.Errorf("2 h at strain 14 = %v, want 100 (under the cap)", got)
 	}
-	if got := StrainLoad(9, 0); got != 41.3 {
+	if got := StrainLoad(9, 0, 0); got != 41.3 {
 		t.Errorf("no duration = %v, want uncapped 41.3", got)
+	}
+}
+
+// Circuit time is capped at IF 1.25 rather than 1.0, so a dense session
+// isn't clipped for being short; strain under the cap is untouched.
+func TestStrainLoadCircuitCap(t *testing.T) {
+	// Strain 16 is 130.6 uncapped. 45 minutes straight sets: capped at 75.
+	if got := StrainLoad(16, 45*60, 0); got != 75 {
+		t.Errorf("straight sets = %v, want 75", got)
+	}
+	// All circuits: cap 156.25/h * 0.75 h = 117.2.
+	if got := StrainLoad(16, 45*60, 1); got != 117.2 {
+		t.Errorf("all circuits = %v, want 117.2", got)
+	}
+	// Half circuits: 128.1/h * 0.75 = 96.1.
+	if got := StrainLoad(16, 45*60, 0.5); got != 96.1 {
+		t.Errorf("half circuits = %v, want 96.1", got)
+	}
+	// Under the cap, circuits score the same as straight sets.
+	if a, b := StrainLoad(10, 3600, 0), StrainLoad(10, 3600, 1); a != b {
+		t.Errorf("under the cap: %v vs %v", a, b)
 	}
 }
 
