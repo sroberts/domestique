@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 
 	"github.com/tormoder/fit"
 )
@@ -83,9 +84,40 @@ func ParseFIT(data []byte) (*Parsed, error) {
 			p.Start = b.start
 		}
 	}
-	p.Sport = fitSport(sport, sub, p.Manufacturer, p.Stream.HasGPS())
+	p.Sport = fitSport(sport, sub, p.Manufacturer, p.Stream.HasGPS() || climbs(p.Stream.Altitude))
 	p.finish()
 	return p, nil
+}
+
+// outdoorSub are the cycling sub-sports that only happen outside, so the file
+// says outdoor even when the GPS recorded nothing.
+var outdoorSub = map[fit.SubSport]bool{
+	fit.SubSportRoad: true, fit.SubSportMountain: true, fit.SubSportDownhill: true,
+	fit.SubSportCyclocross: true, fit.SubSportTrackCycling: true, fit.SubSportBmx: true,
+	fit.SubSportGravelCycling: true, fit.SubSportEBikeMountain: true,
+	fit.SubSportCommuting: true, fit.SubSportMixedSurface: true,
+}
+
+// climbMinM is how far a ride's altitude must range to count as moving over
+// the ground. A trainer ride stays within a few metres of barometric drift
+// (weather, the heating); almost any outdoor ride climbs more than this.
+const climbMinM = 30
+
+// climbs reports whether an altitude trace ranges over at least climbMinM,
+// ignoring the top and bottom 2% so a glitch can't fake a hill.
+func climbs(alt []float32) bool {
+	var v []float64
+	for _, a := range alt {
+		if !math.IsNaN(float64(a)) {
+			v = append(v, float64(a))
+		}
+	}
+	if len(v) < 60 {
+		return false
+	}
+	slices.Sort(v)
+	k := len(v) / 50
+	return v[len(v)-1-k]-v[k] >= climbMinM
 }
 
 func manufacturer(m fit.Manufacturer) string {
@@ -106,13 +138,21 @@ func manufacturer(m fit.Manufacturer) string {
 	return fmt.Sprintf("m%d", m)
 }
 
-func fitSport(s fit.Sport, sub fit.SubSport, mfr string, gps bool) string {
+// fitSport maps a FIT session's sport onto Domestique's. For a ride, outside
+// is whatever moved: a GPS track, or a real climb on the barometric altimeter
+// (a head unit whose GPS never locked still records the hills).
+func fitSport(s fit.Sport, sub fit.SubSport, mfr string, outside bool) string {
 	switch s {
 	case fit.SportCycling:
-		if sub == fit.SubSportVirtualActivity || sub == fit.SubSportIndoorCycling || mfr == "zwift" || !gps {
+		switch {
+		case mfr == "zwift":
 			return SportVirtualRide
+		case sub == fit.SubSportVirtualActivity || sub == fit.SubSportIndoorCycling || sub == fit.SubSportSpin:
+			return SportVirtualRide
+		case outdoorSub[sub], outside:
+			return SportRide
 		}
-		return SportRide
+		return SportVirtualRide
 	case fit.SportRunning:
 		return SportRun
 	case fit.SportWalking:
