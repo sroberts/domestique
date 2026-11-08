@@ -2,6 +2,7 @@
   import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
   import LoadChart from '../components/LoadChart.svelte';
+  import AskLink from '../components/AskLink.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import WeekBars from '../components/WeekBars.svelte';
   import { cachedGet, fetchLoad, fetchTrends } from '../lib/data';
@@ -70,6 +71,7 @@
 <main class="page">
   <header class="top">
     <h1>Trends</h1>
+    <AskLink />
     <SyncStatus />
   </header>
   {#if stale}<p class="notice">No connection. Showing trends as of {time(stale)}.</p>{/if}

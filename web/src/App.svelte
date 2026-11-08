@@ -11,6 +11,7 @@
   import TabBar from './components/TabBar.svelte';
   import Workouts from './screens/Workouts.svelte';
   import WorkoutEdit from './screens/WorkoutEdit.svelte';
+  import AskScreen from './screens/Ask.svelte';
 </script>
 
 {#if router.route.name === 'today'}
@@ -41,6 +42,8 @@
   {#key router.route.id}
     <WorkoutEdit id={router.route.id} />
   {/key}
+{:else if router.route.name === 'ask'}
+  <AskScreen />
 {:else}
   <main class="notfound">
     <h1>Nothing on this road.</h1>

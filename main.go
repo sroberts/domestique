@@ -97,7 +97,9 @@ func run() error {
 
 	appMux := http.NewServeMux()
 	app.Register(appMux)
-	appMux.Handle("/mcp", &mcp.Server{API: appMux, Version: version})
+	mcpSrv := &mcp.Server{API: appMux, Version: version}
+	app.Tools = mcpSrv
+	appMux.Handle("/mcp", mcpSrv)
 	appMux.Handle("/", webui.Handler())
 	guarded := gw.Middleware(appMux)
 

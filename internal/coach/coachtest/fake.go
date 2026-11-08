@@ -20,7 +20,11 @@ import (
 type Fake struct {
 	Chat      func(system, user string) string
 	SystemOne func(state json.RawMessage, questions map[string]json.RawMessage) map[string]coach.Answer
-	Calls     atomic.Int32
+	// Tools, when set, answers every chat request as a tool-calling
+	// conversation: it gets all the messages and the offered tools' names
+	// and returns the assistant's next message.
+	Tools func(messages []coach.Message, tools []string) coach.Message
+	Calls atomic.Int32
 }
 
 // AI starts the fake and returns a client for it.
@@ -39,6 +43,26 @@ func (f *Fake) AI(t *testing.T) *coach.AI {
 		}
 		switch r.URL.Path {
 		case "/openai/v1/chat/completions":
+			if f.Tools != nil {
+				var in struct {
+					Model    string          `json:"model"`
+					Messages []coach.Message `json:"messages"`
+					Tools    []struct {
+						Function coach.ToolDef `json:"function"`
+					} `json:"tools"`
+				}
+				if json.Unmarshal(body, &in) != nil || in.Model != "llm" {
+					t.Errorf("chat body: %s", body)
+				}
+				var names []string
+				for _, td := range in.Tools {
+					names = append(names, td.Function.Name)
+				}
+				m := f.Tools(in.Messages, names)
+				_ = json.NewEncoder(w).Encode(map[string]any{"model": "fake-llm",
+					"choices": []any{map[string]any{"message": m}}})
+				return
+			}
 			var in struct {
 				Model    string `json:"model"`
 				Messages []struct {

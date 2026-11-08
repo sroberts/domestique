@@ -266,6 +266,16 @@ export interface WeekNote {
   note: AINote | null;
 }
 
+/** POST /v1/ask: an answer from Outpost's LLM, looked up in the athlete's data. */
+export interface AskResult {
+  answer: string;
+  model?: string;
+  /** The read-only tools it called, e.g. "get_training_load". */
+  tools: string[];
+  /** False when the model's answer failed the number check and answer is the fallback. */
+  checked: boolean;
+}
+
 /** One recording's own account of a workout, before merging. */
 export interface Version {
   id: string;
