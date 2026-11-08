@@ -1,0 +1,65 @@
+[
+  {"name": "RHR +9, HRV -34% for three days, resting", "want": "yes",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 52, "hrv_ms_baseline": 70, "recovery_pct_baseline": 68, "sleep_hours_baseline": 7.4,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 60, "hrv_ms": 48, "recovery_pct": 31, "sleep_hours": 8.1, "training_tss_day_before": 20},
+       {"day": "yesterday", "resting_hr": 61, "hrv_ms": 46, "recovery_pct": 24, "sleep_hours": 8.9, "training_tss_day_before": 0},
+       {"day": "today", "resting_hr": 62, "hrv_ms": 45, "recovery_pct": 19, "sleep_hours": 9.2, "training_tss_day_before": 0}],
+     "resting_hr_change_bpm": 9, "hrv_change_pct": -34}},
+  {"name": "RHR climbing to +7, HRV -25%, recovery sliding", "want": "yes",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 55, "hrv_ms_baseline": 65, "recovery_pct_baseline": 70, "sleep_hours_baseline": 7.0,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 58, "hrv_ms": 60, "recovery_pct": 50, "sleep_hours": 7.2, "training_tss_day_before": 35},
+       {"day": "yesterday", "resting_hr": 63, "hrv_ms": 45, "recovery_pct": 25, "sleep_hours": 8.4, "training_tss_day_before": 0},
+       {"day": "today", "resting_hr": 64, "hrv_ms": 42, "recovery_pct": 20, "sleep_hours": 9.0, "training_tss_day_before": 0}],
+     "resting_hr_change_bpm": 7, "hrv_change_pct": -25}},
+  {"name": "RHR +8, HRV -31%, no training at all", "want": "yes",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 48, "hrv_ms_baseline": 80, "recovery_pct_baseline": 72, "sleep_hours_baseline": 7.6,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 55, "hrv_ms": 58, "recovery_pct": 28, "sleep_hours": 8.0, "training_tss_day_before": 0},
+       {"day": "yesterday", "resting_hr": 56, "hrv_ms": 55, "recovery_pct": 22, "sleep_hours": 8.6, "training_tss_day_before": 0},
+       {"day": "today", "resting_hr": 58, "hrv_ms": 52, "recovery_pct": 17, "sleep_hours": 9.4, "training_tss_day_before": 0}],
+     "resting_hr_change_bpm": 8, "hrv_change_pct": -31}},
+  {"name": "RHR +10, HRV -40%, after an easy week", "want": "yes",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 50, "hrv_ms_baseline": 75, "recovery_pct_baseline": 66, "sleep_hours_baseline": 7.2,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 59, "hrv_ms": 47, "recovery_pct": 26, "sleep_hours": 7.9, "training_tss_day_before": 30},
+       {"day": "yesterday", "resting_hr": 60, "hrv_ms": 45, "recovery_pct": 21, "sleep_hours": 9.1, "training_tss_day_before": 0},
+       {"day": "today", "resting_hr": 61, "hrv_ms": 43, "recovery_pct": 18, "sleep_hours": 9.5, "training_tss_day_before": 0}],
+     "resting_hr_change_bpm": 10, "hrv_change_pct": -40}},
+  {"name": "ordinary variation", "want": "no",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 52, "hrv_ms_baseline": 70, "recovery_pct_baseline": 68, "sleep_hours_baseline": 7.4,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 53, "hrv_ms": 66, "recovery_pct": 62, "sleep_hours": 7.1, "training_tss_day_before": 80},
+       {"day": "yesterday", "resting_hr": 51, "hrv_ms": 72, "recovery_pct": 71, "sleep_hours": 7.6, "training_tss_day_before": 45},
+       {"day": "today", "resting_hr": 52, "hrv_ms": 69, "recovery_pct": 67, "sleep_hours": 7.3, "training_tss_day_before": 60}],
+     "resting_hr_change_bpm": 0, "hrv_change_pct": -1}},
+  {"name": "one bad night: 4.5 h sleep", "want": "no",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 52, "hrv_ms_baseline": 70, "recovery_pct_baseline": 68, "sleep_hours_baseline": 7.4,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 52, "hrv_ms": 71, "recovery_pct": 70, "sleep_hours": 7.5, "training_tss_day_before": 50},
+       {"day": "yesterday", "resting_hr": 53, "hrv_ms": 68, "recovery_pct": 64, "sleep_hours": 7.2, "training_tss_day_before": 40},
+       {"day": "today", "resting_hr": 59, "hrv_ms": 52, "recovery_pct": 33, "sleep_hours": 4.5, "training_tss_day_before": 30}],
+     "resting_hr_change_bpm": 3, "hrv_change_pct": -9}},
+  {"name": "the morning after a 220 TSS day", "want": "no",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 52, "hrv_ms_baseline": 70, "recovery_pct_baseline": 68, "sleep_hours_baseline": 7.4,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 52, "hrv_ms": 70, "recovery_pct": 69, "sleep_hours": 7.4, "training_tss_day_before": 40},
+       {"day": "yesterday", "resting_hr": 52, "hrv_ms": 69, "recovery_pct": 67, "sleep_hours": 7.6, "training_tss_day_before": 0},
+       {"day": "today", "resting_hr": 57, "hrv_ms": 55, "recovery_pct": 38, "sleep_hours": 7.8, "training_tss_day_before": 220}],
+     "resting_hr_change_bpm": 2, "hrv_change_pct": -8}},
+  {"name": "two days after a race, coming back", "want": "no",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 52, "hrv_ms_baseline": 70, "recovery_pct_baseline": 68, "sleep_hours_baseline": 7.4,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 56, "hrv_ms": 55, "recovery_pct": 35, "sleep_hours": 7.9, "training_tss_day_before": 250},
+       {"day": "yesterday", "resting_hr": 54, "hrv_ms": 62, "recovery_pct": 52, "sleep_hours": 8.2, "training_tss_day_before": 40},
+       {"day": "today", "resting_hr": 53, "hrv_ms": 67, "recovery_pct": 63, "sleep_hours": 7.7, "training_tss_day_before": 0}],
+     "resting_hr_change_bpm": 2, "hrv_change_pct": -12}},
+  {"name": "better than baseline", "want": "no",
+   "facts": {"baseline_days": 28, "resting_hr_baseline": 52, "hrv_ms_baseline": 70, "recovery_pct_baseline": 68, "sleep_hours_baseline": 7.4,
+     "last_days": [
+       {"day": "2 days ago", "resting_hr": 49, "hrv_ms": 78, "recovery_pct": 82, "sleep_hours": 7.9, "training_tss_day_before": 30},
+       {"day": "yesterday", "resting_hr": 48, "hrv_ms": 80, "recovery_pct": 88, "sleep_hours": 8.0, "training_tss_day_before": 0},
+       {"day": "today", "resting_hr": 49, "hrv_ms": 76, "recovery_pct": 80, "sleep_hours": 7.6, "training_tss_day_before": 50}],
+     "resting_hr_change_bpm": -3, "hrv_change_pct": 11}}
+]

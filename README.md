@@ -60,6 +60,11 @@ and after a failure the same work waits 15 minutes.
   what the tools returned or in the conversation; otherwise the answer is
   retried once, then replaced with a plain "couldn't answer without
   guessing".
+- **An easier session on a hold-back day.** When readiness says hold or ease
+  off and a lift is planned, Today offers a lighter version of the day's
+  prescription: "Use the easier version" or "Keep the plan". It must keep
+  every exercise and only drop sets, reps or weight, and taking it changes
+  that day's plan, never the workout.
 
 Prose is rejected, and nothing shown, unless it is the expected JSON, short
 enough, free of `!`, and uses only numbers that appear in its facts, with no
@@ -67,7 +72,7 @@ more than a couple of figures beyond small counts.
 
 **The System 1 model** answers typed questions, and Domestique changes data
 only on a confident answer: 0.85 by default, 0.9 to merge two recordings,
-0.93 to call an entry a stray (`coach.Bars`):
+0.93 to call an entry a stray, 0.92 to ask "feeling run down?" (`coach.Bars`):
 - the sport of a workout labelled "other";
 - whether a ride with no GPS was indoors;
 - whether two overlapping recordings that heart rate kept apart are one
@@ -76,7 +81,11 @@ only on a confident answer: 0.85 by default, 0.9 to merge two recordings,
   out of training load, says so on its page, and "It was real: count it"
   restores it;
 - how hard each lifting set was (easy, working, hard, limit), shown as a word
-  beside the set when the model gives a confidence of at least 0.5.
+  beside the set when the model gives a confidence of at least 0.5;
+- whether the last three mornings look like an illness coming on: resting
+  heart rate up and HRV down against your own 28-day baseline, more than
+  training explains. Today then asks "Feeling run down?", which you can
+  dismiss for the day. It never changes the readiness call.
 
 A background sweep asks these about stored workouts after each load
 recalculation, asking each question once per set of facts. The first sweep
