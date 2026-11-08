@@ -199,6 +199,9 @@ type detailResp struct {
 	// "power"), each with a few words on why; RideType is the ride's type.
 	BadData  map[string]string `json:"bad_data,omitempty"`
 	RideType string            `json:"ride_type,omitempty"`
+	// NameSuggestion is the LLM's name for an activity still called by its
+	// default ("Afternoon Ride"); see names.go.
+	NameSuggestion *strength.AINote `json:"name_suggestion,omitempty"`
 }
 
 // versionResp is one source's own account of a workout, before merging.

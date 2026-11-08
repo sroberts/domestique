@@ -7,7 +7,8 @@
 //     whether a recording's heart rate or power is broken, and what kind of
 //     ride each ride was (quality.go); whether a new exercise name is one
 //     the athlete already logs.
-//   - The LLM: tags and a note from the athlete's own descriptions.
+//   - The LLM: tags and a note from the athlete's own descriptions, and
+//     the bike parts they wrote about fitting (gear.go).
 //
 // Each question is asked once per set of facts and its answer kept in
 // sync_state, so a sweep after the first costs nothing until new workouts
@@ -62,6 +63,7 @@ func (s *Sweeper) Run(ctx context.Context) {
 		{"indoor", s.indoor},
 		{"stray", s.strays},
 		{"tags", s.tags},
+		{"gear", s.gearParts},
 		{"bad data", s.badData},
 		{"ride type", s.rideTypes},
 		{"exercise names", s.exerciseNames},

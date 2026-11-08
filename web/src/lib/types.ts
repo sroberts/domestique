@@ -274,12 +274,16 @@ export interface ActivityDetail {
   bad_data?: Record<string, string>;
   /** What kind of ride: endurance, tempo, intervals, race, commute, recovery. */
   ride_type?: string;
+  /** A name the LLM suggests for one still called "Afternoon Ride". */
+  name_suggestion?: AINote;
 }
 
 export interface WeekNote {
   week: string;
   ai: boolean;
   note: AINote | null;
+  /** What the athlete kept writing about: "knee, 4 times in 3 weeks". */
+  keeps_coming_up?: string[];
 }
 
 /** POST /v1/ask: an answer from Outpost's LLM, looked up in the athlete's data. */

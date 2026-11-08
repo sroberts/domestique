@@ -70,14 +70,32 @@ and after a failure the same work waits 15 minutes.
   a draft with the sets as done, the day and the time. You check it, and
   Save stores it as a finished session like one logged live. Walks, runs
   and other cardio it mentions are listed as not logged, never invented.
+- **Parts you wrote about fitting** ("new chain on the Tarmac today"),
+  offered on the Gear page as "Add it" or "Dismiss". Only descriptions that
+  name a part are read; each suggestion quotes your words, goes on the bike
+  you named (or the ride's bike), and replaces the part fitted at the time.
+  Nothing changes until you add it, and a part already logged near that date
+  isn't offered.
+- **A better name** for a workout still called "Afternoon Ride", "Zwift" or
+  the like, from its route and your description, on the activity page. "Use
+  this name" renames it in Domestique only (never on Strava), and it stays
+  through merges and rebuilds; "Dismiss" hides the suggestion for good.
+
+**What keeps coming up** needs no model: a body part (or illness) named in
+your notes on three or more different days in three weeks shows under the
+week note on Trends ("knee, 4 times in 3 weeks"), and the week note may
+mention it.
 
 Prose is rejected, and nothing shown, unless it is the expected JSON, short
 enough, free of `!`, and uses only numbers that appear in its facts, with no
 more than a couple of figures beyond small counts.
 
 **The System 1 model** answers typed questions, and Domestique changes data
-only on a confident answer: 0.85 by default, 0.9 to merge two recordings,
-0.93 to call an entry a stray, 0.92 to ask "feeling run down?" (`coach.Bars`):
+only on a confident answer. Each question has its own bar (`coach.Bars`),
+set from `make eval` runs so that no case is acted on wrongly: 0.85 by
+default; 0.9 to merge two recordings; 0.92 to ask "feeling run down?" or to
+call a channel broken; 0.93 to call an entry a stray; 0.94 to count two
+exercise names as one; 0.65 for a ride's type, which is only shown:
 - the sport of a workout labelled "other";
 - whether a ride with no GPS was indoors;
 - whether two overlapping recordings that heart rate kept apart are one

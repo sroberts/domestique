@@ -325,6 +325,13 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 			}
 		}
 	}
+	// A name the athlete chose in Domestique beats every source's.
+	for _, l := range ls {
+		if n := NameOf(l.src.Extra); n != "" {
+			a.Name = n
+			break
+		}
+	}
 	if a.Name == "" {
 		loc := in.Loc
 		if loc == nil {

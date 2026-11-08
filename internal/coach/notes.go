@@ -121,7 +121,8 @@ type WeekFacts struct {
 	Notes       []string  `json:"athletes_notes,omitempty"`
 	// RideMix is ride minutes by type (endurance, tempo, intervals, ...),
 	// for rides System 1 classified confidently.
-	RideMix map[string]int `json:"ride_minutes_by_type,omitempty"`
+	RideMix   map[string]int `json:"ride_minutes_by_type,omitempty"`
+	Recurring []string       `json:"keeps_coming_up,omitempty"` // Complaint.String()s
 }
 
 // WeekDay is one day of the week.
@@ -131,7 +132,7 @@ type WeekDay struct {
 	What []string `json:"activities,omitempty"`
 }
 
-const weekPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write the note on their finished training week, three or four sentences: the shape of the week (load, where it came from, how it compared with the week before, and the kind of riding when ride_minutes_by_type is given: all easy, or plenty of intensity), whether the lifting happened as planned, recovery and sleep if given, and one plain suggestion for next week that follows from the facts. Don't recite figures: at most four numbers.
+const weekPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write the note on their finished training week, three or four sentences: the shape of the week (load, where it came from, how it compared with the week before, and the kind of riding when ride_minutes_by_type is given: all easy, or plenty of intensity), whether the lifting happened as planned, recovery and sleep if given, anything in keeps_coming_up in a few plain words (something the athlete keeps writing about, worth watching, never a diagnosis), and one plain suggestion for next week that follows from the facts. Don't recite figures: at most four numbers.
 
 ` + voice + `
 
