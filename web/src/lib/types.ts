@@ -382,3 +382,21 @@ export interface ProviderStatus {
   /** Token to give Wahoo for its webhooks. */
   webhook_token?: string;
 }
+
+/** A finished workout read from text, for the athlete to check before saving. */
+export interface LoggedDraft {
+  name: string;
+  started_at: number;
+  minutes: number;
+  exercises: Exercise[];
+  /** What the text mentioned that isn't lifting; never saved. */
+  not_logged?: string[];
+}
+
+/** An exercise name counted as another, from System 1. */
+export interface ExerciseAlias {
+  name: string;
+  to: string;
+  p?: number;
+  at: number;
+}

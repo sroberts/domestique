@@ -11,6 +11,7 @@
   import TabBar from './components/TabBar.svelte';
   import Workouts from './screens/Workouts.svelte';
   import WorkoutEdit from './screens/WorkoutEdit.svelte';
+  import LogWorkout from './screens/LogWorkout.svelte';
 </script>
 
 {#if router.route.name === 'today'}
@@ -37,6 +38,8 @@
   {/key}
 {:else if router.route.name === 'workouts'}
   <Workouts />
+{:else if router.route.name === 'log'}
+  <LogWorkout />
 {:else if router.route.name === 'workout'}
   {#key router.route.id}
     <WorkoutEdit id={router.route.id} />

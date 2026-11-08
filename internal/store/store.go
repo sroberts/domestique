@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -432,18 +433,30 @@ func (s *Store) PutHR(ctx context.Context, source string, samples []HRSample) er
 }
 
 // ExerciseHistory returns the sets of the most recent finished sessions that
-// included the named exercise, newest session first (up to limit sessions).
+// included the named exercise, or a name counted as it (Canon), newest
+// session first (up to limit sessions).
 func (s *Store) ExerciseHistory(ctx context.Context, name string, limit int) ([][]Set, error) {
+	canon, err := s.Canon(ctx)
+	if err != nil {
+		return nil, err
+	}
+	names := canon.Names(name)
+	in := strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")
+	args := make([]any, 0, 2*len(names)+1)
+	for _, n := range append(names, names...) {
+		args = append(args, n)
+	}
+	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT x.id, x.session_id, x.exercise_index, x.exercise_name, x.set_index, x.target_reps,
 			x.target_weight_kg, x.reps, x.weight_kg, x.started_at, x.ended_at, x.updated_at
 		FROM sets x JOIN sessions s ON s.id = x.session_id
-		WHERE s.finished_at IS NOT NULL AND lower(x.exercise_name) = lower(?)
+		WHERE s.finished_at IS NOT NULL AND lower(x.exercise_name) IN (`+in+`)
 			AND x.session_id IN (
 				SELECT s2.id FROM sessions s2 JOIN sets x2 ON x2.session_id = s2.id
-				WHERE s2.finished_at IS NOT NULL AND lower(x2.exercise_name) = lower(?)
+				WHERE s2.finished_at IS NOT NULL AND lower(x2.exercise_name) IN (`+in+`)
 				GROUP BY s2.id ORDER BY s2.started_at DESC LIMIT ?)
-		ORDER BY s.started_at DESC, x.started_at`, name, name, limit)
+		ORDER BY s.started_at DESC, x.started_at`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -465,8 +478,13 @@ func (s *Store) ExerciseHistory(ctx context.Context, name string, limit int) ([]
 	return out, rows.Err()
 }
 
-// AllSets returns every logged set, oldest first (for lift PRs).
+// AllSets returns every logged set, oldest first (for lift PRs), with each
+// exercise name as it counts (Canon).
 func (s *Store) AllSets(ctx context.Context) ([]Set, error) {
+	canon, err := s.Canon(ctx)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT x.id, x.session_id, x.exercise_index, x.exercise_name, x.set_index, x.target_reps,
 			x.target_weight_kg, x.reps, x.weight_kg, x.started_at, x.ended_at, x.updated_at
@@ -483,6 +501,7 @@ func (s *Store) AllSets(ctx context.Context) ([]Set, error) {
 			&x.TargetWeightKg, &x.Reps, &x.WeightKg, &x.StartedAt, &x.EndedAt, &x.UpdatedAt); err != nil {
 			return nil, err
 		}
+		x.ExerciseName = canon.Of(x.ExerciseName)
 		out = append(out, x)
 	}
 	return out, rows.Err()
