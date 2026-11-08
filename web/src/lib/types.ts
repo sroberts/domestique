@@ -158,6 +158,18 @@ export interface Today {
   recent: Session[];
   latest: ActivityRow[];
   athlete: Athlete;
+  /** An easier session the LLM proposes on a hold-back day. */
+  ease?: EaseView;
+  /** The plan is the eased one the athlete took. */
+  eased?: boolean;
+  /** System 1 thinks the last mornings look like an illness coming on. */
+  run_down?: boolean;
+}
+
+export interface EaseView {
+  reason: string;
+  exercises: Exercise[];
+  model?: string;
 }
 
 // ---- Activities, load, trends (v1/activities, v1/load, v1/trends) ----

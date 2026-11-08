@@ -49,6 +49,11 @@ and after a failure the same work waits 15 minutes.
   route and power-best lines, Whoop's strain sentence) are skipped.
 - **A workout from text** in the editor ("5x5 squat at 100, 3x8 RDL 80").
   It fills in the draft for you to check, and saves nothing.
+- **An easier session on a hold-back day.** When readiness says hold or ease
+  off and a lift is planned, Today offers a lighter version of the day's
+  prescription: "Use the easier version" or "Keep the plan". It must keep
+  every exercise and only drop sets, reps or weight, and taking it changes
+  that day's plan, never the workout.
 
 Prose is rejected, and nothing shown, unless it is the expected JSON, short
 enough, free of `!`, and uses only numbers that appear in its facts, with no
@@ -64,7 +69,11 @@ only on a confident answer (≥ 0.85):
   out of training load, says so on its page, and "It was real: count it"
   restores it;
 - how hard each lifting set was (easy, working, hard, limit), shown as a word
-  beside the set.
+  beside the set;
+- whether the last three mornings look like an illness coming on: resting
+  heart rate up and HRV down against your own 28-day baseline, more than
+  training explains. Today then asks "Feeling run down?", which you can
+  dismiss for the day. It never changes the readiness call.
 
 A background sweep asks these about stored workouts after each load
 recalculation, asking each question once per set of facts. The first sweep

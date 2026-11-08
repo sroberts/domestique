@@ -23,6 +23,10 @@ var Bars = map[string]float64{
 	// Laya called a typed-in yoga class and a recovery spin strays at 0.90
 	// and 0.91; its true strays scored 0.92 to 1.00.
 	"stray": 0.93,
+	// d1 put one bad night, the morning after a 220 TSS day, and the second
+	// day after a race at 0.85 to 0.91; its illness cases at 0.92 to 0.93.
+	// Laya stayed between 0.56 and 0.73 on every case.
+	"sick": 0.92,
 }
 
 // Bar is the probability question q's answer must reach before Domestique
