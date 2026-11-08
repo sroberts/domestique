@@ -30,6 +30,7 @@ func (a *API) registerAI(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/plans/{date}/ease", a.easeDay)
 	mux.HandleFunc("DELETE /v1/plans/{date}/ease", a.unEaseDay)
 	mux.HandleFunc("POST /v1/run-down/{date}/dismiss", a.dismissRunDown)
+	mux.HandleFunc("POST /v1/activities/{id}/data-ok", a.dataOK)
 }
 
 func (a *API) aiOn(r *http.Request) bool { return a.Coach != nil && !a.demoOn(r) }
@@ -44,6 +45,7 @@ func r1p(v float64) *float64 { x := math.Round(v*10) / 10; return &x }
 // descriptions, and the stray verdict to an activity's merged view.
 func (a *API) aiDetail(r *http.Request, resp *detailResp) {
 	ctx := r.Context()
+	a.qualityDetail(ctx, resp)
 	if v, err := a.Store.SyncState(ctx, load.StrayPrefix+resp.Activity.ID); err == nil && v == "stray" {
 		resp.Stray = true
 	}
@@ -354,6 +356,7 @@ func (a *API) weekFacts(ctx context.Context, mon time.Time) (coach.WeekFacts, er
 		}
 		ids = append(ids, x.ID)
 	}
+	a.rideMix(ctx, acts, &f)
 	srcs, err := a.Store.SourcesForMany(ctx, ids)
 	if err != nil {
 		return f, err

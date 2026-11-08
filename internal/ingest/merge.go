@@ -52,6 +52,7 @@ func (in *Ingester) loadSources(ctx context.Context, actID string) ([]loaded, er
 		l := loaded{src: s}
 		var st activity.Stream
 		if err := in.Store.GetStream(ctx, s.ID, &st); err == nil {
+			dropBad(s, &st)
 			l.stream = &st
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return nil, err
@@ -347,7 +348,7 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 	}
 
 	// With no HR stream anywhere, fall back to Whoop's own summary.
-	if metrics.AvgHR == 0 && whoop != nil {
+	if metrics.AvgHR == 0 && whoop != nil && BadChannels(whoop.Extra)["hr"] == "" {
 		var ex struct {
 			Avg int `json:"avg_hr"`
 			Max int `json:"max_hr"`

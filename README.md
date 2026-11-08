@@ -86,6 +86,15 @@ only on a confident answer: 0.85 by default, 0.9 to merge two recordings,
   heart rate up and HRV down against your own 28-day baseline, more than
   training explains. Today then asks "Feeling run down?", which you can
   dismiss for the day. It never changes the readiness call.
+- whether a recording's heart rate or power is broken (strap dropouts, a
+  sensor reading cadence, impossible spikes, zeros while pedalling). Go works
+  out the numbers and only asks about channels that already look off. A
+  broken channel is left out of the merged view, zones and load, another
+  recording's is used where there is one, and "It's fine: use it" puts it
+  back;
+- what kind of ride each ride was (endurance, tempo, intervals, race,
+  commute, recovery), shown on the activity and given to the week's note as
+  minutes per type.
 
 A background sweep asks these about stored workouts after each load
 recalculation, asking each question once per set of facts. The first sweep

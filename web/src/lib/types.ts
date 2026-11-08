@@ -270,6 +270,10 @@ export interface ActivityDetail {
   tag_note?: string;
   /** System 1 judged this a stray entry; it carries no load until kept. */
   stray?: boolean;
+  /** Channels System 1 judged broken and left out ("hr", "power"), with why. */
+  bad_data?: Record<string, string>;
+  /** What kind of ride: endurance, tempo, intervals, race, commute, recovery. */
+  ride_type?: string;
 }
 
 export interface WeekNote {
