@@ -1,0 +1,18 @@
+[
+  {"name": "1-minute 'Test entry'", "want": "yes",
+   "facts": {"name": "Test entry", "source": "strava", "local_start": "Mon 12:00", "minutes": 1, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true}},
+  {"name": "'asdf', 0 minutes", "want": "yes",
+   "facts": {"name": "asdf", "source": "strava", "local_start": "Tue 21:40", "minutes": 0, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true}},
+  {"name": "described as a duplicate", "want": "yes",
+   "facts": {"name": "Morning Ride", "source": "strava", "local_start": "Sun 08:00", "minutes": 120, "distance_km": 55.0, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true, "description": "duplicate, the Garmin one uploaded after all"}},
+  {"name": "24-hour 'placeholder'", "want": "yes",
+   "facts": {"name": "placeholder", "source": "strava", "local_start": "Wed 00:00", "minutes": 1440, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true}},
+  {"name": "club ride, forgot the Garmin", "want": "no",
+   "facts": {"name": "Club ride, forgot the Garmin", "source": "strava", "local_start": "Sun 09:00", "minutes": 150, "distance_km": 68.0, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true}},
+  {"name": "yoga class typed in", "want": "no",
+   "facts": {"name": "Yoga", "source": "strava", "local_start": "Thu 18:00", "minutes": 60, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true}},
+  {"name": "short easy recovery spin", "want": "no",
+   "facts": {"name": "Recovery spin", "source": "strava", "local_start": "Mon 07:00", "minutes": 20, "distance_km": 8.0, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true}},
+  {"name": "hike, phone died", "want": "no",
+   "facts": {"name": "Hike up the ridge", "source": "strava", "local_start": "Sat 09:30", "minutes": 210, "distance_km": 12.0, "has_gps": false, "has_power": false, "has_heart_rate": false, "entered_by_hand": true, "description": "phone died at the start"}}
+]

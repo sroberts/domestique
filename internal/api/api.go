@@ -40,6 +40,8 @@ type API struct {
 	// Coach writes the day's call with the operator's LLM; nil when Outpost
 	// gave no model, and the rule-based call is shown alone.
 	Coach *coach.Writer
+	// Tools answer the LLM's lookups for POST /v1/ask (the MCP server).
+	Tools AskTools
 	// Gateway is true when the Outpost login gateway is in front (OUTPOST_AUTH=gateway).
 	Gateway bool
 	// background outlives requests (imports); cancelled on shutdown.
@@ -131,6 +133,11 @@ type todayResp struct {
 	Recent    []sessionRow       `json:"recent"`
 	Latest    []ActivityRow      `json:"latest"`
 	Athlete   load.Athlete       `json:"athlete"`
+	// From the operator's models (today_ai.go).
+	Ease      *easeView `json:"ease,omitempty"`     // an easier session, proposed
+	Eased     bool      `json:"eased,omitempty"`    // the plan is the eased one the athlete took
+	RunDown   bool      `json:"run_down,omitempty"` // ask "feeling run down?"
+	aiPending bool
 }
 
 func (a *API) today(w http.ResponseWriter, r *http.Request) {
@@ -201,6 +208,7 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	if sl, err := a.Store.SleepRange(ctx, date, date); err == nil && len(sl) > 0 {
 		resp.Sleep = &sl[len(sl)-1]
 	}
+	a.todayAI(r, &resp, series, day)
 	latest, err := a.Store.ListActivities(ctx, store.ActivityQuery{Limit: 4})
 	if err != nil {
 		a.fail(w, r, err)
@@ -218,7 +226,7 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			resp.Readiness.Title, resp.Readiness.Detail, resp.Readiness.Source = c.Title, c.Detail, "llm"
 		}
-		resp.Readiness.Pending = pending
+		resp.Readiness.Pending = pending || resp.aiPending
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

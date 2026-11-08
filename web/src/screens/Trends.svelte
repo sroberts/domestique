@@ -1,7 +1,9 @@
 <script lang="ts">
   import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
+  import ExerciseAliases from '../components/ExerciseAliases.svelte';
   import LoadChart from '../components/LoadChart.svelte';
+  import AskLink from '../components/AskLink.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import WeekBars from '../components/WeekBars.svelte';
   import { cachedGet, fetchLoad, fetchTrends } from '../lib/data';
@@ -70,10 +72,14 @@
 <main class="page">
   <header class="top">
     <h1>Trends</h1>
+    <AskLink />
     <SyncStatus />
   </header>
   {#if stale}<p class="notice">No connection. Showing trends as of {time(stale)}.</p>{/if}
   {#if week?.note?.text}<CoachNote label={`Week of ${day(new Date(`${week.week}T12:00:00`).getTime())}`} text={week.note.text} />{/if}
+  {#if week?.keeps_coming_up?.length}
+    <p class="recurring"><span class="label">Keeps coming up in your notes</span> {week.keeps_coming_up.join('; ')}</p>
+  {/if}
 
   {#if empty}
     <section class="empty">
@@ -162,6 +168,7 @@
               </li>
             {/each}
           </ul>
+          <ExerciseAliases onchange={() => fetchTrends().then((r) => (trends = r.data ?? trends))} />
         </section>
       {/if}
     {/if}
@@ -187,6 +194,14 @@
   }
   h1 {
     font-size: var(--size-heading);
+  }
+  .recurring {
+    margin: var(--space-2) 0 0;
+    font-size: var(--size-small);
+    max-width: 62ch;
+  }
+  .recurring .label {
+    display: block;
   }
   .notice {
     margin-top: var(--space-3);

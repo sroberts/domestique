@@ -75,6 +75,8 @@ func TestSweep(t *testing.T) {
 					p = 0.96
 				}
 				return map[string]coach.Answer{"stray": {Type: "noul", Noul: p}}
+			case qs["ride_type"] != nil:
+				return map[string]coach.Answer{"ride_type": {Type: "choice", Choice: "endurance", Probabilities: map[string]float64{"endurance": 0.3}}}
 			}
 			t.Errorf("unexpected questions %v", qs)
 			return nil

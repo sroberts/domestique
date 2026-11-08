@@ -441,6 +441,14 @@ func (in *Ingester) AddWhoopWorkout(ctx context.Context, id string, start time.T
 	in.mu.Lock()
 	defer in.mu.Unlock()
 	if prev, err := in.Store.GetSource(ctx, srcID); err == nil {
+		// Keep what Domestique added: a rename, and System 1's readings.
+		var old map[string]any
+		_ = json.Unmarshal(prev.Extra, &old)
+		for _, k := range []string{NameExtra, "ai_sport", "ai_indoor"} {
+			if v, ok := old[k]; ok {
+				extra[k] = v
+			}
+		}
 		prev.Extra, _ = json.Marshal(extra)
 		prev.ElapsedS = elapsedS
 		err := in.Store.PutSource(ctx, prev)

@@ -195,6 +195,13 @@ type detailResp struct {
 	Tags    []string         `json:"tags,omitempty"`
 	TagNote string           `json:"tag_note,omitempty"`
 	Stray   bool             `json:"stray,omitempty"`
+	// BadData is channels System 1 judged broken and left out ("hr",
+	// "power"), each with a few words on why; RideType is the ride's type.
+	BadData  map[string]string `json:"bad_data,omitempty"`
+	RideType string            `json:"ride_type,omitempty"`
+	// NameSuggestion is the LLM's name for an activity still called by its
+	// default ("Afternoon Ride"); see names.go.
+	NameSuggestion *strength.AINote `json:"name_suggestion,omitempty"`
 }
 
 // versionResp is one source's own account of a workout, before merging.

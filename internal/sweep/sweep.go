@@ -3,12 +3,16 @@
 //
 //   - System 1: the sport of a workout labelled "other"; whether a ride with
 //     no GPS was indoors; whether two overlapping recordings the matcher kept
-//     apart are one workout; whether an entry typed in by hand is a stray.
-//   - The LLM: tags and a note from the athlete's own descriptions.
+//     apart are one workout; whether an entry typed in by hand is a stray;
+//     whether a recording's heart rate or power is broken, and what kind of
+//     ride each ride was (quality.go); whether a new exercise name is one
+//     the athlete already logs.
+//   - The LLM: tags and a note from the athlete's own descriptions, and
+//     the bike parts they wrote about fitting (gear.go).
 //
 // Each question is asked once per set of facts and its answer kept in
 // sync_state, so a sweep after the first costs nothing until new workouts
-// arrive. Data changes only on a confident answer (coach.Sure).
+// arrive. Data changes only on a confident answer (coach.Bar).
 package sweep
 
 import (
@@ -59,6 +63,10 @@ func (s *Sweeper) Run(ctx context.Context) {
 		{"indoor", s.indoor},
 		{"stray", s.strays},
 		{"tags", s.tags},
+		{"gear", s.gearParts},
+		{"bad data", s.badData},
+		{"ride type", s.rideTypes},
+		{"exercise names", s.exerciseNames},
 	} {
 		c, err := pass.run(ctx)
 		changed = changed || c
@@ -233,7 +241,7 @@ func (s *Sweeper) indoor(ctx context.Context) (bool, error) {
 			}
 			continue
 		}
-		if !fresh || v.P < coach.Sure {
+		if !fresh || v.P < coach.Bar("indoor") {
 			continue
 		}
 		for _, src := range srcs[a.ID] {
@@ -282,7 +290,7 @@ func (s *Sweeper) sameWorkout(ctx context.Context) (bool, error) {
 			}
 			continue
 		}
-		if !fresh || v.P < coach.Sure {
+		if !fresh || v.P < coach.Bar("same") {
 			continue
 		}
 		to, err := s.Ingest.MergePair(ctx, x.ID, y.ID)
@@ -327,7 +335,7 @@ func (s *Sweeper) strays(ctx context.Context) (bool, error) {
 			}
 			continue
 		}
-		if !fresh || v.P < coach.Sure {
+		if !fresh || v.P < coach.Bar("stray") {
 			continue
 		}
 		if err := s.Store.SetSyncState(ctx, load.StrayPrefix+a.ID, "stray"); err != nil {
