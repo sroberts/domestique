@@ -170,7 +170,7 @@ func (s *Store) DeleteTemplate(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	if _, err := tx.ExecContext(ctx, `DELETE FROM plans WHERE template_id = ?`, id); err != nil {
 		return err
 	}

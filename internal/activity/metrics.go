@@ -258,7 +258,8 @@ func StrainLoad(strain float64, secs int, circuitShare float64) float64 {
 	if strain <= 0 {
 		return 0
 	}
-	tss := 100 * math.Pow(strain/14, 2)
+	r := strain / 14
+	tss := 100 * r * r
 	if secs > 0 {
 		share := math.Max(0, math.Min(1, circuitShare))
 		perHour := 100 * ((1 - share) + share*circuitIF*circuitIF)

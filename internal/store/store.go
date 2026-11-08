@@ -424,7 +424,7 @@ func (s *Store) PutHR(ctx context.Context, source string, samples []HRSample) er
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	stmt, err := tx.PrepareContext(ctx, `INSERT OR IGNORE INTO hr_samples (source, ts, bpm) VALUES (?, ?, ?)`)
 	if err != nil {
 		return err
@@ -501,7 +501,7 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
 	for _, q := range []string{`DELETE FROM sets WHERE session_id = ?`, `DELETE FROM sessions WHERE id = ?`} {
 		if _, err := tx.ExecContext(ctx, q, id); err != nil {
 			return err

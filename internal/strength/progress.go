@@ -203,8 +203,8 @@ func Counted(sets []store.Set) []store.Set {
 
 // Progress is how much of a session's plan was actually lifted.
 type Progress struct {
-	Done    int `json:"done"`    // sets that were really lifted
-	Logged  int `json:"logged"`  // every set logged, taps included
+	Done    int `json:"done"`   // sets that were really lifted
+	Logged  int `json:"logged"` // every set logged, taps included
 	Planned int `json:"planned"`
 }
 

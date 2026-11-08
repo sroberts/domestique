@@ -9,8 +9,12 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 ## Run
 
     make run                 # builds the PWA and the binary, serves on :8099 with demo data
-    make test                # go vet + go test
+    make test                # go test
+    make check               # everything CI runs: gofmt, go mod tidy, vet + golangci-lint,
+                             # tests with a coverage floor, race tests, svelte-check,
+                             # and scripts/conformance.sh against the Outpost service spec
     make release             # dist/domestique-darwin-arm64 + SHA256SUMS + outpost.toml
+    make help                # every target
 
 ## Configuration (environment)
 
