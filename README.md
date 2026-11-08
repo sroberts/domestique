@@ -55,7 +55,8 @@ enough, free of `!`, and uses only numbers that appear in its facts, with no
 more than a couple of figures beyond small counts.
 
 **The System 1 model** answers typed questions, and Domestique changes data
-only on a confident answer (≥ 0.85):
+only on a confident answer: 0.85 by default, 0.9 to merge two recordings,
+0.93 to call an entry a stray (`coach.Bars`):
 - the sport of a workout labelled "other";
 - whether a ride with no GPS was indoors;
 - whether two overlapping recordings that heart rate kept apart are one
@@ -64,12 +65,27 @@ only on a confident answer (≥ 0.85):
   out of training load, says so on its page, and "It was real: count it"
   restores it;
 - how hard each lifting set was (easy, working, hard, limit), shown as a word
-  beside the set.
+  beside the set when the model gives a confidence of at least 0.5.
 
 A background sweep asks these about stored workouts after each load
 recalculation, asking each question once per set of facts. The first sweep
 over a long history takes a while on a local model: hundreds of descriptions
 at tens of seconds each.
+
+**Checking a model.** `make eval` puts a fixed set of cases
+(`internal/coach/eval/cases`) to the models and shows, per question, what
+Domestique would do with each answer: hits, misses (not sure enough to act),
+and WRONG actions, plus the lowest bar with no wrong action. Run it whenever
+Outpost's models change. It goes through Outpost when `OUTPOST_AI_URL` and
+`OUTPOST_AI_TOKEN` are set, or straight to Ollama on this machine:
+
+    make eval SYSTEM1=laya
+    make eval SYSTEM1=d1 EVAL_ARGS="-q stray,same -v"
+
+It exits 1 if any answer would be acted on wrongly at today's bars. On
+Laya and d1 (November 2026), no question has a wrong action at its bar.
+Neither model can yet grade set effort reliably, so it mostly stays blank,
+and neither tells sports apart from numbers alone.
 
 Zwift's "🗺️ Route in World" line is read into the activity's route without
 any model. Earlier imports are backfilled once at startup.
