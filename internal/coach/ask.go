@@ -37,9 +37,15 @@ const (
 	AskRounds = 6
 	// AskHistory is how many earlier turns are sent with a question.
 	AskHistory = 4
-	// maxToolResult keeps one tool's result from filling a small model's
-	// context; the rest is cut with a marker the model can see.
-	maxToolResult = 12000
+	// maxToolResult and maxToolTotal keep tool results from filling a small
+	// model's context; the rest is cut with a marker the model can see.
+	// Ollama loads gemma4 with a 4096-token window and, when a request is
+	// longer, silently drops the oldest messages, the question among them:
+	// a 12000-character trends result did exactly that. About 9000
+	// characters (some 2300 tokens) leaves room for the prompt, the tool
+	// list and the answer.
+	maxToolResult = 4000
+	maxToolTotal  = 9000
 	maxAnswer     = 1200
 	maxQuestion   = 500
 )
@@ -82,6 +88,7 @@ func (a *AI) Ask(ctx context.Context, question string, history []Turn, today str
 
 	res := AskResult{Tools: []string{}}
 	retried := false
+	budget := maxToolTotal
 	for round := 0; round < AskRounds; round++ {
 		offer := tools
 		if round == AskRounds-1 {
@@ -95,7 +102,7 @@ func (a *AI) Ask(ctx context.Context, question string, history []Turn, today str
 		msgs = append(msgs, m)
 		if len(m.ToolCalls) > 0 && offer != nil {
 			for _, c := range m.ToolCalls {
-				out := a.runTool(ctx, c, offered, run)
+				out := a.runTool(ctx, c, offered, run, &budget)
 				if offered[c.Function.Name] && !contains(res.Tools, c.Function.Name) {
 					res.Tools = append(res.Tools, c.Function.Name)
 				}
@@ -121,7 +128,9 @@ func (a *AI) Ask(ctx context.Context, question string, history []Turn, today str
 	return res, nil
 }
 
-func (a *AI) runTool(ctx context.Context, c ToolCall, offered map[string]bool, run ToolRunner) string {
+// runTool runs one call, cutting its result to fit what's left of budget
+// (characters across all of one answer's tool results).
+func (a *AI) runTool(ctx context.Context, c ToolCall, offered map[string]bool, run ToolRunner, budget *int) string {
 	name := c.Function.Name
 	if !offered[name] {
 		return fmt.Sprintf(`{"error": "no tool named %q"}`, name)
@@ -137,9 +146,14 @@ func (a *AI) runTool(ctx context.Context, c ToolCall, offered map[string]bool, r
 		b, _ := json.Marshal(map[string]string{"error": err.Error()})
 		return string(b)
 	}
-	if utf8.RuneCountInString(out) > maxToolResult {
-		out = string([]rune(out)[:maxToolResult]) + " …(cut: ask for fewer days or one item)"
+	limit := min(maxToolResult, *budget)
+	if limit <= 0 {
+		return `{"error": "no room for more lookups: answer with what you have"}`
 	}
+	if r := []rune(out); len(r) > limit {
+		out = string(r[:limit]) + " …(cut: ask for fewer days or one item)"
+	}
+	*budget -= utf8.RuneCountInString(out)
 	return out
 }
 
