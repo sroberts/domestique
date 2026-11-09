@@ -228,6 +228,12 @@ func (s *Sweeper) indoor(ctx context.Context) (bool, error) {
 		if f.HasGPS {
 			continue // outside, and the map shows it
 		}
+		if ingest.FromFile(srcs[a.ID]) {
+			// A recording file only reads as outdoor without GPS on evidence
+			// (an outdoor sub-sport, a climb, the athlete's label), which the
+			// model doesn't see. The evidence stands.
+			continue
+		}
 		type verdict struct {
 			P float64 `json:"p"`
 		}

@@ -87,17 +87,12 @@ func TestBadData(t *testing.T) {
 		t.Fatalf("ride type = %q", v)
 	}
 
-	// The indoor pass ran before heart rate was left out, and asks once
-	// more about the changed ride; after that, nothing is asked again.
-	before := len(asked)
-	sw.Run(ctx)
-	if got := asked[before:]; len(got) != 1 || got[0] != "indoor" {
-		t.Fatalf("second sweep asked %v, want one indoor question", got)
-	}
+	// These are head-unit files, so the indoor pass never asks about them;
+	// a second sweep asks nothing.
 	n := f.Calls.Load()
 	sw.Run(ctx)
 	if f.Calls.Load() != n {
-		t.Fatalf("third sweep made %d calls", f.Calls.Load()-n)
+		t.Fatalf("second sweep made %d calls", f.Calls.Load()-n)
 	}
 }
 
