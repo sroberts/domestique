@@ -5,15 +5,22 @@
   import { onDestroy } from 'svelte';
   import { theme } from '../lib/device.svelte';
   import type { Map as MLMap, GeoJSONSource } from 'maplibre-gl';
+  import type { ZwiftWorld } from '../lib/types';
 
   interface Props {
     route: [number, number][];
     cursor: [number, number] | null;
-    virtual?: boolean;
+    /** The Zwift world the route is in, if any. */
+    world?: ZwiftWorld;
     /** CSS colour token for the route line, e.g. the sport's colour. */
     tone?: string;
   }
-  let { route, cursor, virtual = false, tone = '--text' }: Props = $props();
+  let { route, cursor, world, tone = '--text' }: Props = $props();
+
+  // A made-up Zwift world sits over open ocean or unrelated land, so a real
+  // map under it would mislead: draw the route alone. Worlds that sit on the
+  // place they copy (London, New York, ...) keep the real map.
+  const madeUp = $derived(!!world && !world.real);
 
   let el = $state<HTMLDivElement | null>(null);
   let map: MLMap | null = null;
@@ -73,8 +80,7 @@
         if (cancelled || !el) return;
         const m = new ml.Map({
           container: el,
-          // Zwift's virtual worlds have no real basemap: draw the route alone.
-          style: virtual || !navigator.onLine ? { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': css('--surface') } }] } : styleUrl(theme.value),
+          style: madeUp || !navigator.onLine ? { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': css('--surface') } }] } : styleUrl(theme.value),
           attributionControl: { compact: true },
           dragRotate: false,
           pitchWithRotate: false,
@@ -108,7 +114,7 @@
   let lastTheme = theme.value;
   $effect(() => {
     const t = theme.value;
-    if (!map || t === lastTheme || virtual) return;
+    if (!map || t === lastTheme || madeUp) return;
     lastTheme = t;
     map.setStyle(styleUrl(t));
     map.once('styledata', () => map && addLayers(map));
@@ -127,7 +133,10 @@
   onDestroy(() => map?.remove());
 </script>
 
-<div class="map" bind:this={el} role="img" aria-label="Map of the route">
+<div class="map" bind:this={el} role="img" aria-label={world ? `Map of the route in Zwift's ${world.name}` : 'Map of the route'}>
+  {#if world}
+    <p class="world"><span class="label">Zwift</span> {world.name}</p>
+  {/if}
   {#if failed}
     <p class="muted fallback">The map couldn't load. The route is still in the charts below.</p>
   {/if}
@@ -159,6 +168,23 @@
     padding: var(--space-4);
     text-align: center;
     font-size: var(--size-small);
+  }
+  .world {
+    position: absolute;
+    top: var(--space-2);
+    left: var(--space-2);
+    z-index: 1;
+    margin: 0;
+    padding: var(--space-1) var(--space-2);
+    background: var(--surface-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-s);
+    font-size: var(--size-small);
+    color: var(--text);
+    pointer-events: none;
+  }
+  .world .label {
+    margin-right: var(--space-1);
   }
   .map :global(.maplibregl-ctrl-attrib) {
     font-size: 10px;
