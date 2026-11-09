@@ -247,6 +247,13 @@ export interface ChartStream {
   altitude?: number[];
   distance?: number[];
   route?: [number, number][];
+  /** The Zwift world the route is in; real = it sits on the place it copies. */
+  world?: ZwiftWorld;
+}
+
+export interface ZwiftWorld {
+  name: string;
+  real: boolean;
 }
 
 export interface ActivityDetail {

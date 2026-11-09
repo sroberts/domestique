@@ -162,6 +162,9 @@ type ChartStream struct {
 	Altitude []float32    `json:"altitude,omitempty"`
 	Distance []float32    `json:"distance,omitempty"` // km
 	Route    [][2]float64 `json:"route,omitempty"`    // [lat, lng]
+	// World is the Zwift world the route is in, whatever the ride's sport, so
+	// the map can tell a made-up world from a real place.
+	World *activity.ZwiftWorld `json:"world,omitempty"`
 }
 
 type detailResp struct {
@@ -410,6 +413,7 @@ func downsample(s *activity.Stream, n int) ChartStream {
 				c.Route = append(c.Route, [2]float64{math.Round(s.Lat[i]*1e5) / 1e5, math.Round(s.Lng[i]*1e5) / 1e5})
 			}
 		}
+		c.World = activity.ZwiftWorldOf(c.Route)
 	}
 	return c
 }

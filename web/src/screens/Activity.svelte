@@ -241,7 +241,7 @@
     {#if stale}<p class="notice">No connection. Showing this activity as last opened at {time(stale)}.</p>{/if}
 
     {#if d.stream.route && d.stream.route.length > 1}
-      <div class="map-wrap"><RouteMap route={d.stream.route} cursor={cursorLatLng} virtual={a.sport === 'virtual_ride'} tone={`--sport-${kind}`} /></div>
+      <div class="map-wrap"><RouteMap route={d.stream.route} cursor={cursorLatLng} world={d.stream.world} tone={`--sport-${kind}`} /></div>
     {/if}
 
     <dl class="stats">
