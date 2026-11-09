@@ -215,3 +215,24 @@ func TestRideLabelKeepsClimbingFileOutdoor(t *testing.T) {
 		t.Errorf("sport %q, want %q", a.Sport, activity.SportRide)
 	}
 }
+
+// A file's evidence for outdoor (here, a climb with no GPS) outranks a model's
+// "indoor" verdict stored on the source.
+func TestFileEvidenceBeatsModelIndoor(t *testing.T) {
+	ride := noGPS(t, fixture(t, "dcrainmaker/Edge810-Vector-2013-08-16-15-35-10.fit"))
+	in, st, _ := setup(t)
+	ctx := context.Background()
+	res, err := in.Ingest(ctx, "ride.fit", ride, "wahoo-api", ingest.Hint{Source: "wahoo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetSourceExtra(ctx, res.SourceID, "ai_indoor", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := in.Rebuild(ctx, res.ActivityID); err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := st.GetActivity(ctx, res.ActivityID); a.Sport != activity.SportRide {
+		t.Errorf("sport %q, want the file's evidence to stand", a.Sport)
+	}
+}

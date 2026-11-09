@@ -208,6 +208,14 @@ func merge(ls []loaded) *Merged {
 	return m
 }
 
+// FromFile reports whether any recording came from a file (a head unit,
+// Zwift), not a hand-typed entry or a Whoop workout. Such a file only reads
+// as an outdoor ride without GPS on evidence: an outdoor sub-sport, a climb
+// on the altimeter, or the athlete's label.
+func FromFile(srcs []store.Source) bool {
+	return slices.ContainsFunc(srcs, func(s store.Source) bool { return s.RawSHA256 != nil })
+}
+
 // rideSport decides whether a ride was indoors.
 //
 // Whoop can't know: it never records GPS, so its rides read as indoor only
@@ -303,6 +311,12 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 	}
 	// System 1's reading of a workout its own source only called "other",
 	// and of a ride with no GPS that was on a trainer (see internal/sweep).
+	// A recording file's own evidence for outdoor outranks the model's guess.
+	srcs := make([]store.Source, len(ls))
+	for i := range ls {
+		srcs[i] = ls[i].src
+	}
+	fromFile := FromFile(srcs)
 	for i := range ls {
 		var ex struct {
 			Sport  string `json:"ai_sport"`
@@ -312,7 +326,7 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 		if a.Sport == activity.SportOther && ex.Sport != "" {
 			a.Sport = ex.Sport
 		}
-		if ex.Indoor && a.Sport == activity.SportRide {
+		if ex.Indoor && a.Sport == activity.SportRide && !fromFile {
 			a.Sport = activity.SportVirtualRide
 		}
 	}

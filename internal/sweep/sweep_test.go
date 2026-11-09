@@ -62,6 +62,9 @@ func TestSweep(t *testing.T) {
 			case qs["sport"] != nil:
 				return map[string]coach.Answer{"sport": {Type: "choice", Choice: "strength", Probabilities: map[string]float64{"strength": 0.95}}}
 			case qs["indoor"] != nil:
+				if strings.Contains(s, "hill loop") {
+					t.Error("asked whether a head unit's outdoor ride was indoors")
+				}
 				p := 0.2
 				if strings.Contains(s, "Trainer") {
 					p = 0.93
@@ -99,8 +102,11 @@ func TestSweep(t *testing.T) {
 	// A hand-typed Strava entry, and a real one.
 	put(t, st, "a_stray", "strava:4", "strava", "ride", "Test entry", day.Add(48*time.Hour), 1, "", false)
 	put(t, st, "a_real", "strava:5", "strava", "ride", "Club run", day.Add(72*time.Hour), 90, "", false)
-	// A ride with no GPS that was on the trainer.
-	put(t, st, "a_trainer", "wahoo:8", "wahoo", "ride", "Trainer session", day.Add(144*time.Hour), 45, "", true)
+	// A hand-typed ride with no GPS that was on the trainer.
+	put(t, st, "a_trainer", "strava:8", "strava", "ride", "Trainer session", day.Add(144*time.Hour), 45, "", false)
+	// A head unit's file the parser read as outdoor without GPS (it climbed):
+	// the model isn't asked, whatever the name suggests.
+	put(t, st, "a_climb", "wahoo:9", "wahoo", "ride", "Trainer legs on the hill loop", day.Add(168*time.Hour), 70, "", true)
 	// A description of the athlete's own, and one that's only Zwift's lines.
 	put(t, st, "a_zwift", "strava:6", "strava", "virtual_ride", "Zwift", day.Add(96*time.Hour), 60,
 		`{"description":"🗺️ Tempus Fugit in Watopia\nlegs dead, new saddle"}`, true)
@@ -114,6 +120,9 @@ func TestSweep(t *testing.T) {
 	}
 	if a, _ := st.GetActivity(ctx, "a_trainer"); a.Sport != "virtual_ride" {
 		t.Errorf("trainer ride: sport %q", a.Sport)
+	}
+	if a, _ := st.GetActivity(ctx, "a_climb"); a.Sport != "ride" {
+		t.Errorf("file-backed outdoor ride: sport %q, want the file's evidence to stand", a.Sport)
 	}
 	if a, _ := st.GetActivity(ctx, "a_real"); a.Sport != "ride" {
 		t.Errorf("outdoor ride: sport %q", a.Sport)
