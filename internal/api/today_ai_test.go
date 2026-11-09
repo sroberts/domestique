@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -137,7 +138,13 @@ func TestRunDown(t *testing.T) {
 	const date = "2026-11-03"
 	day, _ := time.Parse("2006-01-02", date)
 	var state json.RawMessage
+	// Count only the run-down question: the same request also starts the
+	// readiness write-up in the background, which may reach the fake too.
+	var asked atomic.Int32
 	f := &coachtest.Fake{SystemOne: func(s json.RawMessage, qs map[string]json.RawMessage) map[string]coach.Answer {
+		if _, ok := qs["sick"]; ok {
+			asked.Add(1)
+		}
 		state = s
 		return map[string]coach.Answer{"sick": {Type: "noul", Noul: 0.95}}
 	}}
@@ -153,8 +160,8 @@ func TestRunDown(t *testing.T) {
 	}
 	put(0, 3, 61, 45) // the last three mornings
 	put(3, 10, 52, 70)
-	if r := getToday(t, h, date); r.RunDown || f.Calls.Load() != 0 {
-		t.Fatalf("10 days of baseline: run down %v, %d calls", r.RunDown, f.Calls.Load())
+	if r := getToday(t, h, date); r.RunDown || asked.Load() != 0 {
+		t.Fatalf("10 days of baseline: run down %v, asked %d times", r.RunDown, asked.Load())
 	}
 	put(13, 18, 52, 70)
 	var r todayResp
