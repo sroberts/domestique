@@ -1,7 +1,8 @@
 /* Domestique design tokens: "Team Car".
    Colors are the spec's committed palette. Dark is the default theme.
    Color carries meaning (recovery, sport, zones, chart roles) and shows it
-   at full strength; signal yellow stays the one action. */
+   at full strength; signal yellow stays the one action, except mid-workout,
+   where starting a set is green and ending it is red. */
 
 :root,
 :root[data-theme='dark'] {
@@ -16,6 +17,13 @@
   --signal: #f2c230;
   --signal-press: #d9ab1f;
   --on-signal: #16171a;
+  /* Start and end a set (>= 5:1 with their ink) */
+  --go: #4fc283;
+  --go-press: #3fae73;
+  --on-go: #16171a;
+  --stop: #f0656a;
+  --stop-press: #e5484d;
+  --on-stop: #16171a;
   --plate: #ece8df;       /* race-number plate: painted bone on graphite */
   --on-plate: #16171a;
   --band: rgb(236 232 223 / 0.06);
@@ -61,6 +69,12 @@
   --signal: #a87d00;
   --signal-press: #8e6a00;
   --on-signal: #1b1c1f;
+  --go: #1f7a49;
+  --go-press: #18663c;
+  --on-go: #ffffff;
+  --stop: #c8323a;
+  --stop-press: #b0262e;
+  --on-stop: #ffffff;
   --plate: #1b1c1f;
   --on-plate: #f4f1ea;
   --band: rgb(27 28 31 / 0.05);

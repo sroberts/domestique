@@ -176,6 +176,26 @@ a {
   background: var(--signal-press);
 }
 
+.btn-go,
+.btn-go:hover {
+  background: var(--go);
+  color: var(--on-go);
+}
+
+.btn-go:active {
+  background: var(--go-press);
+}
+
+.btn-stop,
+.btn-stop:hover {
+  background: var(--stop);
+  color: var(--on-stop);
+}
+
+.btn-stop:active {
+  background: var(--stop-press);
+}
+
 .btn-quiet {
   border-color: transparent;
   color: var(--text-muted);
