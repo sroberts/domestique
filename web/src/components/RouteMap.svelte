@@ -18,9 +18,33 @@
   let { route, cursor, world, tone = '--text' }: Props = $props();
 
   // A made-up Zwift world sits over open ocean or unrelated land, so a real
-  // map under it would mislead: draw the route alone. Worlds that sit on the
-  // place they copy (London, New York, ...) keep the real map.
+  // map under it would mislead: draw Zwift's own map of the world instead,
+  // which the server fetches from Zwift and keeps. If that fails, the route
+  // goes on a plain background. Worlds that sit on the place they copy
+  // (London, New York, ...) keep the real map.
   const madeUp = $derived(!!world && !world.real);
+
+  const blank = () => ({ version: 8 as const, sources: {}, layers: [{ id: 'bg', type: 'background' as const, paint: { 'background-color': css('--surface') } }] });
+
+  function zwiftStyle(w: ZwiftWorld) {
+    if (!w.map_corners) return blank();
+    // MapLibre takes [lng, lat]; the corners may be turned, as some of Zwift's images are.
+    const [tl, tr, br, bl] = w.map_corners.map(([lat, lng]) => [lng, lat] as [number, number]);
+    return {
+      version: 8 as const,
+      sources: {
+        world: {
+          type: 'image' as const,
+          url: `/v1/worlds/${encodeURIComponent(w.slug)}/map`,
+          coordinates: [tl!, tr!, br!, bl!] as [[number, number], [number, number], [number, number], [number, number]],
+        },
+      },
+      layers: [
+        { id: 'bg', type: 'background' as const, paint: { 'background-color': w.background || css('--surface') } },
+        { id: 'world', type: 'raster' as const, source: 'world', paint: { 'raster-fade-duration': 0 } },
+      ],
+    };
+  }
 
   let el = $state<HTMLDivElement | null>(null);
   let map: MLMap | null = null;
@@ -80,8 +104,8 @@
         if (cancelled || !el) return;
         const m = new ml.Map({
           container: el,
-          style: madeUp || !navigator.onLine ? { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': css('--surface') } }] } : styleUrl(theme.value),
-          attributionControl: { compact: true },
+          style: !navigator.onLine ? blank() : madeUp && world ? zwiftStyle(world) : styleUrl(theme.value),
+          attributionControl: madeUp && world?.map_corners ? { compact: true, customAttribution: '© Zwift' } : { compact: true },
           dragRotate: false,
           pitchWithRotate: false,
           cooperativeGestures: true,
@@ -95,6 +119,12 @@
           ready = true;
         });
         m.on('error', (e) => {
+          // Zwift's map didn't come: fall back to the plain background.
+          if ((e as { sourceId?: string }).sourceId === 'world' && m.getLayer('world')) {
+            m.removeLayer('world');
+            m.setPaintProperty('bg', 'background-color', css('--surface'));
+            return;
+          }
           // Tile failures are fine; a style failure means no basemap.
           if (!m.isStyleLoaded() && !ready) console.warn('map', e.error?.message);
         });

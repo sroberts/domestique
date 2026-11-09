@@ -42,6 +42,8 @@ type API struct {
 	Coach *coach.Writer
 	// Tools answer the LLM's lookups for POST /v1/ask (the MCP server).
 	Tools AskTools
+	// WorldMaps serves Zwift's world map images; nil turns them off.
+	WorldMaps *WorldMaps
 	// Gateway is true when the Outpost login gateway is in front (OUTPOST_AUTH=gateway).
 	Gateway bool
 	// background outlives requests (imports); cancelled on shutdown.
@@ -93,6 +95,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerExport(mux)
 	a.registerGear(mux)
 	a.registerAI(mux)
+	a.registerWorlds(mux)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such endpoint")
 	})

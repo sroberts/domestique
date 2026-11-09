@@ -253,7 +253,13 @@ export interface ChartStream {
 
 export interface ZwiftWorld {
   name: string;
+  slug: string;
   real: boolean;
+  /** [lat, lng] of Zwift's map image's top-left, top-right, bottom-right and
+   * bottom-left corners; absent when there's no image that lines up. */
+  map_corners?: [[number, number], [number, number], [number, number], [number, number]];
+  /** Colour at the image's edges, to fill the map beyond it. */
+  background?: string;
 }
 
 export interface ActivityDetail {

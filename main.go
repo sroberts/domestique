@@ -93,7 +93,8 @@ func run() error {
 	var ready atomic.Bool
 	gw := auth.FromEnv(log)
 	app := &api.API{MaxHR: maxHR, Log: log, Loc: loc, Uploads: &api.Uploads{}, Providers: map[string]*provider.Client{},
-		Gateway: gw.Enabled}
+		WorldMaps: &api.WorldMaps{Dir: filepath.Join(storage, "cache", "worlds")},
+		Gateway:   gw.Enabled}
 
 	appMux := http.NewServeMux()
 	app.Register(appMux)

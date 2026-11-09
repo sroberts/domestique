@@ -39,6 +39,56 @@ func TestZwiftWorldOf(t *testing.T) {
 	}
 }
 
+func TestZwiftWorldImages(t *testing.T) {
+	slugs := map[string]bool{}
+	images := 0
+	for _, w := range zwiftWorlds {
+		if w.Slug == "" || slugs[w.Slug] {
+			t.Errorf("%s: missing or repeated slug %q", w.Name, w.Slug)
+		}
+		slugs[w.Slug] = true
+		if (w.MapCorners == nil) != (w.imageURL == "") {
+			t.Errorf("%s: an image needs both a URL and corners", w.Name)
+		}
+		if got := ZwiftMapURL(w.Slug); got != w.imageURL {
+			t.Errorf("%s: ZwiftMapURL = %q", w.Name, got)
+		}
+		if w.MapCorners == nil {
+			continue
+		}
+		images++
+		if w.Real {
+			t.Errorf("%s: a real world keeps the real map", w.Name)
+		}
+		if w.Background == "" {
+			t.Errorf("%s: needs a background colour", w.Name)
+		}
+		// The corners must make a rectangle that covers the middle of the
+		// world's box, or routes would be drawn off the map.
+		minLat, maxLat, minLng, maxLng := 90.0, -90.0, 180.0, -180.0
+		for _, c := range w.MapCorners {
+			minLat, maxLat = min(minLat, c[0]), max(maxLat, c[0])
+			minLng, maxLng = min(minLng, c[1]), max(maxLng, c[1])
+		}
+		c := w.MapCorners
+		if c[0][0] != c[1][0] && c[0][1] != c[1][1] || c[2][0] != c[3][0] && c[2][1] != c[3][1] {
+			t.Errorf("%s: corners %v aren't a rectangle in order", w.Name, *c)
+		}
+		lat, lng := (w.minLat+w.maxLat)/2, (w.minLng+w.maxLng)/2
+		if lat < minLat || lat > maxLat || lng < minLng || lng > maxLng {
+			t.Errorf("%s: image %v doesn't cover the world's middle", w.Name, *c)
+		}
+	}
+	if images != 3 {
+		t.Errorf("%d worlds have images, want Watopia, Makuri Islands and Scotland", images)
+	}
+	for _, s := range []string{"", "atlantis", "../watopia", "france", "london", "https://cdn.zwift.com/x.png"} {
+		if got := ZwiftMapURL(s); got != "" {
+			t.Errorf("ZwiftMapURL(%q) = %q, want none", s, got)
+		}
+	}
+}
+
 // The boxes must not overlap, or the order of the table would decide which
 // world a route is in.
 func TestZwiftWorldsApart(t *testing.T) {
