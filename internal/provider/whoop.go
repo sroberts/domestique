@@ -264,8 +264,10 @@ func (w *Whoop) reconcile(ctx context.Context, since time.Time, seen map[string]
 // whoopSport maps Whoop's sport names onto Strava-style types the importer knows.
 func whoopSport(s string) string {
 	switch strings.ToLower(s) {
-	case "cycling", "mountain-biking", "spin", "assault-bike":
+	case "cycling", "mountain-biking":
 		return "Ride"
+	case "spin", "assault-bike":
+		return "VirtualRide"
 	case "running", "track-and-field":
 		return "Run"
 	case "walking":

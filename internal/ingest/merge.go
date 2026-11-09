@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -207,6 +208,41 @@ func merge(ls []loaded) *Merged {
 	return m
 }
 
+// rideSport decides whether a ride was indoors.
+//
+// Whoop can't know: it never records GPS, so its rides read as indoor only
+// for want of a track. It decides only when it's the sole recording; next to
+// a bike computer (Wahoo, which carries the GPS) or Zwift, it has no say.
+//
+// Among the rest, a recording that says outdoor has evidence for it: a GPS
+// track, an outdoor sub-sport, a climb on the altimeter, or the athlete's
+// own label. One without GPS that says indoor may only be guessing from the
+// missing track, so it can't overrule that. One that has a track and still
+// says indoor (Zwift, a head unit set to indoor) is sure, and wins.
+func rideSport(ls []loaded) string {
+	var sure, guess, outdoor bool
+	others := slices.ContainsFunc(ls, func(l loaded) bool {
+		return l.src.Source != "whoop" && activity.IsRide(l.src.Sport)
+	})
+	for _, l := range ls {
+		if others && l.src.Source == "whoop" {
+			continue
+		}
+		switch s := l.src; {
+		case s.Sport == activity.SportVirtualRide && s.HasGPS:
+			sure = true
+		case s.Sport == activity.SportVirtualRide:
+			guess = true
+		case s.Sport == activity.SportRide:
+			outdoor = true
+		}
+	}
+	if sure || guess && !outdoor {
+		return activity.SportVirtualRide
+	}
+	return activity.SportRide
+}
+
 // Rebuild recomputes an activity from all of its sources. FTP-dependent load
 // is left to RecalcLoad, which runs once per import batch.
 func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
@@ -246,8 +282,11 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 		a.MovingS = a.ElapsedS
 	}
 
-	// Sport: indoor if any recording says so; strength if the app logged it.
+	// Sport: strength if the app logged it; for rides, indoor or outdoor.
 	a.Sport = base.Sport
+	if activity.IsRide(a.Sport) {
+		a.Sport = rideSport(ls)
+	}
 	var app, zwift, strava, whoop *store.Source
 	for i := range ls {
 		s := &ls[i].src
@@ -260,9 +299,6 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 			strava = s
 		case "whoop":
 			whoop = s
-		}
-		if s.Sport == activity.SportVirtualRide && activity.IsRide(a.Sport) {
-			a.Sport = activity.SportVirtualRide
 		}
 	}
 	// System 1's reading of a workout its own source only called "other",
