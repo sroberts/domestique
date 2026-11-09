@@ -154,7 +154,10 @@ func (in *Ingester) addParsed(ctx context.Context, p *activity.Parsed, sha *stri
 		RawSHA256: sha,
 	}
 	if h.Sport != "" {
-		if sp := activity.TextSport(h.Sport, src.HasGPS); sp != activity.SportOther {
+		// A file that already says outdoor (an outdoor sub-sport, a climb)
+		// counts as moving, so a plain "Ride" label doesn't turn it indoor.
+		moved := src.HasGPS || p.Sport == activity.SportRide
+		if sp := activity.TextSport(h.Sport, moved); sp != activity.SportOther {
 			// The athlete's own label wins over the device's guess, except
 			// that an indoor file stays indoor.
 			if sp != activity.SportRide || p.Sport != activity.SportVirtualRide {

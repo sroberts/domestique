@@ -220,7 +220,9 @@ func merge(ls []loaded) *Merged {
 // says indoor (Zwift, a head unit set to indoor) is sure, and wins.
 func rideSport(ls []loaded) string {
 	var sure, guess, outdoor bool
-	others := slices.ContainsFunc(ls, func(l loaded) bool { return l.src.Source != "whoop" })
+	others := slices.ContainsFunc(ls, func(l loaded) bool {
+		return l.src.Source != "whoop" && activity.IsRide(l.src.Sport)
+	})
 	for _, l := range ls {
 		if others && l.src.Source == "whoop" {
 			continue

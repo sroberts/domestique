@@ -84,40 +84,62 @@ func ParseFIT(data []byte) (*Parsed, error) {
 			p.Start = b.start
 		}
 	}
-	p.Sport = fitSport(sport, sub, p.Manufacturer, p.Stream.HasGPS() || climbs(p.Stream.Altitude))
+	p.Sport = fitSport(sport, sub, p.Manufacturer, p.Stream.HasGPS() || climbs(p.Stream.T, p.Stream.Altitude))
 	p.finish()
 	return p, nil
 }
 
 // outdoorSub are the cycling sub-sports that only happen outside, so the file
-// says outdoor even when the GPS recorded nothing.
+// says outdoor even when the GPS recorded nothing. Road isn't one: it's many
+// head units' default profile, trainer rides included. Nor is track cycling:
+// velodromes are often indoors.
 var outdoorSub = map[fit.SubSport]bool{
-	fit.SubSportRoad: true, fit.SubSportMountain: true, fit.SubSportDownhill: true,
-	fit.SubSportCyclocross: true, fit.SubSportTrackCycling: true, fit.SubSportBmx: true,
-	fit.SubSportGravelCycling: true, fit.SubSportEBikeMountain: true,
+	fit.SubSportMountain: true, fit.SubSportDownhill: true, fit.SubSportCyclocross: true,
+	fit.SubSportBmx: true, fit.SubSportGravelCycling: true, fit.SubSportEBikeMountain: true,
 	fit.SubSportCommuting: true, fit.SubSportMixedSurface: true,
 }
 
-// climbMinM is how far a ride's altitude must range to count as moving over
-// the ground. A trainer ride stays within a few metres of barometric drift
-// (weather, the heating); almost any outdoor ride climbs more than this.
-const climbMinM = 30
+// A ride climbs when its altitude changes by climbMinM within climbWindowMin
+// minutes. Barometric drift on a trainer (weather, the heating) is a few
+// metres an hour, far slower; almost any outdoor ride gains or loses this
+// much in ten minutes somewhere.
+const (
+	climbMinM      = 20
+	climbWindowMin = 10
+)
 
-// climbs reports whether an altitude trace ranges over at least climbMinM,
-// ignoring the top and bottom 2% so a glitch can't fake a hill.
-func climbs(alt []float32) bool {
-	var v []float64
-	for _, a := range alt {
-		if !math.IsNaN(float64(a)) {
-			v = append(v, float64(a))
-		}
-	}
-	if len(v) < 60 {
+// climbs reports whether an altitude trace climbs (or descends). It works on
+// per-minute medians, so a glitch can't fake a hill. The stream has already
+// filled altitude gaps, so every sample is real.
+func climbs(t []int32, alt []float32) bool {
+	if len(alt) == 0 || len(alt) != len(t) {
 		return false
 	}
-	slices.Sort(v)
-	k := len(v) / 50
-	return v[len(v)-1-k]-v[k] >= climbMinM
+	var minute []int32
+	var med, bucket []float32
+	flush := func() {
+		if len(bucket) > 0 {
+			slices.Sort(bucket)
+			med = append(med, bucket[len(bucket)/2])
+			bucket = bucket[:0]
+		}
+	}
+	for i := range alt {
+		if m := t[i] / 60; len(minute) == 0 || m != minute[len(minute)-1] {
+			flush()
+			minute = append(minute, m)
+		}
+		bucket = append(bucket, alt[i])
+	}
+	flush()
+	for i := range med {
+		for j := i + 1; j < len(med) && minute[j]-minute[i] <= climbWindowMin; j++ {
+			if d := med[j] - med[i]; d >= climbMinM || d <= -climbMinM {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func manufacturer(m fit.Manufacturer) string {
