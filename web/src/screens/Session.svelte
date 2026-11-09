@@ -266,11 +266,11 @@
 
   <ActionBar session>
     {#if c.phase === 'ready'}
-      <button class="btn btn-primary" onclick={start} disabled={busy}>Start set</button>
+      <button class="btn btn-primary btn-go" onclick={start} disabled={busy}>Start set</button>
     {:else if c.phase === 'active'}
-      <button class="btn btn-primary" onclick={finishSet} disabled={busy}>Finish set</button>
+      <button class="btn btn-primary btn-stop" onclick={finishSet} disabled={busy}>Finish set</button>
     {:else if c.phase === 'rest' && slot}
-      <button class="btn btn-primary" onclick={start} disabled={busy}>
+      <button class="btn btn-primary btn-go" onclick={start} disabled={busy}>
         {newExercise ? `Start ${slot.exercise.name}` : `Start set ${slot.setIndex + 1}`}
       </button>
     {:else if c.phase === 'last'}

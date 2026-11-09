@@ -11,6 +11,10 @@ colors:
   dust: "#8a8f98"
   signal-yellow: "#f2c230"
   signal-yellow-press: "#d9ab1f"
+  go-green: "#4fc283"
+  go-green-press: "#3fae73"
+  stop-red: "#f0656a"
+  stop-red-press: "#e5484d"
   danger-red: "#e5484d"
   zone-1-slate: "#7d8590"
   zone-2-blue: "#4f8fd9"
@@ -31,6 +35,8 @@ colors:
   light-ink: "#1b1c1f"
   light-muted: "#6b6f76"
   light-signal: "#a87d00"
+  light-go: "#1f7a49"
+  light-stop: "#c8323a"
 typography:
   live:
     fontFamily: "Barlow Condensed, Arial Narrow, sans-serif-condensed, sans-serif"
@@ -105,6 +111,24 @@ components:
   button-primary-active:
     backgroundColor: "{colors.signal-yellow-press}"
     textColor: "{colors.graphite}"
+  button-go:
+    backgroundColor: "{colors.go-green}"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.m}"
+    height: "64px"
+    width: "100%"
+  button-go-active:
+    backgroundColor: "{colors.go-green-press}"
+    textColor: "{colors.graphite}"
+  button-stop:
+    backgroundColor: "{colors.stop-red}"
+    textColor: "{colors.graphite}"
+    rounded: "{rounded.m}"
+    height: "64px"
+    width: "100%"
+  button-stop-active:
+    backgroundColor: "{colors.stop-red-press}"
+    textColor: "{colors.graphite}"
   button-quiet:
     backgroundColor: "transparent"
     textColor: "{colors.dust}"
@@ -159,7 +183,7 @@ It explicitly rejects Strava's orange, social feeds, kudos and leaderboards; neo
 **Key Characteristics:**
 - Dark by default (graphite `#16171a`), with a complete light theme for daylight review.
 - Numbers are the hero: Barlow Condensed tabular numerals, 6rem live, 3rem target, 2rem stat.
-- One action colour, signal yellow, reserved for the current action and the active state.
+- One action colour, signal yellow, reserved for the current action and the active state. The one exception is mid-workout: Start set is green and Finish set is red, so the state reads at arm's length.
 - Meaning carries colour at full strength: recovery slabs, sport blocks and tags, zones, form, chart roles. Chrome never does.
 - Flat surfaces separated by 1px rules, not cards and shadows.
 - Workout actions are at least 56px tall, and the primary action is 64px tall and full width at the bottom.
@@ -171,6 +195,7 @@ A graphite dash and painted bone, with one stripe of team yellow and a zone ramp
 
 ### Primary
 - **Signal Yellow** (`#f2c230`, light theme `#a87d00`): the team-car tape. The primary action button, the active set's plate, focus rings and the current selection. Pressed state is `#d9ab1f`. Text on it is graphite (`#16171a`).
+- **Go and Stop** (green `#4fc283`, red `#f0656a`, pressed `#3fae73` and `#e5484d`; light theme `#1f7a49` and `#c8323a` with white text): the workout's set buttons. Start set is green, Finish set is red, so a glance from the bench says whether a set is running. Dark mode puts graphite text on them (8:1 and 5.8:1); light mode white (both above 5:1). They take the primary action's place and shape and are used nowhere else; Finish session stays signal yellow.
 
 ### Secondary
 - **Zone Ramp** (Z1 slate `#7d8590`, Z2 blue `#4f8fd9`, Z3 green `#45b07a`, Z4 amber `#f2a33a`, Z5 red `#e5484d`; light theme darkens each step): heart-rate effort, on time-in-zone bars, the heart-rate trace and per-set effort. Always paired with the zone number or label.
@@ -190,7 +215,7 @@ A graphite dash and painted bone, with one stripe of team yellow and a zone ramp
 - **Light theme**: background `#f4f1ea`, surface `#ffffff`, rules `#ddd8cc`, ink `#1b1c1f`, muted `#6b6f76`. The plate inverts to ink-on-light.
 
 ### Named Rules
-**The Tape Rule.** Signal yellow is only for "do this now" or "this one is active": the single primary action on screen, the plate of the set in progress, focus and selection. It never fills a card, a header, a chart series or decoration. If two things on one screen are yellow, one of them is wrong.
+**The Tape Rule.** Signal yellow is only for "do this now" or "this one is active": the single primary action on screen, the plate of the set in progress, focus and selection. It never fills a card, a header, a chart series or decoration. If two things on one screen are yellow, one of them is wrong. During a workout the set buttons are green (start) and red (finish) instead; they're still the single primary action for that state.
 
 **The Meaning-Paints Rule.** Colour belongs to things that mean something: a recovery, a sport, a zone, a form state, a chart role. Those get colour at full strength, as solid blocks with dark ink. Chrome (tabs, buttons, headers, borders) never wears a data colour, and a colour never appears without its word, number or icon beside it.
 
@@ -282,7 +307,7 @@ Used for choosing a view, such as the Combined / per-recording switch on an acti
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** keep exactly one signal-yellow primary action per state, full width, 64px tall, at the bottom of the screen.
+- **Do** keep exactly one primary action per state, full width, 64px tall, at the bottom of the screen: signal yellow, except Start set (green) and Finish set (red).
 - **Do** set every number the athlete acts on in Barlow Condensed with tabular figures, as the largest element near it.
 - **Do** pair every zone colour with its zone number or label ("Z3 150+"), in both the bar and the legend.
 - **Do** paint meaning at full strength: recovery as a solid slab, sports as solid blocks, with dark ink at 4.5:1 or better.
