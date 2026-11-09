@@ -1,13 +1,16 @@
 <script lang="ts">
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import BikePicker from '../components/BikePicker.svelte';
+  import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
   import ExportMenu from '../components/ExportMenu.svelte';
   import RouteMap from '../components/RouteMap.svelte';
   import Sources from '../components/Sources.svelte';
   import StreamPanels from '../components/StreamPanels.svelte';
   import ZoneRows from '../components/ZoneRows.svelte';
+  import { HTTPError, postJSON, putJSON } from '../lib/api';
   import { fetchActivity } from '../lib/data';
+  import { Recheck } from '../lib/recheck';
   import { activityExports } from '../lib/export';
   import { SOURCE_LABEL, SPORT_LABEL, day, duration, km, thousands, time } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
@@ -22,13 +25,19 @@
   // The recording shown alone, or '' for everything merged.
   let view = $state('');
   let loading = $state(false);
+  // Bumped to fetch again while the note is being written.
+  let tick = $state(0);
+  const recheck = new Recheck(() => tick++);
+  $effect(() => () => recheck.stop());
 
   $effect(() => {
     const want = view;
+    void tick;
     loading = true;
     fetchActivity(id, want || undefined).then((res) => {
       if (want !== view) return; // switched again before this arrived
       loading = false;
+      recheck.after((!!res.data?.note?.pending || !!res.data?.name_suggestion?.pending) && !res.stale);
       if (!res.data && d) return; // keep what's on screen; the switch just didn't load
       d = res.data;
       stale = res.stale;
@@ -40,6 +49,70 @@
       if (sid && !want && !res.data?.versions) router.go(`/session/${sid}/summary`, { replace: true });
     });
   });
+
+  let keeping = $state(false);
+  let keepError = $state('');
+  /** Overrule System 1: this was a real workout, so count its load. */
+  async function keep() {
+    if (!d || keeping) return;
+    keeping = true;
+    keepError = '';
+    try {
+      await postJSON(`/v1/activities/${encodeURIComponent(d.activity.id)}/keep`);
+      d.stray = false;
+    } catch (err) {
+      keepError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
+    } finally {
+      keeping = false;
+    }
+  }
+
+  let restoring = $state(false);
+  let restoreError = $state('');
+  /** Overrule System 1: the data it left out was fine, so put it back. */
+  async function dataOK() {
+    if (!d || restoring) return;
+    restoring = true;
+    restoreError = '';
+    try {
+      await postJSON(`/v1/activities/${encodeURIComponent(d.activity.id)}/data-ok`);
+      tick++; // zones, charts and load change: fetch again
+    } catch (err) {
+      restoreError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
+    } finally {
+      restoring = false;
+    }
+  }
+
+  const CHANNEL: Record<string, string> = { hr: 'Heart rate', power: 'Power' };
+  /** "Heart rate looked wrong (strap dropouts)", one line per channel. */
+  const badLines = $derived(
+    Object.entries(d?.bad_data ?? {}).map(([ch, why]) => `${CHANNEL[ch] ?? ch} looked wrong${why ? ` (${why})` : ''}`)
+  );
+
+  let naming = $state(false);
+  let nameError = $state('');
+  /** Take the suggested name (in Domestique only), or hide it for good. */
+  async function useName(take: boolean) {
+    const s = d?.name_suggestion?.text;
+    if (!d || !s || naming) return;
+    naming = true;
+    nameError = '';
+    const path = `/v1/activities/${encodeURIComponent(d.activity.id)}`;
+    try {
+      if (take) {
+        await putJSON(`${path}/name`, { name: s });
+        d.activity.name = s;
+      } else {
+        await postJSON(`${path}/name-suggestion/dismiss`);
+      }
+      d.name_suggestion = undefined;
+    } catch (err) {
+      nameError = err instanceof HTTPError ? err.message : 'No connection. Try again when online.';
+    } finally {
+      naming = false;
+    }
+  }
 
   // Names for each recording, told apart when one app recorded twice (Whoop's
   // own record and the copy it posted to Strava, or a ride Whoop split).
@@ -142,6 +215,16 @@
       <span class="sport-tag sport-{kind}">{SPORT_LABEL[a.sport] ?? a.sport}</span>
       {day(a.start_at)} · {time(a.start_at)}{#if a.route} · {a.route}{/if}
     </p>
+    {#if d.name_suggestion?.text && !d.view}
+      <div class="rename" role="group" aria-label="Suggested name">
+        <p>Call it <strong>{d.name_suggestion.text}</strong>?</p>
+        <div class="rename-actions">
+          <button type="button" class="btn" onclick={() => useName(true)} disabled={naming}>Use this name</button>
+          <button type="button" class="btn btn-quiet" onclick={() => useName(false)} disabled={naming}>Dismiss</button>
+        </div>
+        {#if nameError}<p class="small">{nameError}</p>{/if}
+      </div>
+    {/if}
     {#if d.versions}
       <div class="versions-switch" role="group" aria-label="Show this workout as" aria-busy={loading}>
         <button type="button" class="vbtn" aria-pressed={!view} onclick={() => (view = '')}>Combined</button>
@@ -189,7 +272,29 @@
         <div><dt class="label">Strain</dt><dd><span class="num">{a.strain.toFixed(1)}</span></dd></div>
       {/if}
     </dl>
-    <p class="note">{loadNote()}</p>
+    {#if d.stray}
+      <div class="notice stray" role="status">
+        <p>This looks like a stray entry rather than a workout, so it isn't counted in training load.</p>
+        <button class="btn" onclick={keep} disabled={keeping}>It was real: count it</button>
+        {#if keepError}<p class="small">{keepError}</p>{/if}
+      </div>
+    {:else}
+      <p class="note">{#if d.ride_type}<span class="tag ride-type" title="What kind of ride, by System 1">{d.ride_type}</span> {/if}{loadNote()}</p>
+    {/if}
+    {#if badLines.length && !d.view}
+      <div class="notice stray" role="status">
+        <p>{badLines.join('. ')}, so it's left out of load and zones.</p>
+        <button class="btn" onclick={dataOK} disabled={restoring}>It's fine: use it</button>
+        {#if restoreError}<p class="small">{restoreError}</p>{/if}
+      </div>
+    {/if}
+    {#if d.note?.text}<CoachNote text={d.note.text} />{/if}
+    {#if d.tags?.length || d.tag_note}
+      <p class="tags" aria-label="From your description">
+        {#each d.tags ?? [] as t (t)}<span class="tag">{t}</span>{/each}
+        {#if d.tag_note}<span class="tag-note">{d.tag_note}</span>{/if}
+      </p>
+    {/if}
     {#if isRide && !stale && !d.view}<BikePicker activityId={a.id} />{/if}
 
     {#if d.strength && a.session_id}
@@ -398,6 +503,51 @@
   }
   .block {
     margin-top: var(--space-6);
+  }
+  .rename {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    margin-top: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+  }
+  .rename p {
+    margin: 0;
+  }
+  .rename-actions {
+    display: flex;
+    gap: var(--space-2);
+  }
+  .stray {
+    display: grid;
+    gap: var(--space-2);
+  }
+  .stray p {
+    margin: 0;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+  }
+  .tag {
+    font-family: var(--font-mono);
+    font-size: var(--size-small);
+    padding: 0.0625rem 0.375rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-s);
+  }
+  .ride-type {
+    color: var(--text);
+  }
+  .tag-note {
+    font-size: var(--size-small);
+    color: var(--text-muted);
   }
   .block-h {
     display: flex;

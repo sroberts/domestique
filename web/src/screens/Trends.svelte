@@ -1,12 +1,16 @@
 <script lang="ts">
+  import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
+  import ExerciseAliases from '../components/ExerciseAliases.svelte';
   import LoadChart from '../components/LoadChart.svelte';
+  import AskLink from '../components/AskLink.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import WeekBars from '../components/WeekBars.svelte';
-  import { fetchLoad, fetchTrends } from '../lib/data';
+  import { cachedGet, fetchLoad, fetchTrends } from '../lib/data';
+  import { Recheck } from '../lib/recheck';
   import { day, time } from '../lib/format';
   import { link } from '../lib/router.svelte';
-  import type { LoadDay, Trends } from '../lib/types';
+  import type { LoadDay, Trends, WeekNote } from '../lib/types';
 
   const ranges = [
     { days: 90, label: '3 months' },
@@ -34,6 +38,19 @@
     });
   });
 
+  // Last week's note from Outpost's LLM, when there's a model.
+  let week = $state<WeekNote | null>(null);
+  let weekTick = $state(0);
+  const recheck = new Recheck(() => weekTick++);
+  $effect(() => () => recheck.stop());
+  $effect(() => {
+    void weekTick;
+    cachedGet<WeekNote>('/v1/week-note').then((r) => {
+      if (r.data) week = r.data;
+      recheck.after(!!r.data?.note?.pending && !r.stale);
+    });
+  });
+
   let curveDurations = $derived(trends?.curve_all_time.map((c) => c.duration) ?? []);
   let hasPower = $derived(!!trends?.curve_all_time.some((c) => c.watts > 0));
   // When every best is recent, two identical lines would be one line and a legend lie.
@@ -55,9 +72,14 @@
 <main class="page">
   <header class="top">
     <h1>Trends</h1>
+    <AskLink />
     <SyncStatus />
   </header>
   {#if stale}<p class="notice">No connection. Showing trends as of {time(stale)}.</p>{/if}
+  {#if week?.note?.text}<CoachNote label={`Week of ${day(new Date(`${week.week}T12:00:00`).getTime())}`} text={week.note.text} />{/if}
+  {#if week?.keeps_coming_up?.length}
+    <p class="recurring"><span class="label">Keeps coming up in your notes</span> {week.keeps_coming_up.join('; ')}</p>
+  {/if}
 
   {#if empty}
     <section class="empty">
@@ -146,6 +168,7 @@
               </li>
             {/each}
           </ul>
+          <ExerciseAliases onchange={() => fetchTrends().then((r) => (trends = r.data ?? trends))} />
         </section>
       {/if}
     {/if}
@@ -171,6 +194,14 @@
   }
   h1 {
     font-size: var(--size-heading);
+  }
+  .recurring {
+    margin: var(--space-2) 0 0;
+    font-size: var(--size-small);
+    max-width: 62ch;
+  }
+  .recurring .label {
+    display: block;
   }
   .notice {
     margin-top: var(--space-3);

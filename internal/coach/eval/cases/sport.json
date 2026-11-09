@@ -1,0 +1,18 @@
+[
+  {"name": "lifting: 50 min, low HR, no distance", "want": "strength",
+   "facts": {"name": "Afternoon Workout", "source": "whoop", "local_start": "Tue 17:30", "minutes": 50, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 108, "whoop_strain": 7.1}},
+  {"name": "run: 6.1 km at 10.8 km/h, cadence 168", "want": "run",
+   "facts": {"name": "Afternoon Activity", "source": "whoop", "local_start": "Sat 08:10", "minutes": 34, "distance_km": 6.1, "has_gps": true, "has_power": false, "has_heart_rate": true, "avg_hr": 154, "avg_speed_kmh": 10.8, "avg_cadence": 168}},
+  {"name": "ride: 62 km at 27 km/h with power", "want": "ride",
+   "facts": {"name": "Morning Activity", "source": "whoop", "local_start": "Sun 08:00", "minutes": 140, "distance_km": 62.0, "has_gps": true, "has_power": true, "has_heart_rate": true, "avg_hr": 138, "avg_speed_kmh": 27.0, "avg_cadence": 86}},
+  {"name": "walk: 3.4 km at 5 km/h, HR 96", "want": "walk",
+   "facts": {"name": "Activity", "source": "whoop", "local_start": "Thu 19:02", "minutes": 41, "distance_km": 3.4, "has_gps": true, "has_power": false, "has_heart_rate": true, "avg_hr": 96, "avg_speed_kmh": 5.0}},
+  {"name": "swim: 1.6 km in 40 min, no GPS", "want": "swim",
+   "facts": {"name": "Pool", "source": "whoop", "local_start": "Mon 06:30", "minutes": 40, "distance_km": 1.6, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 131, "avg_speed_kmh": 2.4}},
+  {"name": "described as gym lifting", "want": "strength",
+   "facts": {"name": "Workout", "source": "strava", "local_start": "Wed 12:10", "minutes": 55, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 112, "description": "Squats 5x5, deadlifts, then some pull-ups"}},
+  {"name": "yoga: an hour at HR 84", "want": "",
+   "facts": {"name": "Activity", "source": "whoop", "local_start": "Sun 10:00", "minutes": 60, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 84, "whoop_strain": 3.2}},
+  {"name": "nothing to go on", "want": "",
+   "facts": {"name": "Activity", "source": "whoop", "local_start": "Fri 14:00", "minutes": 20, "has_gps": false, "has_power": false, "has_heart_rate": false}}
+]

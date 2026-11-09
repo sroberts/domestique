@@ -133,6 +133,19 @@ export interface Summary {
   set_stats: SetStat[];
   progress: Progress;
   alignment?: Alignment;
+  /** System 1's reading of how hard each set was, by set id (Outpost AI). */
+  efforts?: Record<string, { level: EffortLevel; score: number }>;
+  efforts_pending?: boolean;
+  /** The LLM's debrief of the session (Outpost AI). */
+  note?: AINote;
+}
+
+export type EffortLevel = 'easy' | 'working' | 'hard' | 'limit';
+
+/** Prose from Outpost's LLM, or the promise of it. */
+export interface AINote {
+  text?: string;
+  pending?: boolean;
 }
 
 export interface Today {
@@ -148,6 +161,18 @@ export interface Today {
   recent: Session[];
   latest: ActivityRow[];
   athlete: Athlete;
+  /** An easier session the LLM proposes on a hold-back day. */
+  ease?: EaseView;
+  /** The plan is the eased one the athlete took. */
+  eased?: boolean;
+  /** System 1 thinks the last mornings look like an illness coming on. */
+  run_down?: boolean;
+}
+
+export interface EaseView {
+  reason: string;
+  exercises: Exercise[];
+  model?: string;
 }
 
 // ---- Activities, load, trends (v1/activities, v1/load, v1/trends) ----
@@ -242,6 +267,36 @@ export interface ActivityDetail {
   versions?: Version[];
   /** The source shown alone, or absent for the merged view. */
   view?: string;
+  /** From Outpost's models, merged view only. */
+  note?: AINote;
+  tags?: string[];
+  tag_note?: string;
+  /** System 1 judged this a stray entry; it carries no load until kept. */
+  stray?: boolean;
+  /** Channels System 1 judged broken and left out ("hr", "power"), with why. */
+  bad_data?: Record<string, string>;
+  /** What kind of ride: endurance, tempo, intervals, race, commute, recovery. */
+  ride_type?: string;
+  /** A name the LLM suggests for one still called "Afternoon Ride". */
+  name_suggestion?: AINote;
+}
+
+export interface WeekNote {
+  week: string;
+  ai: boolean;
+  note: AINote | null;
+  /** What the athlete kept writing about: "knee, 4 times in 3 weeks". */
+  keeps_coming_up?: string[];
+}
+
+/** POST /v1/ask: an answer from Outpost's LLM, looked up in the athlete's data. */
+export interface AskResult {
+  answer: string;
+  model?: string;
+  /** The read-only tools it called, e.g. "get_training_load". */
+  tools: string[];
+  /** False when the model's answer failed the number check and answer is the fallback. */
+  checked: boolean;
 }
 
 /** One recording's own account of a workout, before merging. */
@@ -294,6 +349,10 @@ export interface Readiness {
   level: 'push' | 'normal' | 'hold' | 'easy';
   title: string;
   detail: string;
+  /** "llm" when the operator's model wrote title and detail; the level is always the rules'. */
+  source?: 'llm';
+  /** The model is writing today's call now; ask again shortly. */
+  pending?: boolean;
 }
 
 export interface SleepRecord {
@@ -355,4 +414,22 @@ export interface ProviderStatus {
   client_id?: string;
   /** Token to give Wahoo for its webhooks. */
   webhook_token?: string;
+}
+
+/** A finished workout read from text, for the athlete to check before saving. */
+export interface LoggedDraft {
+  name: string;
+  started_at: number;
+  minutes: number;
+  exercises: Exercise[];
+  /** What the text mentioned that isn't lifting; never saved. */
+  not_logged?: string[];
+}
+
+/** An exercise name counted as another, from System 1. */
+export interface ExerciseAlias {
+  name: string;
+  to: string;
+  p?: number;
+  at: number;
 }

@@ -14,7 +14,7 @@ GOLANGCI ?= $(shell command -v golangci-lint 2>/dev/null || echo "go run github.
 # coverage grows, never lower it to make a change pass.
 COVER_MIN := 46
 
-.PHONY: help all web web-check build test test-race cover vet lint fmt fmt-check tidy conformance check run dev release clean
+.PHONY: help all web web-check build test test-race cover vet lint fmt fmt-check tidy conformance check eval run dev release clean
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -65,6 +65,14 @@ conformance: ## Run the built binary against the Outpost service checklist
 	bash scripts/conformance.sh
 
 check: fmt-check tidy lint cover test-race web-check conformance ## Everything CI runs
+
+# Score the models on Domestique's questions (internal/coach/eval). With
+# SYSTEM1 or LLM set, against Ollama on this machine; otherwise through
+# Outpost, from OUTPOST_AI_URL and OUTPOST_AI_TOKEN.
+#   make eval SYSTEM1=laya
+OLLAMA ?= http://127.0.0.1:11434
+eval: ## Score the models on fixed cases (SYSTEM1=laya for local Ollama)
+	go run ./cmd/eval $(if $(SYSTEM1)$(LLM),-ollama $(OLLAMA) -system1 '$(SYSTEM1)' -llm '$(LLM)') $(EVAL_ARGS)
 
 # Run locally with demo Whoop data (recovery, heart rate, strain).
 run: build ## Build, then run with demo data on PORT

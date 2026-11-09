@@ -2,7 +2,10 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import ActionBar from '../components/ActionBar.svelte';
   import ActivityRow from '../components/ActivityRow.svelte';
+  import EaseOffer from '../components/EaseOffer.svelte';
   import GearReminder from '../components/GearReminder.svelte';
+  import AskLink from '../components/AskLink.svelte';
+  import RunDown from '../components/RunDown.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, fetchToday, localDate } from '../lib/api';
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
@@ -23,10 +26,20 @@
   let starting = $state(false);
   let slow = $state(false);
 
+  // While Outpost's LLM writes today's call, look again a few times; the
+  // rule-based call stands meanwhile, and for good if the model never answers.
+  const RECHECK_MS = 20_000;
+  const RECHECKS = 9;
+  let rechecks = 0;
+  let recheck: ReturnType<typeof setTimeout> | undefined;
+
   $effect(() => {
     const t = setTimeout(() => (slow = true), 400);
     void refresh();
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(recheck);
+    };
   });
 
   async function refresh() {
@@ -36,6 +49,11 @@
     try {
       today = await fetchToday(date);
       load = 'fresh';
+      clearTimeout(recheck);
+      if (today.readiness.pending && rechecks < RECHECKS) {
+        rechecks++;
+        recheck = setTimeout(() => void refresh(), RECHECK_MS);
+      }
       await cacheToday($state.snapshot(today) as Today);
       void fetchTemplates(); // keep the workout list on the phone for offline starts
     } catch (err) {
@@ -111,6 +129,7 @@
 <main class="today">
   <header class="top">
     <span class="wordmark">Domestique</span>
+    <AskLink />
     <SyncStatus />
   </header>
 
@@ -151,6 +170,7 @@
       <h1 id="call-h" class="call-title">{today.readiness.title}</h1>
       <p class="call-detail">{today.readiness.detail}</p>
     </section>
+    {#if today.run_down}<RunDown {date} ondismiss={refresh} />{/if}
 
     <section class="body" aria-label="Recovery and sleep">
       <dl class="vitals">
@@ -170,6 +190,9 @@
           <a class="more" href="/workouts" use:link aria-label="Change today's workout">Change</a>
         </div>
         <p class="mono plan-meta">{shapeText(plan.exercises)} · {totalSets} sets · about {estimateMinutes(plan.exercises)} min</p>
+        {#if (today.ease || today.eased) && !doneToday}
+          <EaseOffer {date} ease={today.ease} eased={today.eased} plan={plan.exercises} onchange={refresh} />
+        {/if}
         <ol class="sheet">
           {#each plan.exercises as ex, i (i)}
             {@const s = summarizeSets(ex.sets)}

@@ -26,6 +26,7 @@ import (
 
 	"domestique/internal/api"
 	"domestique/internal/auth"
+	"domestique/internal/coach"
 	"domestique/internal/demo"
 	"domestique/internal/importer"
 	"domestique/internal/ingest"
@@ -34,6 +35,7 @@ import (
 	"domestique/internal/provider"
 	"domestique/internal/seed"
 	"domestique/internal/store"
+	"domestique/internal/sweep"
 	"domestique/internal/webui"
 )
 
@@ -95,7 +97,9 @@ func run() error {
 
 	appMux := http.NewServeMux()
 	app.Register(appMux)
-	appMux.Handle("/mcp", &mcp.Server{API: appMux, Version: version})
+	mcpSrv := &mcp.Server{API: appMux, Version: version}
+	app.Tools = mcpSrv
+	appMux.Handle("/mcp", mcpSrv)
 	appMux.Handle("/", webui.Handler())
 	guarded := gw.Middleware(appMux)
 
@@ -158,6 +162,11 @@ func run() error {
 		ing := &ingest.Ingester{Store: s, StorageDir: storage, Log: log, Loc: loc}
 		app.Ingest = ing
 		app.SetBackground(ctx)
+		if ai := coach.FromEnv(); ai != nil {
+			// Outpost's models (service spec §15): the LLM rewrites the day's call.
+			app.Coach = &coach.Writer{AI: ai, KV: s, Log: log, Background: ctx}
+			log.Info("outpost AI models available: notes, tags and second opinions on workouts")
+		}
 		if os.Getenv("DOMESTIQUE_DEMO") == "1" {
 			delay := time.Duration(envInt("DOMESTIQUE_DEMO_HR_DELAY", 15)) * time.Second
 			app.Demo = &demo.Demo{Store: s, MaxHR: maxHR, HRDelay: delay}
@@ -172,6 +181,13 @@ func run() error {
 			default:
 			}
 		}
+		// With Outpost's models, each recalc is followed by a sweep that asks
+		// them about new workouts; one that changes something kicks another
+		// recalc, and the next sweep finds nothing new.
+		var sw *sweep.Sweeper
+		if app.Coach != nil && app.Demo == nil {
+			sw = &sweep.Sweeper{W: app.Coach, Store: s, Ingest: ing, Log: log, Loc: loc, Recalc: app.Recalc}
+		}
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
@@ -179,6 +195,10 @@ func run() error {
 			for {
 				if _, err := load.Recalc(ctx, s, maxHR); err != nil && ctx.Err() == nil {
 					log.Warn("load recalc", "err", err.Error())
+				}
+				if sw != nil {
+					workers.Add(1)
+					go func() { defer workers.Done(); sw.Run(ctx) }()
 				}
 				select {
 				case <-ctx.Done():
@@ -379,6 +399,7 @@ func logRequests(log *slog.Logger, next http.Handler) http.Handler {
 // remerge folds together recordings of one workout that an older, stricter
 // matching rule left apart. It runs once per rule.
 func remerge(ctx context.Context, s *store.Store, ing *ingest.Ingester, log *slog.Logger) {
+	backfillRoutes(ctx, s, ing, log)
 	if v, err := s.SyncState(ctx, "merge:rule"); err == nil && v == ingest.MergeRule {
 		return
 	}
@@ -393,4 +414,23 @@ func remerge(ctx context.Context, s *store.Store, ing *ingest.Ingester, log *slo
 		log.Warn("re-merge", "err", err.Error())
 	}
 	log.Info("re-merged recordings", "rule", ingest.MergeRule, "activities", len(changed))
+}
+
+// backfillRoutes reads Zwift route names out of descriptions imported before
+// Domestique looked there, once per ingest.RouteRule.
+func backfillRoutes(ctx context.Context, s *store.Store, ing *ingest.Ingester, log *slog.Logger) {
+	if v, err := s.SyncState(ctx, "route:rule"); err == nil && v == ingest.RouteRule {
+		return
+	}
+	n, err := ing.BackfillRoutes(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Warn("route backfill", "err", err.Error())
+		}
+		return
+	}
+	if err := s.SetSyncState(ctx, "route:rule", ingest.RouteRule); err != nil {
+		log.Warn("route backfill", "err", err.Error())
+	}
+	log.Info("routes read from descriptions", "rule", ingest.RouteRule, "activities", n)
 }

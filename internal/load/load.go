@@ -162,6 +162,10 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 		}
 	}
 
+	stray, err := Strays(ctx, st)
+	if err != nil {
+		return Athlete{}, err
+	}
 	for i, a := range acts {
 		m := ms[i]
 		if activity.IsRide(a.Sport) && len(m.PowerCurve) > idx20min && m.PowerCurve[idx20min] > 0 {
@@ -184,6 +188,11 @@ func Recalc(ctx context.Context, st *store.Store, fallbackMaxHR int) (Athlete, e
 		}
 
 		tss, intensity, method := score(a, m, ftp, ath)
+		if stray[a.ID] {
+			// System 1 judged it no real workout (internal/sweep), and the
+			// athlete hasn't said otherwise: it carries no load.
+			tss, intensity, method = 0, 0, "stray"
+		}
 		if a.FTP != ftp || a.TSS != tss || a.Intensity != intensity || a.LoadMethod != method {
 			if err := st.SetLoad(ctx, a.ID, ftp, tss, intensity, method); err != nil {
 				return Athlete{}, err
@@ -298,3 +307,22 @@ func r1(v float64) float64 { return math.Round(v*10) / 10 }
 
 // ErrNoData is returned when there is nothing to model yet.
 var ErrNoData = errors.New("no activities")
+
+// StrayPrefix keys System 1's verdict that an activity is no real workout:
+// "stray" excludes it from load, "kept" is the athlete overruling it.
+const StrayPrefix = "ai:stray:"
+
+// Strays is the set of activities excluded from load as stray entries.
+func Strays(ctx context.Context, st *store.Store) (map[string]bool, error) {
+	kv, err := st.SyncStatePrefix(ctx, StrayPrefix)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for id, v := range kv {
+		if v == "stray" {
+			out[id] = true
+		}
+	}
+	return out, nil
+}

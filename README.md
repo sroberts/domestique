@@ -30,6 +30,127 @@ strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 | `DOMESTIQUE_TZ` | Athlete's time zone for days and weeks (default: system) |
 | `DOMESTIQUE_MAX_HR` | Fallback max HR until one is detected (default 190) |
 | `DOMESTIQUE_DEMO=1` | Stand-in Whoop data until Whoop is connected |
+| `OUTPOST_AI_URL`, `OUTPOST_AI_TOKEN` | Set by Outpost when the operator has chosen models (service spec §15); see [Outpost's AI models](#outposts-ai-models) |
+
+### Outpost's AI models
+
+When Outpost provides models (`OUTPOST_AI_URL`, `OUTPOST_AI_TOKEN`, service
+spec §15), Domestique uses them as an enhancement. Without them, or while a
+model is down, every screen shows what it showed before. No model call runs
+inside a request: a response carries `pending` while the work runs in the
+background, the app checks again shortly, and results are kept in
+`sync_state`. They're redone only when their facts (or the prompt) change,
+and after a failure the same work waits 15 minutes.
+
+**The LLM** writes, in a directeur sportif's voice:
+- **Today's readiness call:** a rewording of the rule-based call. The rules
+  still decide the level and the day's weights.
+- **A note on each workout** (activity page), and **a debrief of each lifting
+  session** (session summary), from their metrics and your own description.
+- **A note on last week** (Trends, and the `get_week_note` MCP tool).
+- **Tags and a lasting fact from your descriptions**, from a fixed list
+  (`ill`, `new gear`, `sore`, `rain`…). Lines apps write themselves (Zwift's
+  route and power-best lines, Whoop's strain sentence) are skipped.
+- **A workout from text** in the editor ("5x5 squat at 100, 3x8 RDL 80").
+  It fills in the draft for you to check, and saves nothing.
+- **Answers about your own data** (Ask, linked from Today and Trends, and
+  `POST /v1/ask`): "how has my threshold moved since June?" The LLM looks
+  things up with the MCP server's read-only tools (today, activities,
+  load, recovery, trends, gear, workouts, the week note), which run through
+  the same handlers as the app; it's never offered a tool that changes
+  anything. Up to 6 rounds, 150 seconds at most, and the last few turns are
+  kept for follow-ups. This one runs inside the request, since there's
+  nothing to show until it's done. Every number in the answer must appear in
+  what the tools returned or in the conversation; otherwise the answer is
+  retried once, then replaced with a plain "couldn't answer without
+  guessing".
+- **An easier session on a hold-back day.** When readiness says hold or ease
+  off and a lift is planned, Today offers a lighter version of the day's
+  prescription: "Use the easier version" or "Keep the plan". It must keep
+  every exercise and only drop sets, reps or weight, and taking it changes
+  that day's plan, never the workout.
+- **A finished workout from text** (Workouts → "Log a finished workout"):
+  "this morning: 3x10 push-ups, squats 5x5 at 80, last set only 3" becomes
+  a draft with the sets as done, the day and the time. You check it, and
+  Save stores it as a finished session like one logged live. Walks, runs
+  and other cardio it mentions are listed as not logged, never invented.
+- **Parts you wrote about fitting** ("new chain on the Tarmac today"),
+  offered on the Gear page as "Add it" or "Dismiss". Only descriptions that
+  name a part are read; each suggestion quotes your words, goes on the bike
+  you named (or the ride's bike), and replaces the part fitted at the time.
+  Nothing changes until you add it, and a part already logged near that date
+  isn't offered.
+- **A better name** for a workout still called "Afternoon Ride", "Zwift" or
+  the like, from its route and your description, on the activity page. "Use
+  this name" renames it in Domestique only (never on Strava), and it stays
+  through merges and rebuilds; "Dismiss" hides the suggestion for good.
+
+**What keeps coming up** needs no model: a body part (or illness) named in
+your notes on three or more different days in three weeks shows under the
+week note on Trends ("knee, 4 times in 3 weeks"), and the week note may
+mention it.
+
+Prose is rejected, and nothing shown, unless it is the expected JSON, short
+enough, free of `!`, and uses only numbers that appear in its facts, with no
+more than a couple of figures beyond small counts.
+
+**The System 1 model** answers typed questions, and Domestique changes data
+only on a confident answer. Each question has its own bar (`coach.Bars`),
+set from `make eval` runs so that no case is acted on wrongly: 0.85 by
+default; 0.9 to merge two recordings; 0.92 to ask "feeling run down?" or to
+call a channel broken; 0.93 to call an entry a stray; 0.94 to count two
+exercise names as one; 0.65 for a ride's type, which is only shown:
+- the sport of a workout labelled "other";
+- whether a ride with no GPS was indoors;
+- whether two overlapping recordings that heart rate kept apart are one
+  workout (they're then merged);
+- whether a hand-typed Strava entry with no file is a stray. A stray is left
+  out of training load, says so on its page, and "It was real: count it"
+  restores it;
+- how hard each lifting set was (easy, working, hard, limit), shown as a word
+  beside the set when the model gives a confidence of at least 0.5;
+- whether the last three mornings look like an illness coming on: resting
+  heart rate up and HRV down against your own 28-day baseline, more than
+  training explains. Today then asks "Feeling run down?", which you can
+  dismiss for the day. It never changes the readiness call.
+- whether a recording's heart rate or power is broken (strap dropouts, a
+  sensor reading cadence, impossible spikes, zeros while pedalling). Go works
+  out the numbers and only asks about channels that already look off. A
+  broken channel is left out of the merged view, zones and load, another
+  recording's is used where there is one, and "It's fine: use it" puts it
+  back;
+- what kind of ride each ride was (endurance, tempo, intervals, race,
+  commute, recovery), shown on the activity and given to the week's note as
+  minutes per type;
+- whether an exercise name you haven't used before is one you already log,
+  written another way ("BB bench" as Bench Press, "RDL" as Romanian
+  Deadlift). A match counts its sets with the older name's, for history,
+  weight progression and PRs; Trends lists each under "Counted together"
+  with an Undo. Variations that train differently (front and back squat,
+  incline and flat bench) are kept apart.
+
+A background sweep asks these about stored workouts after each load
+recalculation, asking each question once per set of facts. The first sweep
+over a long history takes a while on a local model: hundreds of descriptions
+at tens of seconds each.
+
+**Checking a model.** `make eval` puts a fixed set of cases
+(`internal/coach/eval/cases`) to the models and shows, per question, what
+Domestique would do with each answer: hits, misses (not sure enough to act),
+and WRONG actions, plus the lowest bar with no wrong action. Run it whenever
+Outpost's models change. It goes through Outpost when `OUTPOST_AI_URL` and
+`OUTPOST_AI_TOKEN` are set, or straight to Ollama on this machine:
+
+    make eval SYSTEM1=laya
+    make eval SYSTEM1=d1 EVAL_ARGS="-q stray,same -v"
+
+It exits 1 if any answer would be acted on wrongly at today's bars. On
+Laya and d1 (November 2026), no question has a wrong action at its bar.
+Neither model can yet grade set effort reliably, so it mostly stays blank,
+and neither tells sports apart from numbers alone.
+
+Zwift's "🗺️ Route in World" line is read into the activity's route without
+any model. Earlier imports are backfilled once at startup.
 
 ### Secrets
 

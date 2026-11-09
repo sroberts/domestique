@@ -23,6 +23,10 @@
     type GearStatus,
     type GearView,
     type SensorView,
+    acceptGearSuggestion,
+    dismissGearSuggestion,
+    fetchGearSuggestions,
+    type GearSuggestion,
   } from '../lib/gear';
 
   let g = $state<GearView | null>(null);
@@ -34,6 +38,31 @@
     g = r.data;
     stale = r.stale;
     failed = !r.data;
+    // Parts read from your own descriptions, when there's a model. Optional:
+    // offline or without one, there's simply nothing to offer.
+    fetchGearSuggestions().then(
+      (s) => (suggestions = s.suggestions),
+      () => (suggestions = []),
+    );
+  }
+
+  let suggestions = $state<GearSuggestion[]>([]);
+  let suggesting = $state('');
+  let suggestMsg = $state('');
+  async function decide(s: GearSuggestion, accept: boolean) {
+    if (suggesting) return;
+    suggesting = s.id;
+    suggestMsg = '';
+    try {
+      if (accept) await acceptGearSuggestion(s.id);
+      else await dismissGearSuggestion(s.id);
+      suggestions = suggestions.filter((x) => x.id !== s.id);
+      if (accept) await load();
+    } catch (err) {
+      suggestMsg = err instanceof AuthError ? 'Sign in again to save.' : `Couldn't save: ${(err as Error).message}`;
+    } finally {
+      suggesting = '';
+    }
   }
   $effect(() => {
     void load();
@@ -307,6 +336,26 @@
       <p class="muted small">Chest strap? <button class="linkish" onclick={addSensor}>Track its battery</button> by hours of use.</p>
     </section>
   {:else if g}
+    {#if suggestions.length && !stale}
+      <section class="suggest" aria-labelledby="sg-h">
+        <h2 id="sg-h" class="label">From your ride notes</h2>
+        <ul>
+          {#each suggestions as s (s.id)}
+            <li>
+              <p>
+                <strong>{s.text}</strong>{#if s.replaces_name}, replacing the {s.replaces_name.toLowerCase()}{/if}.
+                <span class="muted small">“{s.quote}”, on {s.activity_name}</span>
+              </p>
+              <div class="suggest-actions">
+                <button class="btn" onclick={() => decide(s, true)} disabled={!!suggesting}>Add it</button>
+                <button class="btn btn-quiet" onclick={() => decide(s, false)} disabled={!!suggesting}>Dismiss</button>
+              </div>
+            </li>
+          {/each}
+        </ul>
+        {#if suggestMsg}<p class="small" role="alert">{suggestMsg}</p>{/if}
+      </section>
+    {/if}
     {#if sensorsFirst}{@render sensorBlock()}{/if}
     {#each activeBikes as b (b.id)}{@render bikeBlock(b)}{/each}
     {#if g.unmatched_gear.length}
@@ -462,6 +511,35 @@
   }
   h1 {
     font-size: var(--size-heading);
+  }
+  .suggest {
+    margin-top: var(--space-4);
+  }
+  .suggest ul {
+    list-style: none;
+    margin: var(--space-2) 0 0;
+    padding: 0;
+    border-top: 1px solid var(--line-strong);
+  }
+  .suggest li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .suggest p {
+    margin: 0;
+    max-width: 62ch;
+  }
+  .suggest .muted {
+    display: block;
+  }
+  .suggest-actions {
+    display: flex;
+    gap: var(--space-2);
   }
   .small {
     font-size: var(--size-small);

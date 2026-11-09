@@ -53,6 +53,7 @@ func (in *Ingester) loadSources(ctx context.Context, actID string) ([]loaded, er
 		l := loaded{src: s}
 		var st activity.Stream
 		if err := in.Store.GetStream(ctx, s.ID, &st); err == nil {
+			dropBad(s, &st)
 			l.stream = &st
 		} else if !errors.Is(err, store.ErrNotFound) {
 			return nil, err
@@ -300,6 +301,21 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 			whoop = s
 		}
 	}
+	// System 1's reading of a workout its own source only called "other",
+	// and of a ride with no GPS that was on a trainer (see internal/sweep).
+	for i := range ls {
+		var ex struct {
+			Sport  string `json:"ai_sport"`
+			Indoor bool   `json:"ai_indoor"`
+		}
+		_ = json.Unmarshal(ls[i].src.Extra, &ex)
+		if a.Sport == activity.SportOther && ex.Sport != "" {
+			a.Sport = ex.Sport
+		}
+		if ex.Indoor && a.Sport == activity.SportRide {
+			a.Sport = activity.SportVirtualRide
+		}
+	}
 	if app != nil {
 		a.Sport = activity.SportStrength
 		a.StartAt, a.ElapsedS, a.MovingS = app.StartAt, app.ElapsedS, app.ElapsedS
@@ -330,9 +346,7 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 	}
 	a.Route = ""
 	for _, l := range ls {
-		var ex map[string]any
-		_ = json.Unmarshal(l.src.Extra, &ex)
-		if r, ok := ex["route"].(string); ok && r != "" && a.Route == "" {
+		if r := routeOf(l.src.Extra); r != "" && a.Route == "" {
 			a.Route = r
 		}
 	}
@@ -345,6 +359,13 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 				a.Name = l.src.Name
 				break
 			}
+		}
+	}
+	// A name the athlete chose in Domestique beats every source's.
+	for _, l := range ls {
+		if n := NameOf(l.src.Extra); n != "" {
+			a.Name = n
+			break
 		}
 	}
 	if a.Name == "" {
@@ -380,7 +401,7 @@ func (in *Ingester) Rebuild(ctx context.Context, actID string) error {
 	}
 
 	// With no HR stream anywhere, fall back to Whoop's own summary.
-	if metrics.AvgHR == 0 && whoop != nil {
+	if metrics.AvgHR == 0 && whoop != nil && BadChannels(whoop.Extra)["hr"] == "" {
 		var ex struct {
 			Avg int `json:"avg_hr"`
 			Max int `json:"max_hr"`

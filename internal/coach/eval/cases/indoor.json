@@ -1,0 +1,18 @@
+[
+  {"name": "KICKR, power and cadence, no GPS", "want": "yes",
+   "facts": {"name": "Trainer session", "source": "wahoo", "device": "KICKR", "local_start": "Wed 06:00", "minutes": 45, "distance_km": 22.0, "has_gps": false, "has_power": true, "has_heart_rate": true, "avg_hr": 141, "avg_cadence": 89}},
+  {"name": "named Zwift workout", "want": "yes",
+   "facts": {"name": "Zwift - Group Ride: Tempo Tuesday", "source": "strava", "local_start": "Tue 18:30", "minutes": 60, "distance_km": 33.5, "has_gps": false, "has_power": true, "has_heart_rate": true, "avg_hr": 146}},
+  {"name": "described as on the rollers", "want": "yes",
+   "facts": {"name": "Evening Ride", "source": "strava", "local_start": "Thu 20:00", "minutes": 40, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 128, "description": "rollers in the garage, too icy out"}},
+  {"name": "spin class", "want": "yes",
+   "facts": {"name": "Spin class", "source": "whoop", "local_start": "Mon 07:00", "minutes": 45, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 150}},
+  {"name": "group ride with coffee stop on the coast road", "want": "no",
+   "facts": {"name": "Saturday Group Ride", "source": "whoop", "local_start": "Sat 08:00", "minutes": 185, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 132, "description": "Coffee stop at the bakery, windy on the coast road"}},
+  {"name": "commute, phone GPS off", "want": "no",
+   "facts": {"name": "Commute", "source": "whoop", "local_start": "Tue 08:15", "minutes": 25, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 118}},
+  {"name": "gravel ride, described as muddy", "want": "no",
+   "facts": {"name": "Afternoon Ride", "source": "strava", "local_start": "Sun 13:00", "minutes": 150, "distance_km": 48.0, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 136, "description": "Muddy gravel, flatted twice"}},
+  {"name": "MTB at the trail centre", "want": "no",
+   "facts": {"name": "MTB - trail centre", "source": "whoop", "local_start": "Sat 10:00", "minutes": 120, "has_gps": false, "has_power": false, "has_heart_rate": true, "avg_hr": 145}}
+]

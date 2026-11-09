@@ -1,5 +1,5 @@
 // Gear: bikes, wearing parts and sensor batteries. Mirrors internal/gear.
-import { deleteJSON, getJSON, putJSON } from './api';
+import { deleteJSON, getJSON, postJSON, putJSON } from './api';
 import { cachedGet } from './data';
 
 export type GearStatus = 'ok' | 'soon' | 'due';
@@ -123,6 +123,27 @@ export async function setActivityBike(id: string, bikeId: string | null | undefi
   else await putJSON(path, { bike_id: bikeId });
   return fetchActivityBike(id);
 }
+
+/** A part the athlete wrote about fitting, read by Outpost's LLM: offered, never applied on its own. */
+export interface GearSuggestion {
+  id: string;
+  activity_id: string;
+  activity_name: string;
+  at: number;
+  bike_id: string;
+  bike_name: string;
+  kind: ComponentKind;
+  name: string;
+  quote: string;
+  replaces?: string;
+  replaces_name?: string;
+  /** "New chain on the Tarmac, 3 Nov" */
+  text: string;
+}
+
+export const fetchGearSuggestions = () => getJSON<{ ai: boolean; suggestions: GearSuggestion[] }>('/v1/gear/suggestions');
+export const acceptGearSuggestion = (id: string) => postJSON(`/v1/gear/suggestions/${encodeURIComponent(id)}/accept`);
+export const dismissGearSuggestion = (id: string) => postJSON(`/v1/gear/suggestions/${encodeURIComponent(id)}/dismiss`);
 
 export function newID(prefix: string): string {
   const b = new Uint8Array(9);
