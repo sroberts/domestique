@@ -11,6 +11,7 @@
   import { clock as fmtClock, setText, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
   import { Workout, type Slot } from '../lib/workout.svelte';
+  import { weightStep } from '../lib/weights';
 
   let { id }: { id: string } = $props();
 
@@ -123,10 +124,6 @@
       if (w!.session.finished_at) router.go(`/session/${id}/summary`, { replace: true });
     });
 
-  function weightStep(kg: number): number {
-    return kg < 20 ? 1 : 2.5;
-  }
-
   function ladderState(s: Slot): 'done' | 'current' | 'skipped' | 'todo' {
     if (!w || !c) return 'todo';
     if (c.skipped.includes(s.index)) return 'skipped';
@@ -141,6 +138,25 @@
     return rec ? compact(rec.reps, rec.weight_kg) : '';
   }
 </script>
+
+<!-- The weight for the set about to start, changeable before it does. It
+     carries to the rest of the exercise; the plan's weight stays the target. -->
+{#snippet nextWeight(label: string)}
+  {#if w && slot && target}
+    <div class="next-weight">
+      <Stepper
+        {label}
+        unit={target.weight_kg === 0 ? 'BW' : 'kg'}
+        value={target.weight_kg === 0 ? '0' : weight(target.weight_kg)}
+        canDecrease={target.weight_kg > 0}
+        onstep={(d) => w!.adjustNext(d)}
+      />
+      <p class="muted next-planned" aria-live="polite">
+        {#if target.weight_kg !== slot.target.weight_kg}Planned {slot.target.weight_kg === 0 ? 'bodyweight' : `${weight(slot.target.weight_kg)} kg`}{/if}
+      </p>
+    </div>
+  {/if}
+{/snippet}
 
 <div class="visually-hidden" aria-live="assertive">{announce}</div>
 
@@ -190,6 +206,7 @@
             <span class="times num" aria-hidden="true">×</span>
             <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
           </div>
+          {@render nextWeight('Weight')}
         {:else if c.phase === 'active' && slot && target}
           <Plate n={slot.setIndex + 1} of={exerciseSlots.length} {unit} active />
           <div class="in-set">
@@ -241,12 +258,12 @@
             unit={ls.weight_kg === 0 ? 'BW' : 'kg'}
             value={ls.weight_kg === 0 ? '0' : weight(ls.weight_kg)}
             canDecrease={ls.weight_kg > 0}
-            onstep={(d) => w!.adjustLast('weight_kg', d * weightStep(ls.weight_kg + (d < 0 ? -0.01 : 0)))}
+            onstep={(d) => w!.adjustLast('weight_kg', d * weightStep(ls.weight_kg, d))}
           />
         </div>
         <!-- Space reserved so the note appearing never shifts the screen mid-glance. -->
         <p class="muted adj" aria-live="polite">
-          {#if ls.reps !== ls.target_reps || ls.weight_kg !== ls.target_weight_kg}Target was {setText(ls.target_reps, ls.target_weight_kg)}{ls.weight_kg !== ls.target_weight_kg ? '. New weight carries to the next sets.' : '.'}{/if}
+          {#if ls.reps !== ls.target_reps || ls.weight_kg !== ls.target_weight_kg}Target was {setText(ls.target_reps, ls.target_weight_kg)}{ls.weight_kg !== ls.target_weight_kg && w.carries(ls) ? '. New weight carries to the next sets.' : '.'}{/if}
         </p>
       </section>
     {/if}
@@ -260,6 +277,7 @@
         {:else}
           <p class="next-main">Set {slot.setIndex + 1} of {exerciseSlots.length} · <span class="num next-num">{setText(target.reps, target.weight_kg)}</span></p>
         {/if}
+        {@render nextWeight(`${slot.exercise.name} weight`)}
       </section>
     {/if}
   </main>
@@ -558,6 +576,19 @@
   .adj {
     min-height: 2.4em;
     margin-top: var(--space-2);
+    font-size: var(--size-label);
+  }
+  .next-weight {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+    gap: var(--space-3);
+  }
+  .next .next-weight {
+    margin-top: var(--space-3);
+  }
+  .next-planned {
+    padding-bottom: var(--space-3);
     font-size: var(--size-label);
   }
   .next {
