@@ -21,11 +21,11 @@ help: ## List targets
 
 all: build
 
-web: ## Install, type-check and build the PWA into internal/webui/dist
-	cd web && npm ci && npm run check && npm run build
+web: ## Install, type-check, test and build the PWA into internal/webui/dist
+	cd web && npm ci && npm run check && npm test && npm run build
 
-web-check: ## Type-check the PWA (needs web/node_modules)
-	cd web && npm run check
+web-check: ## Type-check and test the PWA (needs web/node_modules)
+	cd web && npm run check && npm test
 
 build: web ## Build the binary into ./bin
 	go build -trimpath -o bin/domestique .

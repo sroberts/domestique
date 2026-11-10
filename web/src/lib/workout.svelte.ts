@@ -4,6 +4,7 @@
 import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSets } from './db';
 import { sync } from './sync.svelte';
 import type { Exercise, LocalSession, Progress, SetRecord, TargetSet, Template } from './types';
+import { correctionCarries, loggedAt, stepNext, targetWith } from './weights';
 
 /** A run of adjacent exercises sharing a circuit key: plan[start, end). */
 export interface Circuit {
@@ -188,8 +189,7 @@ export class Workout {
 
   /** Target for a slot, with any carried-forward weight applied. */
   target(slot: Slot): TargetSet {
-    const w = this.session.cursor.weight_override[slot.exerciseIndex];
-    return w === undefined ? slot.target : { reps: slot.target.reps, weight_kg: w };
+    return targetWith(slot, this.session.cursor.weight_override);
   }
 
   /** Sets done in the current exercise, for the set ladder. */
@@ -211,17 +211,13 @@ export class Workout {
     const slot = this.current;
     if (!slot || c.phase !== 'active') return;
     const now = Date.now();
-    const t = this.target(slot);
     const rec: SetRecord = {
       id: newId(),
       session_id: this.session.id,
       exercise_index: slot.exerciseIndex,
       exercise_name: slot.exercise.name,
       set_index: slot.setIndex,
-      target_reps: slot.target.reps,
-      target_weight_kg: slot.target.weight_kg,
-      reps: t.reps,
-      weight_kg: t.weight_kg,
+      ...loggedAt(slot, c.weight_override),
       started_at: c.phase_started_at,
       ended_at: now,
       updated_at: now,
@@ -249,18 +245,36 @@ export class Workout {
     sync.kick();
   }
 
-  /** Correct the set just logged. Weight changes carry forward to the rest of that exercise. */
+  /** Correct the set just logged. Weight changes carry forward to the rest
+   * of that exercise, unless its next set's weight was chosen separately. */
   async adjustLast(field: 'reps' | 'weight_kg', delta: number): Promise<void> {
     const last = this.lastSet;
     if (!last) return;
     const next = field === 'reps' ? Math.max(0, Math.min(100, last.reps + delta)) : Math.max(0, Math.min(1000, last.weight_kg + delta));
     if (next === last[field]) return;
+    const override = this.session.cursor.weight_override;
+    if (field === 'weight_kg' && correctionCarries(override[last.exercise_index], last.weight_kg)) override[last.exercise_index] = next;
     last[field] = next;
     last.updated_at = Date.now();
-    if (field === 'weight_kg') this.session.cursor.weight_override[last.exercise_index] = next;
     await saveSet($state.snapshot(last) as SetRecord);
     await saveCursor($state.snapshot(this.session) as LocalSession);
     sync.kick();
+  }
+
+  /** Change the next set's weight before starting it. It carries to the
+   * rest of that exercise; the set just logged keeps the weight it has. */
+  async adjustNext(dir: -1 | 1): Promise<void> {
+    const c = this.session.cursor;
+    const slot = this.current;
+    const kg = stepNext(c, slot, dir);
+    if (kg === null || !slot) return;
+    c.weight_override[slot.exerciseIndex] = kg;
+    await saveCursor($state.snapshot(this.session) as LocalSession);
+  }
+
+  /** Whether the logged weight of this set is carrying to its exercise's next sets. */
+  carries(s: SetRecord): boolean {
+    return this.session.cursor.weight_override[s.exercise_index] === s.weight_kg;
   }
 
   /** Edit any logged set after the fact (from the summary). */
