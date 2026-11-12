@@ -514,6 +514,105 @@ func (s *Store) AllSets(ctx context.Context) ([]Set, error) {
 	return out, rows.Err()
 }
 
+// MergeSessions makes gone part of keep, in one transaction: keep is saved
+// as given (its joined plan and new finish), moved (gone's sets, renumbered
+// onto keep) are saved over gone's, gone is deleted, and the merge is kept so
+// late uploads to gone find keep. Sessions earlier merged into gone now point
+// at keep.
+func (s *Store) MergeSessions(ctx context.Context, keep Session, gone string, moved []Set) error {
+	plan, err := json.Marshal(keep.Plan)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }() // a no-op once committed
+	res, err := tx.ExecContext(ctx, `UPDATE sessions SET name = ?, plan = ?, finished_at = ?, updated_at = ? WHERE id = ?`,
+		keep.Name, string(plan), keep.FinishedAt, keep.UpdatedAt, keep.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	for _, x := range moved {
+		if _, err := tx.ExecContext(ctx, `UPDATE sets SET session_id = ?, exercise_index = ?, set_index = ?, updated_at = ?
+			WHERE id = ? AND session_id = ?`, keep.ID, x.ExerciseIndex, x.SetIndex, x.UpdatedAt, x.ID, gone); err != nil {
+			return err
+		}
+	}
+	for _, q := range []string{
+		`DELETE FROM sets WHERE session_id = ?`, // none left, unless one arrived mid-merge
+		`DELETE FROM sessions WHERE id = ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, gone); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE merged_sessions SET into_id = ? WHERE into_id = ?`, keep.ID, gone); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO merged_sessions (from_id, into_id, merged_at) VALUES (?, ?, ?)
+		ON CONFLICT(from_id) DO UPDATE SET into_id = excluded.into_id, merged_at = excluded.merged_at`,
+		gone, keep.ID, keep.UpdatedAt); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// MergedInto is the session a merged-away session became, or "" when id
+// wasn't merged.
+func (s *Store) MergedInto(ctx context.Context, id string) (string, error) {
+	var into string
+	err := s.db.QueryRowContext(ctx, `SELECT into_id FROM merged_sessions WHERE from_id = ?`, id).Scan(&into)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return into, err
+}
+
+// Merge is one session merged into another.
+type Merge struct {
+	From     string `json:"from"`
+	Into     string `json:"into"`
+	MergedAt int64  `json:"merged_at"`
+}
+
+// Merges lists merges made since (epoch ms), oldest first.
+func (s *Store) Merges(ctx context.Context, since int64) ([]Merge, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT from_id, into_id, merged_at FROM merged_sessions
+		WHERE merged_at >= ? ORDER BY merged_at`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Merge{}
+	for rows.Next() {
+		var m Merge
+		if err := rows.Scan(&m.From, &m.Into, &m.MergedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// GetSet returns one set.
+func (s *Store) GetSet(ctx context.Context, id string) (Set, error) {
+	var x Set
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, session_id, exercise_index, exercise_name, set_index, target_reps,
+			target_weight_kg, reps, weight_kg, started_at, ended_at, updated_at
+		FROM sets WHERE id = ?`, id).Scan(&x.ID, &x.SessionID, &x.ExerciseIndex, &x.ExerciseName, &x.SetIndex,
+		&x.TargetReps, &x.TargetWeightKg, &x.Reps, &x.WeightKg, &x.StartedAt, &x.EndedAt, &x.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Set{}, ErrNotFound
+	}
+	return x, err
+}
+
 // DeleteSession removes a session and its sets (a session started by mistake).
 func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	tx, err := s.db.BeginTx(ctx, nil)

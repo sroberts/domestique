@@ -9,12 +9,14 @@
   import Stepper from '../components/Stepper.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import ZoneBar from '../components/ZoneBar.svelte';
-  import { AuthError, HTTPError, OfflineError, fetchSummary } from '../lib/api';
+  import { AuthError, HTTPError, OfflineError, fetchSummary, mergeSessions, mergedInto, previewMerge } from '../lib/api';
+  import { pendingFor } from '../lib/db';
+  import { sync } from '../lib/sync.svelte';
   import { sessionExports } from '../lib/export';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
-  import { backTarget, link } from '../lib/router.svelte';
+  import { backTarget, link, router } from '../lib/router.svelte';
   import { Workout, earlyText, endedEarly, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
-  import type { SetRecord, SetStat, Summary } from '../lib/types';
+  import type { MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
 
   let { id }: { id: string } = $props();
   // Back goes where you came from; on a direct load, to this tab's list.
@@ -91,6 +93,13 @@
       source = 'server';
       problem = null;
     } catch (err) {
+      // Merged into another session since: that's where it lives now.
+      const into = mergedInto(err);
+      if (into) {
+        await sync.followMerges(true);
+        router.go(`/session/${into}/summary`, { replace: true });
+        return;
+      }
       if (workout) {
         summary = localSummary(workout);
         source = 'local';
@@ -144,6 +153,64 @@
   let selStat = $derived(sel ? stats.get(sel.id) : undefined);
   let end = $derived(summary ? (summary.session.finished_at ?? summary.sets.at(-1)?.ended_at ?? summary.session.started_at) : 0);
 
+  // Merging: one workout saved as two sessions, put back together.
+  let mergeDialog = $state<HTMLDialogElement | null>(null);
+  let mergeWith = $state<SessionRef | null>(null);
+  let preview = $state<MergePreview | null>(null);
+  let mergeError = $state('');
+  let merging = $state(false);
+  let suggested = $derived(summary?.same_day?.find((o) => o.id === summary?.suggest_merge) ?? null);
+
+  function openMerge(other: SessionRef | null) {
+    mergeWith = null;
+    preview = null;
+    mergeError = '';
+    mergeDialog?.showModal();
+    if (other) void choose(other);
+  }
+
+  async function choose(other: SessionRef) {
+    mergeWith = other;
+    preview = null;
+    mergeError = '';
+    try {
+      preview = await previewMerge(id, other.id);
+    } catch (err) {
+      mergeError = err instanceof HTTPError ? err.message : "Couldn't reach the Mac Mini. Try again when you're connected.";
+    }
+  }
+
+  async function confirmMerge() {
+    if (!mergeWith || merging) return;
+    merging = true;
+    mergeError = '';
+    try {
+      // Every set of both must be on the Mac Mini first, or it would merge
+      // without them.
+      await sync.flush();
+      if (await pendingFor([id, mergeWith.id])) {
+        mergeError = 'Some sets are still syncing to the Mac Mini. Try again in a moment.';
+        return;
+      }
+      const res = await mergeSessions(id, mergeWith.id);
+      await sync.followMerges(true);
+      mergeDialog?.close();
+      if (res.id === id) {
+        workout = await Workout.load(id);
+        await load();
+      } else {
+        router.go(`/session/${res.id}/summary`, { replace: true });
+      }
+    } catch (err) {
+      mergeError = err instanceof HTTPError ? err.message : "Couldn't reach the Mac Mini. Try again when you're connected.";
+    } finally {
+      merging = false;
+    }
+  }
+
+  /** "4 rounds" for a circuit exercise, "5 sets" otherwise. */
+  const countText = (n: number, circuit?: string) => `${n} ${circuit ? (n === 1 ? 'round' : 'rounds') : n === 1 ? 'set' : 'sets'}`;
+
   async function step(s: SetRecord, field: 'reps' | 'weight_kg', dir: -1 | 1) {
     if (!workout) return;
     const kgStep = s.weight_kg + (dir < 0 ? -0.01 : 0) < 20 ? 1 : 2.5;
@@ -195,6 +262,13 @@
         {:else if problem === 'auth'}Sign in again to sync and fetch heart rate. These are the sets on this phone.
         {:else}No connection. These are the sets on this phone; heart rate needs the Mac Mini.{/if}
       </p>
+    {/if}
+
+    {#if suggested && source === 'server'}
+      <div class="merge-hint">
+        <p>Looks like the rest of <strong>{suggested.name}</strong> at {time(suggested.started_at)}. Merge them into one session?</p>
+        <button class="btn" onclick={() => openMerge(suggested)}>Merge…</button>
+      </div>
     {/if}
 
     <dl class="strip">
@@ -304,8 +378,53 @@
         <p class="muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
       {/if}
     </section>
+
+    {#if summary.same_day?.length && source === 'server'}
+      <section class="block merge-row">
+        <button class="btn btn-quiet" onclick={() => openMerge(null)}>Merge with another session from {day(summary.session.started_at)}…</button>
+      </section>
+    {/if}
   {/if}
 </main>
+
+<dialog bind:this={mergeDialog} class="sheet" aria-labelledby="merge-h" onclick={(e) => e.target === mergeDialog && mergeDialog?.close()}>
+  <div class="sheet-inner">
+    {#if !mergeWith}
+      <h2 id="merge-h">Merge with…</h2>
+      <p class="muted">One workout saved as two? Pick the other part.</p>
+      <div class="sheet-actions">
+        {#each summary?.same_day ?? [] as o (o.id)}
+          <button class="btn sheet-btn pick" onclick={() => choose(o)}>
+            <span>{o.name}</span>
+            <span class="mono muted">{time(o.started_at)}–{time(o.finished_at)} · {o.sets} {o.sets === 1 ? 'set' : 'sets'}</span>
+          </button>
+        {/each}
+        <!-- svelte-ignore a11y_autofocus -->
+        <button class="btn btn-quiet sheet-btn" autofocus onclick={() => mergeDialog?.close()}>Cancel</button>
+      </div>
+    {:else}
+      <h2 id="merge-h">Merge into one session?</h2>
+      {#if preview}
+        <p class="muted">
+          {preview.name} · {time(preview.started_at)}–{time(preview.finished_at)} · {preview.sets} sets
+        </p>
+        <ul class="preview" aria-label="The merged session">
+          {#each preview.plan as ex, i (i)}
+            <li><span>{ex.name}</span><span class="mono muted">{countText(ex.sets.length, ex.circuit)}</span></li>
+          {/each}
+        </ul>
+        <p class="muted merge-note">Kept as the earlier session. Exercises in both carry on where the first part stopped. Heart rate, load and any Whoop recording follow. This can't be undone.</p>
+      {:else if !mergeError}
+        <p class="muted" aria-live="polite">Working out the merged session…</p>
+      {/if}
+      {#if mergeError}<p class="merge-error" role="alert">{mergeError}</p>{/if}
+      <div class="sheet-actions">
+        <button class="btn btn-primary sheet-btn" onclick={confirmMerge} disabled={!preview || merging}>{merging ? 'Merging…' : 'Merge'}</button>
+        <button class="btn btn-quiet sheet-btn" onclick={() => mergeDialog?.close()}>Cancel</button>
+      </div>
+    {/if}
+  </div>
+</dialog>
 
 {#if justFinished}
   <ActionBar>
@@ -544,6 +663,93 @@
     justify-content: flex-end;
   }
   .edit-row .btn {
+    font-size: var(--size-small);
+  }
+  .merge-hint {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-m);
+    font-size: var(--size-small);
+  }
+  .merge-hint p {
+    flex: 1 1 14rem;
+  }
+  .merge-row {
+    padding-bottom: var(--space-6);
+  }
+  .merge-row .btn {
+    margin-left: calc(var(--space-2) * -1);
+    font-size: var(--size-small);
+  }
+
+  /* Merge sheet */
+  .sheet {
+    margin: auto auto 0;
+    width: 100%;
+    max-width: 35rem;
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-bottom: 0;
+    border-radius: var(--radius-m) var(--radius-m) 0 0;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .sheet::backdrop {
+    background: rgb(0 0 0 / 0.55);
+  }
+  .sheet-inner {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-5) var(--gutter) calc(var(--space-5) + env(safe-area-inset-bottom));
+  }
+  .sheet-inner h2 {
+    font-size: var(--size-heading);
+  }
+  .sheet-actions {
+    display: grid;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+  .sheet-btn {
+    min-height: var(--tap-min);
+    width: 100%;
+  }
+  .pick {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    text-align: left;
+  }
+  .pick .mono {
+    font-size: var(--size-small);
+  }
+  .preview {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--line);
+  }
+  .preview li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .preview .mono {
+    font-size: var(--size-small);
+  }
+  .merge-note {
+    font-size: var(--size-small);
+  }
+  .merge-error {
+    color: var(--danger);
     font-size: var(--size-small);
   }
   .foot {

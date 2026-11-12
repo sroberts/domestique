@@ -2,9 +2,10 @@
 // whenever a connection exists. Nothing is ever dropped: auth failures wait for
 // sign-in, network failures wait for the network, and server rejections are
 // kept and reported.
-import { AuthError, HTTPError, OfflineError, deleteJSON, putJSON } from './api';
+import { AuthError, HTTPError, OfflineError, deleteJSON, fetchMerges, fetchSummary, mergedInto, putJSON } from './api';
 import { clockOffset } from './clock';
-import { db, type OutboxEntry } from './db';
+import { applyMerge, db, getSession, mergesSince, pendingFor, setMergesSince, type OutboxEntry } from './db';
+import type { Summary } from './types';
 
 export type SyncStatus = 'idle' | 'syncing' | 'offline' | 'auth' | 'error';
 
@@ -18,6 +19,7 @@ class Sync {
   #again = false;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #backoff = 2000;
+  #mergesAt = 0;
 
   start(): void {
     void this.refreshCount();
@@ -69,6 +71,7 @@ class Sync {
     const queue = (await d.getAllFromIndex('outbox', 'seq')).filter((e) => !e.rejected);
     if (queue.length === 0) {
       if (this.status !== 'auth') this.status = navigator.onLine ? 'idle' : 'offline';
+      void this.followMerges();
       return;
     }
     this.status = 'syncing';
@@ -125,6 +128,33 @@ class Sync {
     const current = await tx.store.get(entry.key);
     if (current && current.seq === entry.seq) await tx.store.delete(entry.key);
     await tx.done;
+  }
+
+  /** Drop sessions merged into others since this phone last looked, and
+   * refresh the ones they went into. At most every 5 minutes unless forced
+   * (straight after a merge from this phone). A merge whose sessions still
+   * have uploads waiting is left for next time, so nothing is lost. */
+  async followMerges(force = false): Promise<void> {
+    if (!force && Date.now() - this.#mergesAt < 5 * 60_000) return;
+    this.#mergesAt = Date.now();
+    try {
+      for (const m of await fetchMerges(await mergesSince())) {
+        if (await pendingFor([m.from, m.into])) return;
+        if ((await getSession(m.from)) || (await getSession(m.into))) {
+          let into: Summary | null = null;
+          try {
+            into = await fetchSummary(m.into);
+          } catch (err) {
+            // Merged on again since: a later entry follows that one.
+            if (!mergedInto(err)) return;
+          }
+          await applyMerge(m.from, into);
+        }
+        await setMergesSince(m.merged_at);
+      }
+    } catch {
+      /* offline or signed out: next time */
+    }
   }
 
   #retry(): void {

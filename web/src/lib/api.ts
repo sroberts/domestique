@@ -1,5 +1,5 @@
 import { observe } from './clock';
-import type { Summary, Today } from './types';
+import type { Merge, MergePreview, Summary, Today } from './types';
 
 /** Thrown when the Outpost gateway wants the athlete to sign in again. */
 export class AuthError extends Error {
@@ -19,6 +19,8 @@ export class HTTPError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** The JSON body the server sent with the error, if any. */
+    public data: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -38,12 +40,14 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   if (res.type === 'opaqueredirect' || res.status === 401) throw new AuthError();
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
+    let data: Record<string, unknown> = {};
     try {
-      msg = ((await res.json()) as { error?: string }).error ?? msg;
+      data = (await res.json()) as Record<string, unknown>;
+      if (typeof data.error === 'string') msg = data.error;
     } catch {
       /* not JSON */
     }
-    throw new HTTPError(res.status, msg);
+    throw new HTTPError(res.status, msg, data);
   }
   const type = res.headers.get('content-type') ?? '';
   if (res.status !== 204 && !type.includes('application/json')) {
@@ -100,3 +104,16 @@ export function localDate(d = new Date()): string {
 
 export const fetchToday = (date: string) => getJSON<Today>(`/v1/today?date=${date}`);
 export const fetchSummary = (id: string) => getJSON<Summary>(`/v1/sessions/${encodeURIComponent(id)}/summary`);
+
+/** The session a merged-away one became, when err says so. */
+export function mergedInto(err: unknown): string | null {
+  return err instanceof HTTPError && err.status === 410 && typeof err.data.merged_into === 'string' ? err.data.merged_into : null;
+}
+
+const mergePath = (id: string, dry: boolean) => `/v1/sessions/${encodeURIComponent(id)}/merge${dry ? '?dry_run=1' : ''}`;
+/** What merging two sessions would make, without making it. */
+export const previewMerge = (id: string, other: string) => postForJSON<MergePreview>(mergePath(id, true), { with: other });
+/** Merge two sessions; the earlier is kept and named in the answer. */
+export const mergeSessions = (id: string, other: string) => postForJSON<{ id: string; merged: string }>(mergePath(id, false), { with: other });
+/** Merges made since a time (epoch ms), for dropping merged-away sessions. */
+export const fetchMerges = (since: number) => getJSON<Merge[]>(`/v1/sessions/merged?since=${since}`);

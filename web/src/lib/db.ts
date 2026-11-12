@@ -1,7 +1,7 @@
 // IndexedDB is the source of truth on the device: a set is durable here the
 // moment it's logged, before any network is involved.
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { LocalSession, SetRecord, Today } from './types';
+import type { LocalSession, SetRecord, Summary, Today } from './types';
 
 export type OutboxKind = 'session' | 'set' | 'session-delete';
 
@@ -84,6 +84,53 @@ export async function discardSession(id: string): Promise<void> {
   await tx.objectStore('outbox').delete(`session:${id}`);
   await tx.objectStore('outbox').put({ key: `session-delete:${id}`, kind: 'session-delete', id, rev: Date.now(), seq: ++seqCounter });
   await tx.done;
+}
+
+/** Whether anything of these sessions (the sessions or their sets) is still
+ * waiting to upload. Entries the server refused never will, so don't count. */
+export async function pendingFor(ids: string[]): Promise<boolean> {
+  const d = await db();
+  for (const e of await d.getAll('outbox')) {
+    if (e.rejected) continue;
+    if (e.kind !== 'set' && ids.includes(e.id)) return true;
+    if (e.kind === 'set') {
+      const s = await d.get('sets', e.id);
+      if (s && ids.includes(s.session_id)) return true;
+    }
+  }
+  return false;
+}
+
+/** Follow a merge made on the Mac Mini: the merged-away session goes from
+ * this phone, and the kept one, if this phone has it, takes the server's
+ * copy (plan, finish and sets). Only call it with nothing of either waiting
+ * to upload (pendingFor), or a local edit would be lost. */
+export async function applyMerge(from: string, into: Summary | null): Promise<void> {
+  const d = await db();
+  const tx = d.transaction(['sessions', 'sets'], 'readwrite');
+  const sets = tx.objectStore('sets');
+  for (const k of await sets.index('session_id').getAllKeys(from)) await sets.delete(k);
+  await tx.objectStore('sessions').delete(from);
+  if (into) {
+    const local = await tx.objectStore('sessions').get(into.session.id);
+    if (local) {
+      const { progress: _progress, ...server } = into.session;
+      await tx.objectStore('sessions').put({ ...local, ...server, cursor: local.cursor });
+      for (const k of await sets.index('session_id').getAllKeys(into.session.id)) await sets.delete(k);
+      for (const s of into.sets) await sets.put(s);
+    }
+  }
+  await tx.done;
+}
+
+/** Merges up to this time (epoch ms) have been followed on this phone. */
+export async function mergesSince(): Promise<number> {
+  const row = await (await db()).get('cache', 'merges:since');
+  return typeof row?.value === 'number' ? row.value : 0;
+}
+
+export async function setMergesSince(at: number): Promise<void> {
+  await (await db()).put('cache', { key: 'merges:since', at: Date.now(), value: at });
 }
 
 export async function getSession(id: string): Promise<LocalSession | undefined> {

@@ -245,6 +245,19 @@ var tools = []tool{
 		},
 	},
 	{
+		Name: "merge_strength_sessions",
+		Description: "Merge two finished strength sessions from the same day into one, when one workout was saved as two " +
+			"(say a circuit stopped after a round, then started again). The earlier session is kept: exercises with the same " +
+			"name carry on (1 round then 3 more becomes 4 rounds), others are added after. Heart rate, load and any Whoop " +
+			"recording follow. It can't be undone. Session IDs are the session_id of strength activities.",
+		InputSchema: obj(map[string]any{"first": str("Session ID"), "second": str("The other session's ID")}, "first", "second"),
+		Annotations: map[string]any{"destructiveHint": true},
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			first, _ := a["first"].(string)
+			return s.send(r, http.MethodPost, "/v1/sessions/"+url.PathEscape(first)+"/merge", map[string]any{"with": a["second"]})
+		},
+	},
+	{
 		Name:        "plan_strength_session",
 		Description: "Plan a template for a date. It appears on the athlete's Today screen with prescribed weights.",
 		InputSchema: obj(map[string]any{"date": str("YYYY-MM-DD"), "template_id": str("Template ID")}, "date", "template_id"),

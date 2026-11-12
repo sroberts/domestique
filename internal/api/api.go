@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"domestique/internal/auth"
@@ -48,6 +49,8 @@ type API struct {
 	Gateway bool
 	// background outlives requests (imports); cancelled on shutdown.
 	background context.Context
+	// mergeMu runs one session merge at a time.
+	mergeMu sync.Mutex
 }
 
 // SetBackground sets the context long-running imports run under.
@@ -89,6 +92,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sessions/{id}/summary", a.summary)
 	mux.HandleFunc("PUT /v1/sessions/{id}/hr-shift", a.putHRShift)
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
+	a.registerMerges(mux)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
 	a.registerWebhooks(mux)
@@ -313,6 +317,15 @@ func (a *API) putSession(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Strain = nil    // strain is Whoop's to set
 	s.HRShiftMs = nil // set through /hr-shift, never by a replayed upload
+	// A phone still holding a session that was merged away: accept the
+	// upload so its queue drains, but don't bring the session back.
+	if into, err := a.Store.MergedInto(r.Context(), s.ID); err != nil {
+		a.fail(w, r, err)
+		return
+	} else if into != "" {
+		writeJSON(w, http.StatusOK, map[string]string{"id": into, "merged_into": into})
+		return
+	}
 	if err := a.Store.PutSession(r.Context(), s); err != nil {
 		a.fail(w, r, err)
 		return
@@ -368,6 +381,15 @@ func (a *API) deleteSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "bad session id")
 		return
 	}
+	// Merged away already: it's gone, and discarding it mustn't touch the
+	// session it became.
+	if into, err := a.Store.MergedInto(r.Context(), id); err != nil {
+		a.fail(w, r, err)
+		return
+	} else if into != "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if a.Ingest != nil {
 		if err := a.Ingest.RemoveSession(r.Context(), id); err != nil {
 			a.fail(w, r, err)
@@ -399,6 +421,19 @@ func (a *API) putSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "reps must be 0-100 and weight_kg 0-1000")
 		return
 	}
+	if into, err := a.Store.MergedInto(r.Context(), s.SessionID); err != nil {
+		a.fail(w, r, err)
+		return
+	} else if into != "" {
+		var refused refusal
+		if err := a.placeLateSet(r.Context(), &s, into); errors.As(err, &refused) {
+			writeErr(w, http.StatusConflict, string(refused))
+			return
+		} else if err != nil {
+			a.fail(w, r, err)
+			return
+		}
+	}
 	if err := a.Store.PutSet(r.Context(), s); err != nil {
 		a.fail(w, r, err)
 		return
@@ -417,11 +452,21 @@ func (a *API) putSet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) summary(w http.ResponseWriter, r *http.Request) {
-	sum, err := a.strengthSummary(r, r.PathValue("id"))
+	id := r.PathValue("id")
+	sum, err := a.strengthSummary(r, id)
 	if errors.Is(err, store.ErrNotFound) {
+		// Merged into another: say which, so the app can go there.
+		if into, err := a.Store.MergedInto(r.Context(), id); err == nil && into != "" {
+			writeJSON(w, http.StatusGone, map[string]string{"error": "this session was merged into another", "merged_into": into})
+			return
+		}
 		writeErr(w, http.StatusNotFound, "no such session")
 		return
 	} else if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if err := a.mergeOptions(r.Context(), sum); err != nil {
 		a.fail(w, r, err)
 		return
 	}
