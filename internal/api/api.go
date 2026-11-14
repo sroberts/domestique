@@ -93,6 +93,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/sessions/{id}/hr-shift", a.putHRShift)
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerMerges(mux)
+	a.registerRides(mux)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
 	a.registerWebhooks(mux)
@@ -132,6 +133,7 @@ type todayResp struct {
 	Recovery  *store.Recovery    `json:"recovery"`
 	Sleep     *store.Sleep       `json:"sleep"`
 	Plan      *store.Template    `json:"plan"`
+	Ride      *rideView          `json:"ride"`     // the day's planned ride
 	Template  *store.Template    `json:"template"` // the plan before today's adjustments
 	Readiness strength.Readiness `json:"readiness"`
 	Load      *load.Day          `json:"load"`
@@ -183,14 +185,21 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Recent = recent
-	if resp.Plan == nil && resp.Readiness.Level == "normal" {
+	day, _ := time.ParseInLocation("2006-01-02", date, a.loc())
+	if err := a.todayRide(r, &resp, day); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if resp.Plan == nil && resp.Ride == nil && resp.Readiness.Level == "normal" {
 		// Nothing planned: "train as planned" would answer a question nobody asked.
 		resp.Readiness.Title = "Good to train"
 		resp.Readiness.Detail = strings.Replace(resp.Readiness.Detail, "nothing in the way of today's plan.", "nothing in the way of a hard session.", 1)
 	}
+	if resp.Plan == nil && resp.Ride != nil {
+		rideOnlyReadiness(&resp.Readiness)
+	}
 
 	// Load: form today, fitness ramp, and this week so far.
-	day, _ := time.ParseInLocation("2006-01-02", date, a.loc())
 	if n := len(series); n > 0 {
 		d := series[n-1]
 		resp.Load = &d

@@ -1,8 +1,8 @@
 // Read-through cache: every screen shows the last copy it saw when the Mac
 // Mini can't be reached, and says how old it is.
-import { AuthError, getJSON } from './api';
+import { AuthError, deleteJSON, getJSON, putJSON } from './api';
 import { db } from './db';
-import type { ActivityDetail, ActivityRow, Athlete, LoadDay, ProviderStatus, Trends } from './types';
+import type { ActivityDetail, ActivityRow, Athlete, LoadDay, ProviderStatus, RidePlan, Trends } from './types';
 
 export interface Loaded<T> {
   data: T | null;
@@ -41,3 +41,8 @@ export const fetchActivity = (id: string, source?: string) =>
 export const fetchLoad = (days: number) => cachedGet<{ days: LoadDay[]; athlete: Athlete }>(`/v1/load?days=${days}`);
 export const fetchTrends = () => cachedGet<Trends>('/v1/trends');
 export const fetchConnections = () => cachedGet<{ providers: ProviderStatus[]; redirect_base: string }>('/v1/connections');
+
+/** Rides planned from a date, two weeks on. */
+export const fetchRidePlans = (from: string) => cachedGet<RidePlan[]>(`/v1/ride-plans?from=${from}`);
+export const saveRidePlan = (p: RidePlan) => putJSON(`/v1/ride-plans/${p.date}`, p);
+export const clearRidePlan = (date: string) => deleteJSON(`/v1/ride-plans/${date}`);

@@ -28,6 +28,8 @@ type Facts struct {
 	Ramp      *int     `json:"fitness_change_7d,omitempty"`
 	Plan      string   `json:"planned_session,omitempty"`
 	PlanSets  int      `json:"planned_sets,omitempty"`
+	Ride      string   `json:"planned_ride,omitempty"`
+	RideDone  bool     `json:"planned_ride_done,omitempty"`
 	Recent    []Event  `json:"recent_activities,omitempty"`
 }
 
@@ -58,7 +60,7 @@ const system = `You are the directeur sportif for one athlete, a cyclist who als
 
 The decision is already made and is given to you as "level", "title" and "detail". Do not change it: never suggest harder or easier training than it says, and keep any instruction it gives (hold the weights, drop a set, ride easy). Your job is to say it better, using the facts. Never mention "level", or the field names.
 
-Say what to do first, then why. Use one or two numbers at most, the ones behind the call, and never list figures. Name the planned session or yesterday's effort when it helps. With no planned_session there is no plan: don't speak of one. Keep a number's sign as given (form +7, form -12).
+Say what to do first, then why. Use one or two numbers at most, the ones behind the call, and never list figures. Name the planned session (lifting), the planned ride, or yesterday's effort when it helps. With neither planned_session nor planned_ride there is no plan: don't speak of one. Keep a number's sign as given (form +7, form -12).
 
 ` + voice + `
 

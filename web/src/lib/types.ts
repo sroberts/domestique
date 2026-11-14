@@ -184,6 +184,8 @@ export interface Today {
   recovery: Recovery | null;
   sleep: SleepRecord | null;
   plan: Template | null;
+  /** The day's planned ride. */
+  ride?: RideView | null;
   template: Template | null;
   readiness: Readiness;
   load: LoadDay | null;
@@ -476,4 +478,33 @@ export interface ExerciseAlias {
   to: string;
   p?: number;
   at: number;
+}
+
+export type RideIntensity = 'recovery' | 'endurance' | 'tempo' | 'threshold' | 'vo2';
+
+/** A bike ride planned for a day (one per day, beside any lift). */
+export interface RidePlan {
+  date: string;
+  name: string;
+  kind: 'indoor' | 'outdoor';
+  duration_min: number;
+  /** 0: no target. */
+  tss: number;
+  intensity: RideIntensity | '';
+  notes: string;
+  updated_at?: number;
+}
+
+/** How to ride the plan on a hold-back morning. */
+export interface RideEase {
+  intensity: RideIntensity | '';
+  duration_min: number;
+  tss?: number;
+  reason: string;
+}
+
+export interface RideView extends RidePlan {
+  /** A ride recorded that day. */
+  done?: ActivityRow;
+  ease?: RideEase;
 }
