@@ -196,6 +196,16 @@ var migrations = []string{
 		updated_at  INTEGER NOT NULL
 	);
 	`,
+	// 5: sessions merged into another (one workout saved as two). A phone
+	// that still holds the merged-away session uploads to it; this sends
+	// those uploads to the session it became, and tells phones to drop it.
+	`
+	CREATE TABLE merged_sessions (
+		from_id   TEXT PRIMARY KEY,
+		into_id   TEXT NOT NULL,
+		merged_at INTEGER NOT NULL
+	);
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

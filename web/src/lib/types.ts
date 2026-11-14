@@ -138,6 +138,37 @@ export interface Summary {
   efforts_pending?: boolean;
   /** The LLM's debrief of the session (Outpost AI). */
   note?: AINote;
+  /** Other finished sessions the same day, which this one can be merged with. */
+  same_day?: SessionRef[];
+  /** One of same_day that looks like this session's first part. */
+  suggest_merge?: string;
+}
+
+export interface SessionRef {
+  id: string;
+  name: string;
+  started_at: number;
+  finished_at: number;
+  sets: number;
+}
+
+/** POST /v1/sessions/{id}/merge?dry_run=1: what a merge would make. */
+export interface MergePreview {
+  /** The session kept (the earlier one), and the one merged into it. */
+  id: string;
+  merged: string;
+  name: string;
+  plan: Exercise[];
+  sets: number;
+  started_at: number;
+  finished_at: number;
+}
+
+/** One session merged into another (GET /v1/sessions/merged). */
+export interface Merge {
+  from: string;
+  into: string;
+  merged_at: number;
 }
 
 export type EffortLevel = 'easy' | 'working' | 'hard' | 'limit';

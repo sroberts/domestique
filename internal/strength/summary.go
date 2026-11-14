@@ -70,6 +70,20 @@ type Summary struct {
 	Efforts        map[string]Effort `json:"efforts,omitempty"`
 	EffortsPending bool              `json:"efforts_pending,omitempty"`
 	Note           *AINote           `json:"note,omitempty"`
+
+	// Other finished sessions the same day, which this one can be merged
+	// with, and the one that looks like its first part (filled by the API).
+	SameDay      []SessionRef `json:"same_day,omitempty"`
+	SuggestMerge string       `json:"suggest_merge,omitempty"`
+}
+
+// SessionRef names a session, for choosing one to merge with.
+type SessionRef struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	StartedAt  int64  `json:"started_at"`
+	FinishedAt int64  `json:"finished_at"`
+	Sets       int    `json:"sets"`
 }
 
 // Effort is System 1's reading of how hard one set was.

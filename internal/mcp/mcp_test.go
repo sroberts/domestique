@@ -78,3 +78,44 @@ func TestTemplateTools(t *testing.T) {
 		t.Fatalf("%d templates left", n)
 	}
 }
+
+// merge_strength_sessions runs the REST merge, refusals included.
+func TestMergeSessionsTool(t *testing.T) {
+	st, err := store.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	a := &api.API{Store: st, Log: slog.New(slog.DiscardHandler), Loc: time.UTC}
+	mux := http.NewServeMux()
+	a.Register(mux)
+	s := &Server{API: mux}
+	callTool := func(name, args string) string {
+		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + name + `","arguments":` + args + `}}`
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest("POST", "/mcp", strings.NewReader(body)))
+		return w.Body.String()
+	}
+	plan := []store.Exercise{{Name: "Squat", Sets: []store.TargetSet{{Reps: 5, WeightKg: 100}, {Reps: 5, WeightKg: 100}}}}
+	day := time.Date(2026, 11, 3, 7, 0, 0, 0, time.UTC).UnixMilli()
+	for i, id := range []string{"one", "two"} {
+		start := day + int64(i)*3_600_000
+		fin := start + 600_000
+		if err := st.PutSession(ctx, store.Session{ID: id, TemplateID: "lower", Name: "Lower", Plan: plan, StartedAt: start, FinishedAt: &fin, UpdatedAt: fin}); err != nil {
+			t.Fatal(err)
+		}
+		if err := st.PutSet(ctx, store.Set{ID: id + "-s", SessionID: id, ExerciseName: "Squat", Reps: 5, WeightKg: 100, StartedAt: start, EndedAt: start + 30_000, UpdatedAt: fin}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out := callTool("merge_strength_sessions", `{"first":"two","second":"two"}`); !strings.Contains(out, `"isError":true`) {
+		t.Fatalf("merged a session with itself: %s", out)
+	}
+	if out := callTool("merge_strength_sessions", `{"first":"two","second":"one"}`); !strings.Contains(out, `\"id\":\"one\"`) {
+		t.Fatalf("merge: %s", out)
+	}
+	if sets, _ := st.SessionSets(ctx, "one"); len(sets) != 2 {
+		t.Fatalf("%d sets on the kept session, want 2", len(sets))
+	}
+}
