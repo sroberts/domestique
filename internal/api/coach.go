@@ -39,9 +39,13 @@ func (a *API) coachFacts(t *todayResp, day time.Time) coach.Facts {
 			f.PlanSets += len(e.Sets)
 		}
 	}
+	if v := t.Ride; v != nil {
+		f.Ride = rideFact(v.RidePlan)
+		f.RideDone = v.Done != nil
+	}
 	today := day.Format("2006-01-02")
 	for _, x := range t.Latest {
-		at := time.Unix(x.StartAt, 0).In(a.loc())
+		at := time.UnixMilli(x.StartAt).In(a.loc())
 		ago := int(math.Round(day.Sub(time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, a.loc())).Hours() / 24))
 		var when string
 		switch {

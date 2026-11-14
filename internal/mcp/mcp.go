@@ -266,6 +266,58 @@ var tools = []tool{
 			return s.send(r, http.MethodPut, "/v1/plans/"+url.PathEscape(d), map[string]any{"template_id": a["template_id"]})
 		},
 	},
+	{
+		Name: "plan_ride",
+		Description: "Plan a bike ride for a date (one per day, beside any strength session; planning again replaces it). " +
+			"It appears on the athlete's Today screen, is ticked off when a ride that day is recorded, and on a low-recovery " +
+			"morning Today suggests an easier version. Name it for what to ride, e.g. a Zwift workout or route, or \"Endurance, rolling\".",
+		InputSchema: obj(map[string]any{
+			"date":         str("YYYY-MM-DD"),
+			"name":         str("What to ride, at most 80 characters"),
+			"kind":         map[string]any{"type": "string", "enum": []string{"indoor", "outdoor"}},
+			"duration_min": num("Planned length in minutes, 10-600"),
+			"intensity":    map[string]any{"type": "string", "enum": []string{"recovery", "endurance", "tempo", "threshold", "vo2"}, "description": "How hard, overall"},
+			"tss":          num("Target TSS, if there is one"),
+			"notes":        str("Anything else: the intervals, the route, fuelling"),
+		}, "date", "name", "kind", "duration_min"),
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			d, _ := a["date"].(string)
+			body := map[string]any{}
+			for _, k := range []string{"name", "kind", "duration_min", "intensity", "tss", "notes"} {
+				if v, ok := a[k]; ok {
+					body[k] = v
+				}
+			}
+			return s.send(r, http.MethodPut, "/v1/ride-plans/"+url.PathEscape(d), body)
+		},
+	},
+	{
+		Name:        "get_planned_rides",
+		Description: "List the bike rides planned from a date (default today) to another (default two weeks on, at most 62 days).",
+		InputSchema: obj(map[string]any{"from": str("YYYY-MM-DD"), "to": str("YYYY-MM-DD")}),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			q := url.Values{}
+			for _, k := range []string{"from", "to"} {
+				if v, _ := a[k].(string); v != "" {
+					q.Set(k, v)
+				}
+			}
+			return s.do(r, http.MethodGet, "/v1/ride-plans", q, nil)
+		},
+	},
+	{
+		Name:        "clear_planned_ride",
+		Description: "Remove the bike ride planned for a date.",
+		InputSchema: obj(map[string]any{"date": str("YYYY-MM-DD")}, "date"),
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			d, _ := a["date"].(string)
+			if _, err := s.do(r, http.MethodDelete, "/v1/ride-plans/"+url.PathEscape(d), nil, nil); err != nil {
+				return nil, err
+			}
+			return map[string]any{"cleared": d}, nil
+		},
+	},
 }
 
 func intArg(a map[string]any, k string, def, lo, hi int) int {

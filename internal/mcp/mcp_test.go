@@ -119,3 +119,36 @@ func TestMergeSessionsTool(t *testing.T) {
 		t.Fatalf("%d sets on the kept session, want 2", len(sets))
 	}
 }
+
+func TestRidePlanTools(t *testing.T) {
+	st, err := store.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	a := &api.API{Store: st, Log: slog.New(slog.DiscardHandler), Loc: time.UTC}
+	mux := http.NewServeMux()
+	a.Register(mux)
+	s := &Server{API: mux}
+	callTool := func(name, args string) string {
+		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + name + `","arguments":` + args + `}}`
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest("POST", "/mcp", strings.NewReader(body)))
+		return w.Body.String()
+	}
+	if out := callTool("plan_ride", `{"date":"2026-11-20","name":"Zwift: Jungle Circuit","kind":"indoor","duration_min":75,"intensity":"tempo"}`); strings.Contains(out, `"isError":true`) {
+		t.Fatalf("plan_ride: %s", out)
+	}
+	if out := callTool("plan_ride", `{"date":"2026-11-21","name":"Ride","kind":"gravel","duration_min":75}`); !strings.Contains(out, `"isError":true`) {
+		t.Fatalf("planned a gravel kind: %s", out)
+	}
+	if out := callTool("get_planned_rides", `{"from":"2026-11-19"}`); !strings.Contains(out, "Jungle Circuit") {
+		t.Fatalf("get_planned_rides: %s", out)
+	}
+	if out := callTool("clear_planned_ride", `{"date":"2026-11-20"}`); strings.Contains(out, `"isError":true`) {
+		t.Fatalf("clear_planned_ride: %s", out)
+	}
+	if _, err := st.GetRidePlan(context.Background(), "2026-11-20"); err == nil {
+		t.Fatal("still planned after clearing")
+	}
+}

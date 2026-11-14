@@ -206,6 +206,19 @@ var migrations = []string{
 		merged_at INTEGER NOT NULL
 	);
 	`,
+	// 6: planned rides, one per day beside the lifting plan.
+	`
+	CREATE TABLE ride_plans (
+		date         TEXT PRIMARY KEY,           -- YYYY-MM-DD, athlete's local date
+		name         TEXT NOT NULL,
+		kind         TEXT NOT NULL,              -- indoor | outdoor
+		duration_min INTEGER NOT NULL,
+		tss          INTEGER NOT NULL DEFAULT 0, -- 0 = no target
+		intensity    TEXT NOT NULL DEFAULT '',   -- recovery | endurance | tempo | threshold | vo2; '' = unsaid
+		notes        TEXT NOT NULL DEFAULT '',
+		updated_at   INTEGER NOT NULL
+	);
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

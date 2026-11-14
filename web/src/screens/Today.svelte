@@ -5,15 +5,18 @@
   import EaseOffer from '../components/EaseOffer.svelte';
   import GearReminder from '../components/GearReminder.svelte';
   import AskLink from '../components/AskLink.svelte';
+  import RideSheet from '../components/RideSheet.svelte';
   import RunDown from '../components/RunDown.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, fetchToday, localDate } from '../lib/api';
+  import { fetchRidePlans } from '../lib/data';
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
   import { day, duration, recoveryBand, time, weight } from '../lib/format';
+  import { addDays, dateMs, minutesText, rideMeta } from '../lib/rides';
   import { link, router } from '../lib/router.svelte';
   import { fetchTemplates, shapeText } from '../lib/templates';
   import { beginSession, complete, estimateMinutes } from '../lib/workout.svelte';
-  import type { LocalSession, Today } from '../lib/types';
+  import type { LocalSession, RidePlan, Today } from '../lib/types';
 
   type Load = 'loading' | 'fresh' | 'stale' | 'none' | 'auth';
 
@@ -25,6 +28,11 @@
   let activeDone = $state(0);
   let starting = $state(false);
   let slow = $state(false);
+  // Rides planned after today, and the sheet that plans them.
+  let upcoming = $state<RidePlan[]>([]);
+  let planned = $state<RidePlan[]>([]);
+  let rideSheet = $state<ReturnType<typeof RideSheet>>();
+  let note = $state('');
 
   // While Outpost's LLM writes today's call, look again a few times; the
   // rule-based call stands meanwhile, and for good if the model never answers.
@@ -46,6 +54,10 @@
     const a = await activeSession();
     active = a ?? null;
     activeDone = a ? (await sessionSets(a.id)).length : 0;
+    void fetchRidePlans(date).then((r) => {
+      planned = r.data ?? [];
+      upcoming = planned.filter((p) => p.date > date);
+    });
     try {
       today = await fetchToday(date);
       load = 'fresh';
@@ -68,6 +80,7 @@
 
   let band = $derived(today?.recovery ? recoveryBand(today.recovery.score) : null);
   let plan = $derived(today?.plan ?? null);
+  let ride = $derived(today?.ride ?? null);
   let totalSets = $derived(plan ? plan.exercises.reduce((n, e) => n + e.sets.length, 0) : 0);
   let ld = $derived(today?.load ?? null);
   // Today's planned session, already done.
@@ -93,6 +106,11 @@
     starting = true;
     const s = await beginSession(plan);
     router.go(`/session/${s.id}`);
+  }
+
+  function rideSaved(msg: string) {
+    note = msg;
+    void refresh();
   }
 
   const totalOf = (s: LocalSession) => s.plan.reduce((n, e) => n + e.sets.length, 0);
@@ -209,13 +227,62 @@
           {/each}
         </ol>
       </section>
-    {:else}
+    {:else if !ride}
       <section class="plan empty-plan" aria-labelledby="plan-h">
-        <h2 id="plan-h" class="plan-name">No lift planned today</h2>
-        <p class="muted small">Rest, or pick a workout to do today.</p>
-        <a class="btn pick" href="/workouts" use:link>Choose a workout</a>
+        <h2 id="plan-h" class="plan-name">Nothing planned today</h2>
+        <p class="muted small">Rest, or pick a workout or a ride for today.</p>
+        <div class="picks">
+          <a class="btn pick" href="/workouts" use:link>Choose a workout</a>
+          <button class="btn pick" onclick={() => rideSheet?.open()}>Plan a ride</button>
+        </div>
       </section>
     {/if}
+    {#if ride}
+      <section class="plan ride" aria-labelledby="ride-h">
+        <p class="kicker">Ride</p>
+        <div class="plan-head">
+          <h2 id="ride-h" class="plan-name">{ride.name}</h2>
+          <button class="more" onclick={() => rideSheet?.open(ride)} aria-label="Change today's ride">Change</button>
+        </div>
+        <p class="mono plan-meta">{rideMeta(ride)}</p>
+        {#if ride.done}
+          <a class="ride-done" href={`/activity/${ride.done.id}`} use:link>
+            <span class="tick" aria-hidden="true">✓</span>
+            <span>Done: {ride.done.name || 'Ride'} · {duration(ride.done.moving_s || ride.done.elapsed_s)}{#if ride.done.tss > 0} · {Math.round(ride.done.tss)} TSS{/if}</span>
+            <ChevronRight size={16} aria-hidden="true" />
+          </a>
+        {:else if ride.ease}
+          <div class="ride-ease">
+            <p>{ride.ease.reason}</p>
+            <p class="mono small">Easier: {rideMeta({ ...ride.ease, kind: ride.kind, tss: ride.ease.tss ?? 0 }, false)}</p>
+          </div>
+        {/if}
+        {#if ride.notes}<p class="ride-notes">{ride.notes}</p>{/if}
+      </section>
+      {#if !plan}
+        <p class="muted small no-lift">No lift planned. <a href="/workouts" use:link>Choose a workout</a></p>
+      {/if}
+    {/if}
+    {#if note}<p class="small note" role="status">{note}</p>{/if}
+
+    <section class="rides" aria-labelledby="rides-h">
+      <h2 id="rides-h" class="sec-h">Rides coming up <button class="more" onclick={() => rideSheet?.open(undefined, ride ? addDays(date, 1) : date)}>Plan a ride</button></h2>
+      {#if upcoming.length}
+        <ul class="ride-list">
+          {#each upcoming as p (p.date)}
+            <li>
+              <button class="ride-row" onclick={() => rideSheet?.open(p)} aria-label={`Change ${p.name} on ${day(dateMs(p.date))}`}>
+                <span class="mono rd">{day(dateMs(p.date))}</span>
+                <span class="rn">{p.name}</span>
+                <span class="mono rm">{p.kind === 'indoor' ? 'In' : 'Out'} · {minutesText(p.duration_min)}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted small rides-none">Nothing planned for the next two weeks.</p>
+      {/if}
+    </section>
 
       </div>
       <div class="col-side">
@@ -264,6 +331,8 @@
     </div>
   {/if}
 </main>
+
+<RideSheet bind:this={rideSheet} {planned} onsaved={rideSaved} />
 
 {#if active}
   <ActionBar column>
@@ -457,6 +526,13 @@
     min-height: 2.75rem;
     margin: -0.5rem 0;
   }
+  button.more {
+    padding: 0;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    cursor: pointer;
+  }
   .figs {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -610,6 +686,98 @@
     content: '▲ ';
     color: var(--signal);
     font-size: 0.7em;
+  }
+  .picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+  .picks .pick {
+    margin-top: 0;
+  }
+  .kicker {
+    font-size: var(--size-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--sport-ride);
+  }
+  .ride-done {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 2.75rem;
+    margin-top: var(--space-2);
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .ride-done .tick {
+    color: var(--rec-green);
+    font-weight: 700;
+  }
+  .ride-ease {
+    margin-top: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-left: 3px solid var(--rec-amber);
+    background: var(--surface-raised);
+    border-radius: 0 var(--radius-m) var(--radius-m) 0;
+  }
+  .ride-ease .mono {
+    margin-top: var(--space-1);
+    color: var(--text-muted);
+  }
+  .ride-notes {
+    margin-top: var(--space-2);
+    white-space: pre-line;
+    max-width: 60ch;
+  }
+  .no-lift {
+    margin-top: var(--space-3);
+  }
+  .note {
+    margin-top: var(--space-3);
+  }
+  .rides {
+    margin-top: var(--space-6);
+  }
+  .ride-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .ride-list li + li {
+    border-top: 1px solid var(--line);
+  }
+  .ride-row {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 2.75rem;
+    padding: var(--space-2) 0;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .rd,
+  .rm {
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
+  .rn {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .rides-none {
+    margin-top: var(--space-2);
   }
   .plan-head {
     display: flex;
