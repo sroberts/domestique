@@ -89,6 +89,10 @@ A circuit is a group of exercises done back to back, one set of each, then repea
 
 **Shape:** each exercise has an optional `circuit` key; adjacent exercises sharing it form one circuit. Rounds are the set count, which every exercise in the circuit shares. In a circuit, an exercise's `rest_seconds` is the rest after it, so the last exercise's rest is the rest between rounds. Template and session plans carry the key with the exercises, so no new tables are needed.
 
+A template also has a `circuits` list, one entry per circuit with its `key`, `rounds` and `round_rest_seconds`. Reading a template always fills it. Writers (REST, MCP, seed files) can send it instead of writing every set: an exercise with one set gets it repeated for each round, and `round_rest_seconds` is written to the last exercise's `rest_seconds`. Sets that number neither one nor the rounds are refused. In the editor, Rounds and Rest between rounds sit together in the circuit header.
+
+During a session, after a circuit's last planned round the athlete can add a round (each exercise repeats its last set), and partway through they can end the circuit, keeping the rounds done so far. Either way the session's own plan changes to match, so the summary counts the rounds actually done, while progression still compares against the template.
+
 **Decisions:**
 
 - Strength only for now. Timed work (intervals, EMOM) can come later

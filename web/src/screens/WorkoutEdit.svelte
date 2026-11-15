@@ -755,6 +755,15 @@
               </div>
               <div class="c-rounds">
                 <Stepper label="Rounds" value={String(rounds)} canDecrease={rounds > 1} onstep={(d) => setRounds(g, rounds + d)} />
+                {#if exercises[g.end - 1]}
+                  {@const endEx = exercises[g.end - 1]!}
+                  <Stepper
+                    label="Rest between rounds, seconds"
+                    value={String(endEx.rest)}
+                    canDecrease={endEx.rest > 0}
+                    onstep={(d) => (endEx.rest = Math.max(0, Math.min(900, endEx.rest + d * 15)))}
+                  />
+                {/if}
               </div>
             </div>
           {/if}
@@ -834,12 +843,17 @@
             </div>
 
             <div class="ex-side">
-              <Stepper
-                label={!g ? 'Rest seconds' : g.end - 1 === i ? 'Rest between rounds, seconds' : 'Rest after, seconds'}
-                value={String(e.rest)}
-                canDecrease={e.rest > 0}
-                onstep={(d) => (e.rest = Math.max(0, Math.min(900, e.rest + d * 15)))}
-              />
+              {#if g && g.end - 1 === i}
+                <!-- The last exercise's rest is the circuit's: set in its header. -->
+                <p class="muted round-end">Then {e.rest > 0 ? `${e.rest} s rest before` : 'straight on to'} the next round.</p>
+              {:else}
+                <Stepper
+                  label={!g ? 'Rest seconds' : 'Rest after, seconds'}
+                  value={String(e.rest)}
+                  canDecrease={e.rest > 0}
+                  onstep={(d) => (e.rest = Math.max(0, Math.min(900, e.rest + d * 15)))}
+                />
+              {/if}
               <div class="field">
                 <label class="fl" for={`ex${e.key}-notes`}>Notes <span class="muted">(optional)</span></label>
                 <input id={`ex${e.key}-notes`} class="text notes" bind:value={e.notes} maxlength="500" autocomplete="off" />
@@ -1101,7 +1115,14 @@
     font-size: var(--size-small);
   }
   .c-rounds {
-    width: min(100%, 13rem);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 13rem));
+    gap: var(--space-3);
+    width: min(100%, 27rem);
+  }
+  .round-end {
+    font-size: var(--size-small);
+    align-self: center;
   }
   .join {
     display: grid;

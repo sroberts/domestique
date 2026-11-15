@@ -84,11 +84,77 @@ func CleanTemplate(t Template) (Template, error) {
 		}
 		ex[i] = e
 	}
+	if err := applyCircuitSpecs(ex, t.Circuits); err != nil {
+		return t, err
+	}
 	if err := checkCircuits(ex); err != nil {
 		return t, err
 	}
 	t.Exercises = ex
+	t.Circuits = CircuitSpecs(ex)
 	return t, nil
+}
+
+// applyCircuitSpecs writes circuit-level rounds and round rest onto the
+// exercises: an exercise with one set gets that set repeated for each round,
+// and the last exercise's rest_seconds becomes the rest between rounds. An
+// exercise whose sets already number the rounds is left as is; any other
+// count disagrees and is refused.
+func applyCircuitSpecs(ex []Exercise, specs []CircuitSpec) error {
+	circuits := Circuits(ex)
+	seen := map[string]bool{}
+	for _, sp := range specs {
+		key := strings.TrimSpace(sp.Key)
+		if seen[key] {
+			return invalid("circuits: %s is listed twice", key)
+		}
+		seen[key] = true
+		var c *Circuit
+		for i := range circuits {
+			if circuits[i].Key == key {
+				c = &circuits[i]
+				break
+			}
+		}
+		switch {
+		case c == nil:
+			return invalid("circuits: no exercise is in circuit %s", key)
+		case sp.Rounds < 0 || sp.Rounds > MaxSetsPerLift:
+			return invalid("circuit %s: rounds must be 1-%d", key, MaxSetsPerLift)
+		case sp.RoundRestSeconds != nil && (*sp.RoundRestSeconds < 0 || *sp.RoundRestSeconds > MaxRestSeconds):
+			return invalid("circuit %s: round_rest_seconds must be 0-%d", key, MaxRestSeconds)
+		}
+		if n := sp.Rounds; n > 0 {
+			for i := c.Start; i < c.End; i++ {
+				switch sets := ex[i].Sets; len(sets) {
+				case n:
+				case 1:
+					ex[i].Sets = make([]TargetSet, n)
+					for j := range ex[i].Sets {
+						ex[i].Sets[j] = sets[0]
+					}
+				default:
+					return invalid("circuit %s has %d rounds, but %s has %d sets: give it one set, or %d",
+						key, n, ex[i].Name, len(sets), n)
+				}
+			}
+		}
+		if sp.RoundRestSeconds != nil {
+			ex[c.End-1].RestSeconds = *sp.RoundRestSeconds
+		}
+	}
+	return nil
+}
+
+// CircuitSpecs reads each circuit's rounds and rest between rounds off the
+// exercises, in order.
+func CircuitSpecs(ex []Exercise) []CircuitSpec {
+	var out []CircuitSpec
+	for _, c := range Circuits(ex) {
+		rest := ex[c.End-1].RestSeconds
+		out = append(out, CircuitSpec{Key: c.Key, Rounds: c.Rounds(ex), RoundRestSeconds: &rest})
+	}
+	return out
 }
 
 // Circuit is a run of adjacent exercises sharing a circuit key: [Start, End).

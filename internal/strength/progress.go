@@ -157,6 +157,7 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 	if r.Level != "hold" && r.Level != "easy" {
 		suggestRounds(out.Exercises, hitWhen)
 	}
+	out.Circuits = store.CircuitSpecs(out.Exercises)
 	return out, nil
 }
 
@@ -176,7 +177,7 @@ func suggestRounds(ex []store.Exercise, hitWhen []string) {
 		if !all {
 			continue
 		}
-		note := "Every exercise in the circuit hit last time: add a round if it felt easy"
+		note := "Every exercise in the circuit hit last time: add a round at the end if it feels easy"
 		if ex[c.Start].Change != "" {
 			note = ex[c.Start].Change + ". " + note
 		}

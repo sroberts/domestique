@@ -5,67 +5,9 @@ import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSe
 import { sync } from './sync.svelte';
 import type { Exercise, LocalSession, Progress, SetRecord, TargetSet, Template } from './types';
 import { correctionCarries, loggedAt, stepNext, targetWith } from './weights';
+import { anotherRound, circuitsOf, endableCircuit, slotsOf, withAnotherRound, withCircuitEnded, type Circuit, type Replanned, type Slot } from './rounds';
 
-/** A run of adjacent exercises sharing a circuit key: plan[start, end). */
-export interface Circuit {
-  key: string;
-  start: number;
-  end: number;
-  rounds: number;
-}
-
-export interface Slot {
-  index: number;
-  exerciseIndex: number;
-  /** Set number within the exercise; in a circuit, also the round. */
-  setIndex: number;
-  exercise: Exercise;
-  target: TargetSet;
-  circuit?: Circuit;
-}
-
-/** Mirrors store.Circuits on the server. */
-export function circuitsOf(plan: Exercise[]): Circuit[] {
-  const out: Circuit[] = [];
-  for (let i = 0; i < plan.length; ) {
-    const key = plan[i]!.circuit;
-    if (!key) {
-      i++;
-      continue;
-    }
-    let j = i + 1;
-    while (j < plan.length && plan[j]!.circuit === key) j++;
-    out.push({ key, start: i, end: j, rounds: plan[i]!.sets.length });
-    i = j;
-  }
-  return out;
-}
-
-/** The planned sets in the order they're done: straight sets exercise by
- * exercise, circuits round by round (A1 B1 C1, A2 B2 C2). */
-export function slotsOf(plan: Exercise[]): Slot[] {
-  const out: Slot[] = [];
-  const push = (exerciseIndex: number, setIndex: number, circuit?: Circuit) => {
-    const exercise = plan[exerciseIndex]!;
-    const target = exercise.sets[setIndex];
-    if (target) out.push({ index: out.length, exerciseIndex, setIndex, exercise, target, circuit });
-  };
-  const circuits = circuitsOf(plan);
-  for (let i = 0; i < plan.length; ) {
-    const c = circuits.find((x) => x.start === i);
-    if (c) {
-      // Rounds from the longest member, so a plan cut short on an easy day
-      // (or an older plan) still covers every set.
-      const rounds = Math.max(...plan.slice(c.start, c.end).map((e) => e.sets.length));
-      for (let r = 0; r < rounds; r++) for (let e = c.start; e < c.end; e++) push(e, r, c);
-      i = c.end;
-    } else {
-      plan[i]!.sets.forEach((_, setIndex) => push(i, setIndex));
-      i++;
-    }
-  }
-  return out;
-}
+export { MAX_ROUNDS, circuitsOf, slotsOf, type Circuit, type Slot } from './rounds';
 
 /** Where a logged set sits in a circuit: "A2", round 3 of 4. */
 export interface CircuitPlace {
@@ -313,6 +255,35 @@ export class Workout {
     }
     c.phase_started_at = Date.now();
     await saveCursor($state.snapshot(this.session) as LocalSession);
+  }
+
+  /** The circuit whose last planned round was just done: it can take
+   * another round. */
+  roundsDone = $derived(anotherRound(this.session, this.sets));
+  /** The circuit under way, once a round has started: it can end. */
+  endable = $derived(endableCircuit(this.session, this.sets));
+
+  /** One more round of the circuit just finished. */
+  async addRound(): Promise<void> {
+    await this.replan(withAnotherRound(this.snapshot(), $state.snapshot(this.sets) as SetRecord[], Date.now()));
+  }
+
+  /** End the circuit under way, keeping the rounds started. */
+  async endCircuit(): Promise<void> {
+    await this.replan(withCircuitEnded(this.snapshot(), $state.snapshot(this.sets) as SetRecord[], Date.now()));
+  }
+
+  private snapshot = () => $state.snapshot(this.session) as LocalSession;
+
+  /** Save a changed plan: it syncs, so the Mac Mini's copy has the rounds
+   * actually done. */
+  private async replan(r: Replanned | null): Promise<void> {
+    if (!r) return;
+    this.session.plan = r.plan;
+    this.session.cursor = r.cursor;
+    this.session.updated_at = Date.now();
+    await saveSession(this.snapshot());
+    sync.kick();
   }
 
   /** Throw the session away entirely: it was started by mistake. */

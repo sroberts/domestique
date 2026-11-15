@@ -16,10 +16,19 @@ export interface Exercise {
   circuit?: string;
 }
 
+/** A circuit's rounds and rest between rounds (the last exercise's rest). */
+export interface CircuitSpec {
+  key: string;
+  rounds?: number;
+  round_rest_seconds?: number;
+}
+
 export interface Template {
   id: string;
   name: string;
   exercises: Exercise[];
+  /** Filled on read; optional on write, where it expands each exercise's one set. */
+  circuits?: CircuitSpec[];
   updated_at: number;
 }
 
@@ -80,6 +89,9 @@ export interface Cursor {
   skipped: number[];
   /** The set just logged, editable during rest. */
   last_set_id: string | null;
+  /** Plan index of each circuit the athlete ended early, which isn't then
+   * offered another round. */
+  ended?: number[];
 }
 
 export interface LocalSession extends Session {

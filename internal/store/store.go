@@ -97,7 +97,23 @@ type Template struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
 	Exercises []Exercise `json:"exercises"`
-	UpdatedAt int64      `json:"updated_at"`
+	// Circuits is a circuit-level view of the exercises: each circuit's
+	// rounds and rest between rounds. Writers may send it instead of
+	// writing every set; it is always filled on read.
+	Circuits  []CircuitSpec `json:"circuits,omitempty"`
+	UpdatedAt int64         `json:"updated_at"`
+}
+
+// CircuitSpec sets a circuit's rounds and the rest between them. It is
+// stored on the exercises (round N is set N of each; the rest between rounds
+// is the last exercise's rest_seconds), so it adds no columns.
+type CircuitSpec struct {
+	Key string `json:"key"`
+	// Rounds expands each exercise's sets to this many; 0 keeps the sets.
+	Rounds int `json:"rounds,omitempty"`
+	// RoundRestSeconds is the rest after each round; nil keeps the last
+	// exercise's rest_seconds.
+	RoundRestSeconds *int `json:"round_rest_seconds,omitempty"`
 }
 
 // Recovery is a morning recovery reading (Whoop).
@@ -210,6 +226,7 @@ func scanTemplate(r scanner) (Template, error) {
 	if err := json.Unmarshal([]byte(ex), &t.Exercises); err != nil {
 		return Template{}, fmt.Errorf("template %s: %w", t.ID, err)
 	}
+	t.Circuits = CircuitSpecs(t.Exercises)
 	return t, nil
 }
 

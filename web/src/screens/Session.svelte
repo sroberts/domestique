@@ -10,7 +10,7 @@
   import { buzz, chime, clock, keepAwake, primeAudio } from '../lib/device.svelte';
   import { clock as fmtClock, setText, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
-  import { Workout, type Slot } from '../lib/workout.svelte';
+  import { Workout, circuitsOf, type Circuit, type Slot } from '../lib/workout.svelte';
   import { weightStep } from '../lib/weights';
 
   let { id }: { id: string } = $props();
@@ -123,6 +123,31 @@
       await w!.skipExercise();
       if (w!.session.finished_at) router.go(`/session/${id}/summary`, { replace: true });
     });
+
+  // A circuit's rounds can change mid-session: one more after the last
+  // planned round, or stop with the rounds done so far.
+  let another = $derived(w?.roundsDone ?? null);
+  let endable = $derived(w?.endable ?? null);
+  /** "Circuit B", lettered as the editor and summary letter them. */
+  const circuitName = (circ: Circuit) =>
+    `Circuit ${String.fromCharCode(65 + (circuitsOf(w!.session.plan).findIndex((x) => x.start === circ.start) % 26))}`;
+  const roundsText = (n: number) => `${n} ${n === 1 ? 'round' : 'rounds'}`;
+  const addRound = () =>
+    act(async () => {
+      const circ = another!;
+      await w!.addRound();
+      announce = `${circuitName(circ)}: round ${circ.rounds + 1} added.`;
+    });
+  const endCircuit = () =>
+    act(async () => {
+      dialog?.close();
+      const e = endable!;
+      await w!.endCircuit();
+      announce = `${circuitName(e.circuit)} ended after ${roundsText(e.rounds)}.`;
+    });
+  // Between rounds (resting before the next one starts), ending is offered
+  // in place, not only from End.
+  let betweenRounds = $derived(!!endable && c?.phase === 'rest' && !!slot && !!w?.lastSet && slot.setIndex > w.lastSet.set_index);
 
   function ladderState(s: Slot): 'done' | 'current' | 'skipped' | 'todo' {
     if (!w || !c) return 'todo';
@@ -268,6 +293,13 @@
       </section>
     {/if}
 
+    {#if another}
+      <section class="again" aria-label="Another round">
+        <p class="muted">That was the last of {roundsText(another.rounds)} of {circuitName(another)}.</p>
+        <button class="btn again-btn" onclick={addRound} disabled={busy}>Add round {another.rounds + 1}</button>
+      </section>
+    {/if}
+
     {#if c.phase === 'rest' && slot && target}
       <section class="next" aria-label="Next set">
         <p class="label">Next</p>
@@ -278,6 +310,11 @@
           <p class="next-main">Set {slot.setIndex + 1} of {exerciseSlots.length} · <span class="num next-num">{setText(target.reps, target.weight_kg)}</span></p>
         {/if}
         {@render nextWeight(`${slot.exercise.name} weight`)}
+        {#if betweenRounds && endable}
+          <button class="btn btn-quiet end-circuit" onclick={endCircuit} disabled={busy}>
+            End {circuitName(endable.circuit)} after {roundsText(endable.rounds)}
+          </button>
+        {/if}
       </section>
     {/if}
   </main>
@@ -303,6 +340,9 @@
         <p class="muted">The set in progress won't be logged.</p>
       {/if}
       <div class="sheet-actions">
+        {#if endable}
+          <button class="btn sheet-btn" onclick={endCircuit}>End {circuitName(endable.circuit)} after {roundsText(endable.rounds)}</button>
+        {/if}
         {#if slot && c.phase !== 'active' && c.phase !== 'last'}
           <button class="btn sheet-btn" onclick={skipExercise}>Skip the rest of {slot.exercise.name}</button>
         {/if}
@@ -594,6 +634,22 @@
   .next {
     margin-top: var(--space-5);
     padding-bottom: var(--space-2);
+  }
+  .again {
+    margin-top: var(--space-5);
+    display: grid;
+    gap: var(--space-2);
+    font-size: var(--size-small);
+  }
+  .again-btn {
+    min-height: var(--tap-min);
+    justify-self: start;
+    min-width: 12rem;
+  }
+  .end-circuit {
+    margin-top: var(--space-3);
+    min-height: var(--tap-min);
+    margin-left: calc(var(--space-3) * -1);
   }
   .next-main {
     margin-top: var(--space-1);
