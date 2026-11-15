@@ -15,7 +15,7 @@
   import { pendingFor } from '../lib/db';
   import { sync } from '../lib/sync.svelte';
   import { sessionExports } from '../lib/export';
-  import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
+  import { clock, day, duration, roundsText, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
   import { Workout, earlyText, endedEarly, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
   import type { CheckInResp, MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
@@ -215,7 +215,7 @@
   }
 
   /** "4 rounds" for a circuit exercise, "5 sets" otherwise. */
-  const countText = (n: number, circuit?: string) => `${n} ${circuit ? (n === 1 ? 'round' : 'rounds') : n === 1 ? 'set' : 'sets'}`;
+  const countText = (n: number, circuit?: string) => (circuit ? roundsText(n) : `${n} ${n === 1 ? 'set' : 'sets'}`);
 
   async function step(s: SetRecord, field: 'reps' | 'weight_kg', dir: -1 | 1) {
     if (!workout) return;

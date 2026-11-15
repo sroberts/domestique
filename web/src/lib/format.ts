@@ -9,6 +9,9 @@ export function setText(reps: number, kg: number): string {
 }
 
 /** m:ss, or h:mm:ss past an hour. */
+/** "1 round", "4 rounds". */
+export const roundsText = (n: number) => `${n} ${n === 1 ? 'round' : 'rounds'}`;
+
 export function clock(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(s / 3600);

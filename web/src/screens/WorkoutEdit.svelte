@@ -10,7 +10,7 @@
   import ActionBar from '../components/ActionBar.svelte';
   import Stepper from '../components/Stepper.svelte';
   import { AuthError, HTTPError, OfflineError, getJSON, localDate, postForJSON } from '../lib/api';
-  import { setText } from '../lib/format';
+  import { roundsText, setText } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
   import { sync } from '../lib/sync.svelte';
   import {
@@ -24,6 +24,7 @@
     startTemplate,
     type ExerciseSuggestion,
   } from '../lib/templates';
+  import { MAX_ROUNDS, circuitLetter } from '../lib/rounds';
   import { newId } from '../lib/workout.svelte';
   import type { Template } from '../lib/types';
 
@@ -264,7 +265,7 @@
       const token = exercises[i]!.circuit;
       let j = i + 1;
       while (token && j < exercises.length && exercises[j]!.circuit === token) j++;
-      if (token) out.push({ token, letter: String.fromCharCode(65 + (out.length % 26)), start: i, end: j });
+      if (token) out.push({ token, letter: circuitLetter(out.length), start: i, end: j });
       i = j;
     }
     return out;
@@ -335,10 +336,10 @@
       }
       e.fresh = false;
     }
-    const letter = String.fromCharCode(65 + groups.filter((g) => g.start < start).length);
+    const letter = circuitLetter(groups.filter((g) => g.start < start).length);
     say(
-      `${exLabel(a, i)} and ${exLabel(b, i + 1)} linked in circuit ${letter}, ${rounds} ${rounds === 1 ? 'round' : 'rounds'}.` +
-        (changed.length ? ` ${changed.join(' and ')} now ${rounds} ${rounds === 1 ? 'round' : 'rounds'}, to match.` : ''),
+      `${exLabel(a, i)} and ${exLabel(b, i + 1)} linked in circuit ${letter}, ${roundsText(rounds)}.` +
+        (changed.length ? ` ${changed.join(' and ')} now ${roundsText(rounds)}, to match.` : ''),
     );
     void focus(`ex${a.key}-join`);
   }
@@ -356,13 +357,16 @@
     void focus(`ex${exercises[i]!.key}-join`);
   }
 
+  /** Rest in 15 s steps, 0 to 900 (store.MaxRestSeconds). */
+  const stepRest = (e: DraftEx, d: -1 | 1) => (e.rest = Math.max(0, Math.min(900, e.rest + d * 15)));
+
   function setRounds(g: Group, n: number) {
-    if (n < 1 || n > 20) return;
+    if (n < 1 || n > MAX_ROUNDS) return;
     for (let k = g.start; k < g.end; k++) {
       resize(exercises[k]!, n);
       exercises[k]!.fresh = false;
     }
-    say(`Circuit ${g.letter}: ${n} ${n === 1 ? 'round' : 'rounds'}.`);
+    say(`Circuit ${g.letter}: ${roundsText(n)}.`);
   }
 
   function validate(): Record<string, string> {
@@ -748,22 +752,15 @@
         >
           {#if g && g.start === i}
             {@const rounds = e.sets.length}
-            <div class="c-head" role="group" aria-label={`Circuit ${g.letter}, ${g.end - g.start} exercises, ${rounds} ${rounds === 1 ? 'round' : 'rounds'}`}>
+            {@const endEx = exercises[g.end - 1]!}
+            <div class="c-head" role="group" aria-label={`Circuit ${g.letter}, ${g.end - g.start} exercises, ${roundsText(rounds)}`}>
               <div class="c-title">
                 <span class="c-name">Circuit {g.letter}</span>
                 <span class="muted c-sub">{g.end - g.start} exercises, one set of each per round</span>
               </div>
               <div class="c-rounds">
                 <Stepper label="Rounds" value={String(rounds)} canDecrease={rounds > 1} onstep={(d) => setRounds(g, rounds + d)} />
-                {#if exercises[g.end - 1]}
-                  {@const endEx = exercises[g.end - 1]!}
-                  <Stepper
-                    label="Rest between rounds, seconds"
-                    value={String(endEx.rest)}
-                    canDecrease={endEx.rest > 0}
-                    onstep={(d) => (endEx.rest = Math.max(0, Math.min(900, endEx.rest + d * 15)))}
-                  />
-                {/if}
+                <Stepper label="Rest between rounds, seconds" value={String(endEx.rest)} canDecrease={endEx.rest > 0} onstep={(d) => stepRest(endEx, d)} />
               </div>
             </div>
           {/if}
@@ -851,7 +848,7 @@
                   label={!g ? 'Rest seconds' : 'Rest after, seconds'}
                   value={String(e.rest)}
                   canDecrease={e.rest > 0}
-                  onstep={(d) => (e.rest = Math.max(0, Math.min(900, e.rest + d * 15)))}
+                  onstep={(d) => stepRest(e, d)}
                 />
               {/if}
               <div class="field">

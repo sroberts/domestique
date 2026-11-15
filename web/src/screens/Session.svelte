@@ -8,9 +8,10 @@
   import SyncStatus from '../components/SyncStatus.svelte';
   import { sync } from '../lib/sync.svelte';
   import { buzz, chime, clock, keepAwake, primeAudio } from '../lib/device.svelte';
-  import { clock as fmtClock, setText, weight } from '../lib/format';
+  import { clock as fmtClock, roundsText, setText, weight } from '../lib/format';
   import { link, router } from '../lib/router.svelte';
-  import { Workout, circuitsOf, type Circuit, type Slot } from '../lib/workout.svelte';
+  import { circuitLetter, circuitsOf, type Circuit } from '../lib/rounds';
+  import { Workout, type Slot } from '../lib/workout.svelte';
   import { weightStep } from '../lib/weights';
 
   let { id }: { id: string } = $props();
@@ -126,28 +127,25 @@
 
   // A circuit's rounds can change mid-session: one more after the last
   // planned round, or stop with the rounds done so far.
-  let another = $derived(w?.roundsDone ?? null);
-  let endable = $derived(w?.endable ?? null);
+  let circuits = $derived(w ? circuitsOf(w.session.plan) : []);
   /** "Circuit B", lettered as the editor and summary letter them. */
-  const circuitName = (circ: Circuit) =>
-    `Circuit ${String.fromCharCode(65 + (circuitsOf(w!.session.plan).findIndex((x) => x.start === circ.start) % 26))}`;
-  const roundsText = (n: number) => `${n} ${n === 1 ? 'round' : 'rounds'}`;
+  const circuitName = (circ: Circuit) => `Circuit ${circuitLetter(circuits.findIndex((x) => x.start === circ.start))}`;
   const addRound = () =>
     act(async () => {
-      const circ = another!;
+      const circ = w!.roundsDone!;
       await w!.addRound();
       announce = `${circuitName(circ)}: round ${circ.rounds + 1} added.`;
     });
   const endCircuit = () =>
     act(async () => {
       dialog?.close();
-      const e = endable!;
+      const e = w!.endable!;
       await w!.endCircuit();
       announce = `${circuitName(e.circuit)} ended after ${roundsText(e.rounds)}.`;
     });
   // Between rounds (resting before the next one starts), ending is offered
   // in place, not only from End.
-  let betweenRounds = $derived(!!endable && c?.phase === 'rest' && !!slot && !!w?.lastSet && slot.setIndex > w.lastSet.set_index);
+  let betweenRounds = $derived(!!slot && !!w?.lastSet && slot.setIndex > w.lastSet.set_index);
 
   function ladderState(s: Slot): 'done' | 'current' | 'skipped' | 'todo' {
     if (!w || !c) return 'todo';
@@ -182,6 +180,8 @@
     </div>
   {/if}
 {/snippet}
+
+{#snippet endText(e: { circuit: Circuit; rounds: number })}End {circuitName(e.circuit)} after {roundsText(e.rounds)}{/snippet}
 
 <div class="visually-hidden" aria-live="assertive">{announce}</div>
 
@@ -293,7 +293,8 @@
       </section>
     {/if}
 
-    {#if another}
+    {#if w.roundsDone}
+      {@const another = w.roundsDone}
       <section class="again" aria-label="Another round">
         <p class="muted">That was the last of {roundsText(another.rounds)} of {circuitName(another)}.</p>
         <button class="btn again-btn" onclick={addRound} disabled={busy}>Add round {another.rounds + 1}</button>
@@ -310,10 +311,8 @@
           <p class="next-main">Set {slot.setIndex + 1} of {exerciseSlots.length} · <span class="num next-num">{setText(target.reps, target.weight_kg)}</span></p>
         {/if}
         {@render nextWeight(`${slot.exercise.name} weight`)}
-        {#if betweenRounds && endable}
-          <button class="btn btn-quiet end-circuit" onclick={endCircuit} disabled={busy}>
-            End {circuitName(endable.circuit)} after {roundsText(endable.rounds)}
-          </button>
+        {#if betweenRounds && w.endable}
+          <button class="btn btn-quiet end-circuit" onclick={endCircuit} disabled={busy}>{@render endText(w.endable)}</button>
         {/if}
       </section>
     {/if}
@@ -340,8 +339,8 @@
         <p class="muted">The set in progress won't be logged.</p>
       {/if}
       <div class="sheet-actions">
-        {#if endable}
-          <button class="btn sheet-btn" onclick={endCircuit}>End {circuitName(endable.circuit)} after {roundsText(endable.rounds)}</button>
+        {#if w.endable}
+          <button class="btn sheet-btn" onclick={endCircuit}>{@render endText(w.endable)}</button>
         {/if}
         {#if slot && c.phase !== 'active' && c.phase !== 'last'}
           <button class="btn sheet-btn" onclick={skipExercise}>Skip the rest of {slot.exercise.name}</button>

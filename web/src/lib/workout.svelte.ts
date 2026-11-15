@@ -5,9 +5,9 @@ import { discardSession, getSession, saveCursor, saveSession, saveSet, sessionSe
 import { sync } from './sync.svelte';
 import type { Exercise, LocalSession, Progress, SetRecord, TargetSet, Template } from './types';
 import { correctionCarries, loggedAt, stepNext, targetWith } from './weights';
-import { anotherRound, circuitsOf, endableCircuit, slotsOf, withAnotherRound, withCircuitEnded, type Circuit, type Replanned, type Slot } from './rounds';
+import { anotherRound, circuitLetter, circuitsOf, endableCircuit, slotsOf, withAnotherRound, withCircuitEnded, type Replanned, type Slot } from './rounds';
 
-export { MAX_ROUNDS, circuitsOf, slotsOf, type Circuit, type Slot } from './rounds';
+export { circuitsOf, slotsOf, type Circuit, type Slot } from './rounds';
 
 /** Where a logged set sits in a circuit: "A2", round 3 of 4. */
 export interface CircuitPlace {
@@ -39,7 +39,7 @@ export function roundsOf(plan: Exercise[], sets: SetRecord[]): { places: Map<str
     const ci = circuits.findIndex((c) => s.exercise_index >= c.start && s.exercise_index < c.end);
     const c = circuits[ci];
     if (!c) continue;
-    const letter = String.fromCharCode(65 + (ci % 26));
+    const letter = circuitLetter(ci);
     places.set(s.id, { letter, pos: `${letter}${s.exercise_index - c.start + 1}`, round: s.set_index + 1, rounds: c.rounds });
     const key = `${ci}:${s.set_index}`;
     let r = byKey.get(key);
@@ -144,7 +144,7 @@ export class Workout {
     if (!this.current || c.phase === 'active' || c.phase === 'last') return;
     c.phase = 'active';
     c.phase_started_at = Date.now();
-    await saveCursor($state.snapshot(this.session) as LocalSession);
+    await saveCursor(this.snap());
   }
 
   /** Finish the active set: it's logged at target and can be adjusted during rest. */
@@ -183,7 +183,7 @@ export class Workout {
     } else {
       c.phase = 'last';
     }
-    await saveCursor($state.snapshot(this.session) as LocalSession);
+    await saveCursor(this.snap());
     sync.kick();
   }
 
@@ -199,7 +199,7 @@ export class Workout {
     last[field] = next;
     last.updated_at = Date.now();
     await saveSet($state.snapshot(last) as SetRecord);
-    await saveCursor($state.snapshot(this.session) as LocalSession);
+    await saveCursor(this.snap());
     sync.kick();
   }
 
@@ -211,7 +211,7 @@ export class Workout {
     const kg = stepNext(c, slot, dir);
     if (kg === null || !slot) return;
     c.weight_override[slot.exerciseIndex] = kg;
-    await saveCursor($state.snapshot(this.session) as LocalSession);
+    await saveCursor(this.snap());
   }
 
   /** Whether the logged weight of this set is carrying to its exercise's next sets. */
@@ -234,7 +234,7 @@ export class Workout {
     const c = this.session.cursor;
     if (c.phase !== 'rest') return;
     c.rest_s = Math.max(15, c.rest_s + seconds);
-    await saveCursor($state.snapshot(this.session) as LocalSession);
+    await saveCursor(this.snap());
   }
 
   /** Skip what's left of the current exercise. In a circuit the rounds
@@ -254,26 +254,24 @@ export class Workout {
       c.phase = 'ready';
     }
     c.phase_started_at = Date.now();
-    await saveCursor($state.snapshot(this.session) as LocalSession);
+    await saveCursor(this.snap());
   }
 
   /** The circuit whose last planned round was just done: it can take
    * another round. */
-  roundsDone = $derived(anotherRound(this.session, this.sets));
+  roundsDone = $derived(anotherRound(this.session, this.sets, this.slots));
   /** The circuit under way, once a round has started: it can end. */
-  endable = $derived(endableCircuit(this.session, this.sets));
+  endable = $derived(endableCircuit(this.session, this.sets, this.slots));
 
   /** One more round of the circuit just finished. */
   async addRound(): Promise<void> {
-    await this.replan(withAnotherRound(this.snapshot(), $state.snapshot(this.sets) as SetRecord[], Date.now()));
+    await this.replan(withAnotherRound(this.snap(), $state.snapshot(this.sets) as SetRecord[], Date.now()));
   }
 
   /** End the circuit under way, keeping the rounds started. */
   async endCircuit(): Promise<void> {
-    await this.replan(withCircuitEnded(this.snapshot(), $state.snapshot(this.sets) as SetRecord[], Date.now()));
+    await this.replan(withCircuitEnded(this.snap(), $state.snapshot(this.sets) as SetRecord[], Date.now()));
   }
-
-  private snapshot = () => $state.snapshot(this.session) as LocalSession;
 
   /** Save a changed plan: it syncs, so the Mac Mini's copy has the rounds
    * actually done. */
@@ -282,8 +280,12 @@ export class Workout {
     this.session.plan = r.plan;
     this.session.cursor = r.cursor;
     this.session.updated_at = Date.now();
-    await saveSession(this.snapshot());
+    await saveSession(this.snap());
     sync.kick();
+  }
+
+  private snap(): LocalSession {
+    return $state.snapshot(this.session) as LocalSession;
   }
 
   /** Throw the session away entirely: it was started by mistake. */
@@ -297,7 +299,7 @@ export class Workout {
     const now = Date.now();
     this.session.finished_at = now;
     this.session.updated_at = now;
-    await saveSession($state.snapshot(this.session) as LocalSession);
+    await saveSession(this.snap());
     sync.kick();
   }
 }

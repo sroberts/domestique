@@ -101,7 +101,10 @@ func CleanTemplate(t Template) (Template, error) {
 // exercise whose sets already number the rounds is left as is; any other
 // count disagrees and is refused.
 func applyCircuitSpecs(ex []Exercise, specs []CircuitSpec) error {
-	circuits := Circuits(ex)
+	byKey := map[string]Circuit{}
+	for _, c := range Circuits(ex) {
+		byKey[c.Key] = c
+	}
 	seen := map[string]bool{}
 	for _, sp := range specs {
 		key := strings.TrimSpace(sp.Key)
@@ -109,15 +112,9 @@ func applyCircuitSpecs(ex []Exercise, specs []CircuitSpec) error {
 			return invalid("circuits: %s is listed twice", key)
 		}
 		seen[key] = true
-		var c *Circuit
-		for i := range circuits {
-			if circuits[i].Key == key {
-				c = &circuits[i]
-				break
-			}
-		}
+		c, ok := byKey[key]
 		switch {
-		case c == nil:
+		case !ok:
 			return invalid("circuits: no exercise is in circuit %s", key)
 		case sp.Rounds < 0 || sp.Rounds > MaxSetsPerLift:
 			return invalid("circuit %s: rounds must be 1-%d", key, MaxSetsPerLift)
