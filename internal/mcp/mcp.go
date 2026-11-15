@@ -206,22 +206,28 @@ var tools = []tool{
 		Description: "Create or replace a strength template. Weights are the starting point; the app adds load " +
 			"automatically when every set hits its reps. Limits: 1-30 exercises, 1-20 sets each, reps 1-100, " +
 			"weight_kg 0-1000 in 0.25 kg steps (0 is bodyweight), rest_seconds 0-900. " +
-			"Circuits and supersets: give adjacent exercises the same circuit key; the athlete does one set of each in turn, " +
-			"one round per set. Every exercise in a circuit needs the same number of sets (at least two exercises). " +
-			"In a circuit, rest_seconds is the rest after that exercise, so set it low (often 0) on all but the last, " +
-			"whose rest_seconds is the rest between rounds.",
+			"Circuits and supersets: give adjacent exercises the same circuit key (at least two exercises); the athlete does " +
+			"one set of each in turn, one round per set. Set each circuit's rounds and rest between rounds in circuits " +
+			"(e.g. [{\"key\":\"a\",\"rounds\":4,\"round_rest_seconds\":90}]) and give its exercises one set each: " +
+			"the set is repeated for every round. In a circuit, an exercise's rest_seconds is the rest after it before the " +
+			"next one, usually 0. Reading a template returns each circuit's rounds and round_rest_seconds.",
 		InputSchema: obj(map[string]any{
 			"id":   str("Stable ID: letters, digits, dashes"),
 			"name": str("Display name, e.g. 'Lower B'"),
 			"exercises": map[string]any{"type": "array", "items": obj(map[string]any{
 				"name":         str("Exercise name"),
-				"rest_seconds": num("Rest after each set; in a circuit, rest after this exercise"),
+				"rest_seconds": num("Rest after each set; in a circuit, rest after this exercise (round_rest_seconds sets the rest after the last)"),
 				"notes":        str("Optional cue"),
 				"circuit":      str("Optional circuit key, e.g. 'a': adjacent exercises sharing it form a circuit"),
 				"sets": map[string]any{"type": "array", "items": obj(map[string]any{
 					"reps": num("Target reps"), "weight_kg": num("Target weight; 0 for bodyweight"),
 				}, "reps", "weight_kg")},
 			}, "name", "sets", "rest_seconds")},
+			"circuits": map[string]any{"type": "array", "items": obj(map[string]any{
+				"key":                str("The circuit key its exercises share"),
+				"rounds":             num("How many rounds: 1-20. Each exercise's single set is repeated this many times"),
+				"round_rest_seconds": num("Rest after each round, 0-900"),
+			}, "key")},
 		}, "id", "name", "exercises"),
 		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
 			id, _ := a["id"].(string)

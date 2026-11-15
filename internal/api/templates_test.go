@@ -253,3 +253,61 @@ func TestPutTemplateCircuits(t *testing.T) {
 		t.Fatalf("rounds %d", cs[0].Rounds(got.Exercises))
 	}
 }
+
+// A circuit's rounds and rest between rounds can be sent as a circuit, not
+// as per-exercise sets, and come back on every read.
+func TestPutTemplateCircuitRounds(t *testing.T) {
+	_, _, h := testAPI(t)
+	body := `{"name":"Finisher","exercises":[
+		{"name":"Swing","circuit":"a","rest_seconds":0,"sets":[{"reps":15,"weight_kg":24}]},
+		{"name":"Push-up","circuit":"a","rest_seconds":15,"sets":[{"reps":12,"weight_kg":0}]},
+		{"name":"Squat","rest_seconds":120,"sets":[{"reps":5,"weight_kg":100},{"reps":5,"weight_kg":100}]}],
+		"circuits":[{"key":"a","rounds":4,"round_rest_seconds":90}]}`
+	if w := call(t, h, "PUT", "/v1/templates/fin", body); w.Code != http.StatusOK {
+		t.Fatalf("put: %d %s", w.Code, w.Body)
+	}
+	var got store.Template
+	_ = json.Unmarshal(call(t, h, "GET", "/v1/templates/fin", "").Body.Bytes(), &got)
+	if len(got.Exercises[0].Sets) != 4 || len(got.Exercises[1].Sets) != 4 || got.Exercises[1].Sets[3].Reps != 12 {
+		t.Fatalf("sets %+v, want each set repeated for 4 rounds", got.Exercises)
+	}
+	if got.Exercises[1].RestSeconds != 90 || got.Exercises[0].RestSeconds != 0 || len(got.Exercises[2].Sets) != 2 {
+		t.Fatalf("exercises %+v, want 90 s after the last of the circuit, the rest untouched", got.Exercises)
+	}
+	if len(got.Circuits) != 1 || got.Circuits[0].Key != "a" || got.Circuits[0].Rounds != 4 || *got.Circuits[0].RoundRestSeconds != 90 {
+		t.Fatalf("circuits %+v", got.Circuits)
+	}
+	var list []store.Template
+	_ = json.Unmarshal(call(t, h, "GET", "/v1/templates", "").Body.Bytes(), &list)
+	if len(list) != 1 || len(list[0].Circuits) != 1 || list[0].Circuits[0].Rounds != 4 {
+		t.Fatalf("list %+v, want circuits there too", list)
+	}
+
+	// Sending back what was read (sets already expanded) saves unchanged;
+	// rounds alone leave the round rest as it was.
+	again, _ := json.Marshal(got)
+	if w := call(t, h, "PUT", "/v1/templates/fin", string(again)); w.Code != http.StatusOK {
+		t.Fatalf("round trip: %d %s", w.Code, w.Body)
+	}
+	got.Circuits = []store.CircuitSpec{{Key: "a", Rounds: 4}}
+	again, _ = json.Marshal(got)
+	_ = json.Unmarshal(call(t, h, "PUT", "/v1/templates/fin", string(again)).Body.Bytes(), &got)
+	if got.Exercises[1].RestSeconds != 90 {
+		t.Fatalf("rest %d, want 90 kept", got.Exercises[1].RestSeconds)
+	}
+
+	for _, c := range []struct{ circuits, want string }{
+		{`[{"key":"a","rounds":3}]`, "has 3 rounds, but Swing has 4 sets"},
+		{`[{"key":"z","rounds":3}]`, "no exercise is in circuit z"},
+		{`[{"key":"a","rounds":21}]`, "rounds must be 1-20"},
+		{`[{"key":"a","round_rest_seconds":901}]`, "round_rest_seconds must be 0-900"},
+		{`[{"key":"a"},{"key":"a"}]`, "listed twice"},
+	} {
+		got.Circuits = nil
+		b, _ := json.Marshal(got)
+		b = []byte(strings.Replace(string(b), `"updated_at"`, `"circuits":`+c.circuits+`,"updated_at"`, 1))
+		if w := call(t, h, "PUT", "/v1/templates/fin", string(b)); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), c.want) {
+			t.Errorf("%s: %d %s, want 400 with %q", c.circuits, w.Code, w.Body, c.want)
+		}
+	}
+}
