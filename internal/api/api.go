@@ -94,6 +94,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /v1/sets/{id}", a.putSet)
 	a.registerMerges(mux)
 	a.registerRides(mux)
+	a.registerCheckIns(mux)
 	a.registerActivities(mux)
 	a.registerConnections(mux)
 	a.registerWebhooks(mux)
@@ -134,6 +135,7 @@ type todayResp struct {
 	Sleep     *store.Sleep       `json:"sleep"`
 	Plan      *store.Template    `json:"plan"`
 	Ride      *rideView          `json:"ride"`     // the day's planned ride
+	CheckIn   *pendingCheckIn    `json:"checkin"`  // a recent workout to ask about
 	Template  *store.Template    `json:"template"` // the plan before today's adjustments
 	Readiness strength.Readiness `json:"readiness"`
 	Load      *load.Day          `json:"load"`
@@ -147,6 +149,7 @@ type todayResp struct {
 	Eased     bool      `json:"eased,omitempty"`    // the plan is the eased one the athlete took
 	RunDown   bool      `json:"run_down,omitempty"` // ask "feeling run down?"
 	aiPending bool
+	felt      []string // how yesterday's workouts felt, for the coach
 }
 
 func (a *API) today(w http.ResponseWriter, r *http.Request) {
@@ -189,6 +192,13 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	if err := a.todayRide(r, &resp, day); err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	if resp.CheckIn, err = a.pendingCheckIn(r); err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	if y, err := a.Store.ListActivities(ctx, store.ActivityQuery{From: day.AddDate(0, 0, -1).UnixMilli(), To: day.UnixMilli() - 1}); err == nil {
+		resp.felt, _ = a.feltLines(ctx, y)
 	}
 	if resp.Plan == nil && resp.Ride == nil && resp.Readiness.Level == "normal" {
 		// Nothing planned: "train as planned" would answer a question nobody asked.

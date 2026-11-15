@@ -1,6 +1,7 @@
 <script lang="ts">
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import BikePicker from '../components/BikePicker.svelte';
+  import CheckIn from '../components/CheckIn.svelte';
   import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
   import ExportMenu from '../components/ExportMenu.svelte';
@@ -9,7 +10,7 @@
   import StreamPanels from '../components/StreamPanels.svelte';
   import ZoneRows from '../components/ZoneRows.svelte';
   import { HTTPError, postJSON, putJSON } from '../lib/api';
-  import { fetchActivity } from '../lib/data';
+  import { checkInPath, fetchActivity } from '../lib/data';
   import { Recheck } from '../lib/recheck';
   import { activityExports } from '../lib/export';
   import { SOURCE_LABEL, SPORT_LABEL, day, duration, km, thousands, time } from '../lib/format';
@@ -294,6 +295,12 @@
         {#each d.tags ?? [] as t (t)}<span class="tag">{t}</span>{/each}
         {#if d.tag_note}<span class="tag-note">{d.tag_note}</span>{/if}
       </p>
+    {/if}
+    {#if d.checkin && !stale && !d.view}
+      {#key a.id}
+        <CheckIn path={checkInPath('activity', a.id)} questions={d.checkin.questions} initial={d.checkin.checkin}
+          srpe={d.checkin.srpe ?? 0} session={!!a.session_id} />
+      {/key}
     {/if}
     {#if isRide && !stale && !d.view}<BikePicker activityId={a.id} />{/if}
 

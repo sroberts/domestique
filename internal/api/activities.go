@@ -205,6 +205,8 @@ type detailResp struct {
 	// NameSuggestion is the LLM's name for an activity still called by its
 	// default ("Afternoon Ride"); see names.go.
 	NameSuggestion *strength.AINote `json:"name_suggestion,omitempty"`
+	// CheckIn is how the athlete said it went, and the questions it gets.
+	CheckIn *checkInResp `json:"checkin,omitempty"`
 }
 
 // versionResp is one source's own account of a workout, before merging.
@@ -347,6 +349,11 @@ func (a *API) getActivity(w http.ResponseWriter, r *http.Request) {
 		resp.Strength = sum
 	}
 	if only == "" {
+		if s, err := a.activitySubject(ctx, act); err == nil {
+			if c, err := a.checkInOf(ctx, s); err == nil {
+				resp.CheckIn = &c
+			}
+		}
 		a.aiDetail(r, &resp)
 	}
 	writeJSON(w, http.StatusOK, resp)

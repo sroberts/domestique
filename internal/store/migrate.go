@@ -219,6 +219,26 @@ var migrations = []string{
 		updated_at   INTEGER NOT NULL
 	);
 	`,
+	// 7: the athlete's check-in after a workout: how it felt, as fixed
+	// values, so the questions can be reworded. Keyed by "session:<id>" for
+	// sessions logged in the app (they exist before their activity does),
+	// else by activity ID; activity and session merges move it along.
+	`
+	CREATE TABLE checkins (
+		key        TEXT PRIMARY KEY,
+		effort     TEXT NOT NULL DEFAULT '',  -- easy | moderate | hard | very_hard | all_out
+		legs       TEXT NOT NULL DEFAULT '',  -- fresh | normal | heavy | dead
+		plan       TEXT NOT NULL DEFAULT '',  -- more | as_planned | cut_short | couldnt
+		pain       TEXT NOT NULL DEFAULT '',  -- none | niggle | pain
+		pain_where TEXT NOT NULL DEFAULT '[]',-- JSON []string of body parts
+		fuel       TEXT NOT NULL DEFAULT '',  -- good | low_energy | fuelled_badly
+		notes      TEXT NOT NULL DEFAULT '',
+		skipped    INTEGER NOT NULL DEFAULT 0,-- asked, and the athlete skipped it
+		workout_at INTEGER NOT NULL,          -- epoch ms the workout started
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX checkins_workout ON checkins(workout_at);
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

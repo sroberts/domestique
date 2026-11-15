@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"domestique/internal/checkin"
 	"domestique/internal/coach"
 	"domestique/internal/store"
 	"domestique/internal/sweep"
@@ -41,6 +42,20 @@ func (a *API) complaints(ctx context.Context, end time.Time) ([]string, error) {
 				text += "\n" + sweep.Description(src)
 			}
 			ms = append(ms, coach.Mention{At: time.UnixMilli(x.StartAt).In(a.loc()), Text: strings.TrimSpace(text), Tags: t.Tags})
+		}
+	}
+	// Body parts named in check-ins count like ones named in notes.
+	cis, err := a.Store.CheckInsBetween(ctx, from.UnixMilli(), end.UnixMilli()-1)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range cis {
+		var parts []string
+		for _, p := range c.Where {
+			parts = append(parts, checkin.PartWord(p))
+		}
+		if len(parts) > 0 {
+			ms = append(ms, coach.Mention{At: time.UnixMilli(c.WorkoutAt).In(a.loc()), Text: strings.Join(parts, ", ")})
 		}
 	}
 	var out []string

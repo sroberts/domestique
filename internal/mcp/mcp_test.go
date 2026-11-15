@@ -152,3 +152,44 @@ func TestRidePlanTools(t *testing.T) {
 		t.Fatal("still planned after clearing")
 	}
 }
+
+func TestCheckInTools(t *testing.T) {
+	st, err := store.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ctx := context.Background()
+	a := &api.API{Store: st, Log: slog.New(slog.DiscardHandler), Loc: time.UTC}
+	mux := http.NewServeMux()
+	a.Register(mux)
+	s := &Server{API: mux}
+	callTool := func(name, args string) string {
+		body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + name + `","arguments":` + args + `}}`
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, httptest.NewRequest("POST", "/mcp", strings.NewReader(body)))
+		return w.Body.String()
+	}
+	if err := st.PutActivity(ctx, store.Activity{ID: "r1", Sport: "ride", Name: "Ride", StartAt: time.Now().Add(-time.Hour).UnixMilli(),
+		ElapsedS: 3600, MovingS: 3600, Metrics: []byte("{}")}); err != nil {
+		t.Fatal(err)
+	}
+	if out := callTool("get_checkin", `{"activity_id":"r1"}`); !strings.Contains(out, `fuel`) {
+		t.Fatalf("get_checkin: %s", out)
+	}
+	// One answer at a time, as Claude asks them: the earlier ones stay.
+	callTool("save_checkin", `{"activity_id":"r1","effort":"hard"}`)
+	if out := callTool("save_checkin", `{"activity_id":"r1","legs":"heavy"}`); strings.Contains(out, `"isError":true`) {
+		t.Fatalf("save_checkin: %s", out)
+	}
+	c, err := st.GetCheckIn(ctx, "r1")
+	if err != nil || c.Effort != "hard" || c.Legs != "heavy" {
+		t.Fatalf("check-in %+v %v", c, err)
+	}
+	if out := callTool("save_checkin", `{"activity_id":"r1","effort":"brutal"}`); !strings.Contains(out, `"isError":true`) {
+		t.Fatalf("saved a bad answer: %s", out)
+	}
+	if out := callTool("save_checkin", `{"effort":"easy"}`); !strings.Contains(out, `"isError":true`) {
+		t.Fatalf("saved with no workout: %s", out)
+	}
+}

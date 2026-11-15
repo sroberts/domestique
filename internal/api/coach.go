@@ -39,6 +39,7 @@ func (a *API) coachFacts(t *todayResp, day time.Time) coach.Facts {
 			f.PlanSets += len(e.Sets)
 		}
 	}
+	f.Felt = t.felt
 	if v := t.Ride; v != nil {
 		f.Ride = rideFact(v.RidePlan)
 		f.RideDone = v.Done != nil

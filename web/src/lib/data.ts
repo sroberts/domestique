@@ -1,8 +1,8 @@
 // Read-through cache: every screen shows the last copy it saw when the Mac
 // Mini can't be reached, and says how old it is.
-import { AuthError, deleteJSON, getJSON, putJSON } from './api';
+import { AuthError, deleteJSON, getJSON, putForJSON, putJSON } from './api';
 import { db } from './db';
-import type { ActivityDetail, ActivityRow, Athlete, LoadDay, ProviderStatus, RidePlan, Trends } from './types';
+import type { ActivityDetail, ActivityRow, Athlete, CheckIn, CheckInResp, LoadDay, ProviderStatus, RidePlan, Trends } from './types';
 
 export interface Loaded<T> {
   data: T | null;
@@ -46,3 +46,9 @@ export const fetchConnections = () => cachedGet<{ providers: ProviderStatus[]; r
 export const fetchRidePlans = (from: string) => cachedGet<RidePlan[]>(`/v1/ride-plans?from=${from}`);
 export const saveRidePlan = (p: RidePlan) => putJSON(`/v1/ride-plans/${p.date}`, p);
 export const clearRidePlan = (date: string) => deleteJSON(`/v1/ride-plans/${date}`);
+
+/** A workout's check-in: /v1/sessions/{id}/checkin or /v1/activities/{id}/checkin. */
+export const checkInPath = (kind: 'session' | 'activity', id: string) =>
+  `/v1/${kind === 'session' ? 'sessions' : 'activities'}/${encodeURIComponent(id)}/checkin`;
+export const fetchCheckIn = (path: string) => getJSON<CheckInResp>(path);
+export const saveCheckIn = (path: string, c: CheckIn) => putForJSON<CheckInResp>(path, c);

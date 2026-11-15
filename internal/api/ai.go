@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"domestique/internal/activity"
+	"domestique/internal/checkin"
 	"domestique/internal/coach"
 	"domestique/internal/load"
 	"domestique/internal/store"
@@ -149,6 +150,9 @@ func (a *API) activityFacts(ctx context.Context, d *detailResp) coach.ActivityFa
 			break
 		}
 	}
+	if c := d.CheckIn; c != nil && c.CheckIn != nil {
+		f.Felt = checkin.Words(*c.CheckIn)
+	}
 	return f
 }
 
@@ -210,6 +214,9 @@ func (a *API) aiSession(r *http.Request, sum *strength.Summary) {
 
 	f := coach.SessionFacts{Name: sum.Session.Name, Minutes: int(math.Round(float64(sum.DurationS) / 60)),
 		VolumeKg: int(math.Round(sum.VolumeKg)), SetsDone: len(sum.Sets)}
+	if c, err := a.Store.GetCheckIn(ctx, store.SessionKey(sum.Session.ID)); err == nil {
+		f.Felt = checkin.Words(c)
+	}
 	if sum.PeakBPM > 0 {
 		f.PeakHR = &sum.PeakBPM
 	}
@@ -378,6 +385,9 @@ func (a *API) weekFacts(ctx context.Context, mon time.Time) (coach.WeekFacts, er
 				f.Notes = append(f.Notes, t.Note)
 			}
 		}
+	}
+	if f.Felt, err = a.feltLines(ctx, acts); err != nil {
+		return f, err
 	}
 
 	sess, err := a.Store.SessionsBetween(ctx, mon.UnixMilli(), end.UnixMilli()-1)

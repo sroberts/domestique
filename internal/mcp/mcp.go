@@ -11,12 +11,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"time"
+
+	"domestique/internal/checkin"
 )
 
 type Server struct {
@@ -69,7 +72,8 @@ var tools = []tool{
 	{
 		Name: "get_today",
 		Description: "Today at a glance: morning recovery (Whoop), last night's sleep, training form (fitness/fatigue/form), " +
-			"this week's load by day, the planned strength session with today's prescribed weights, and a readiness call.",
+			"this week's load by day, the planned strength session with today's prescribed weights, the planned ride, a readiness call, " +
+			"and checkin: a recent workout the athlete hasn't said how it went (ask with save_checkin).",
 		InputSchema: obj(map[string]any{"date": str("Local date YYYY-MM-DD; defaults to today")}),
 		Annotations: readOnly,
 		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
@@ -104,6 +108,7 @@ var tools = []tool{
 			"the athlete's prior best, time in power and HR zones, per-source records, and for strength sessions per-set " +
 			"heart rate, peak and recovery. When Outpost provides AI models it also carries a short note on the workout, " +
 			"tags and a fact read from the athlete's own descriptions, and per-set effort with a session debrief. " +
+			"checkin is how the athlete said it felt, the questions it gets, and session RPE load (srpe). " +
 			"Streams are omitted unless include_stream is true (then ~120 points).",
 		InputSchema: obj(map[string]any{
 			"id":             str("Activity ID from get_recent_activities"),
@@ -267,6 +272,59 @@ var tools = []tool{
 		},
 	},
 	{
+		Name:        "get_checkin",
+		Description: "How the athlete said a workout went (their check-in), the questions that fit it, and session RPE load (srpe = CR-10 effort x minutes). Give activity_id, or session_id for a lifting session.",
+		InputSchema: obj(map[string]any{"activity_id": str("Activity ID"), "session_id": str("Lifting session ID, instead of activity_id")}),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			path, err := checkInPath(a)
+			if err != nil {
+				return nil, err
+			}
+			return s.get(r, path, nil)
+		},
+	},
+	{
+		Name: "save_checkin",
+		Description: "Record how a workout went, from the athlete's answers in chat. Only the answers given change; the rest stay. " +
+			"Ask the questions get_checkin lists, one tap each, in plain words: how hard (effort), legs, whether it went to plan, " +
+			"anything hurting (and where, for a niggle or pain), fuel and energy. Answers feed the debriefs, the week note and the next day's readiness.",
+		InputSchema: obj(map[string]any{
+			"activity_id": str("Activity ID"),
+			"session_id":  str("Lifting session ID, instead of activity_id"),
+			"effort":      map[string]any{"type": "string", "enum": checkin.Answers[checkin.Effort]},
+			"legs":        map[string]any{"type": "string", "enum": checkin.Answers[checkin.Legs]},
+			"plan":        map[string]any{"type": "string", "enum": checkin.Answers[checkin.Plan]},
+			"pain":        map[string]any{"type": "string", "enum": checkin.Answers[checkin.Pain]},
+			"where":       map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": checkin.BodyParts}, "description": "Where, with a niggle or pain"},
+			"fuel":        map[string]any{"type": "string", "enum": checkin.Answers[checkin.Fuel]},
+			"notes":       str("The athlete's own words, if any"),
+		}),
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			path, err := checkInPath(a)
+			if err != nil {
+				return nil, err
+			}
+			cur, err := s.get(r, path, nil)
+			if err != nil {
+				return nil, err
+			}
+			body := map[string]any{}
+			if m, ok := cur.(map[string]any); ok {
+				if c, ok := m["checkin"].(map[string]any); ok {
+					body = c
+				}
+			}
+			for _, k := range []string{"effort", "legs", "plan", "pain", "where", "fuel", "notes"} {
+				if v, ok := a[k]; ok {
+					body[k] = v
+				}
+			}
+			delete(body, "skipped")
+			return s.send(r, http.MethodPut, path, body)
+		},
+	},
+	{
 		Name: "plan_ride",
 		Description: "Plan a bike ride for a date (one per day, beside any strength session; planning again replaces it). " +
 			"It appears on the athlete's Today screen, is ticked off when a ride that day is recorded, and on a low-recovery " +
@@ -318,6 +376,17 @@ var tools = []tool{
 			return map[string]any{"cleared": d}, nil
 		},
 	},
+}
+
+// checkInPath is the REST path of the check-in a tool call names.
+func checkInPath(a map[string]any) (string, error) {
+	if id, _ := a["session_id"].(string); id != "" {
+		return "/v1/sessions/" + url.PathEscape(id) + "/checkin", nil
+	}
+	if id, _ := a["activity_id"].(string); id != "" {
+		return "/v1/activities/" + url.PathEscape(id) + "/checkin", nil
+	}
+	return "", errors.New("give activity_id or session_id")
 }
 
 func intArg(a map[string]any, k string, def, lo, hi int) int {

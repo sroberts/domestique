@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import ChevronLeft from '@lucide/svelte/icons/chevron-left';
   import ActionBar from '../components/ActionBar.svelte';
+  import CheckIn from '../components/CheckIn.svelte';
   import CoachNote from '../components/CoachNote.svelte';
   import HrAlignment from '../components/HrAlignment.svelte';
   import ExportMenu from '../components/ExportMenu.svelte';
@@ -10,13 +11,14 @@
   import SyncStatus from '../components/SyncStatus.svelte';
   import ZoneBar from '../components/ZoneBar.svelte';
   import { AuthError, HTTPError, OfflineError, fetchSummary, mergeSessions, mergedInto, previewMerge } from '../lib/api';
+  import { checkInPath, fetchCheckIn } from '../lib/data';
   import { pendingFor } from '../lib/db';
   import { sync } from '../lib/sync.svelte';
   import { sessionExports } from '../lib/export';
   import { clock, day, duration, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
   import { Workout, earlyText, endedEarly, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
-  import type { MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
+  import type { CheckInResp, MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
 
   let { id }: { id: string } = $props();
   // Back goes where you came from; on a direct load, to this tab's list.
@@ -37,6 +39,7 @@
     }
   }
   let source = $state<'server' | 'local' | null>(null);
+  let checkin = $state<CheckInResp | null>(null);
   let problem = $state<'offline' | 'auth' | 'unsynced' | 'missing' | null>(null);
   let workout = $state<Workout | null>(null);
   let selected = $state<string | null>(null);
@@ -92,6 +95,9 @@
       summary = s;
       source = 'server';
       problem = null;
+      if (s.session.finished_at && !checkin) {
+        fetchCheckIn(checkInPath('session', s.session.id)).then((c) => (checkin = c), () => {});
+      }
     } catch (err) {
       // Merged into another session since: that's where it lives now.
       const into = mergedInto(err);
@@ -269,6 +275,11 @@
         <p>Looks like the rest of <strong>{suggested.name}</strong> at {time(suggested.started_at)}. Merge them into one session?</p>
         <button class="btn" onclick={() => openMerge(suggested)}>Merge…</button>
       </div>
+    {/if}
+
+    {#if checkin && summary}
+      <CheckIn path={checkInPath('session', summary.session.id)} questions={checkin.questions} initial={checkin.checkin}
+        srpe={checkin.srpe ?? 0} session heading="How did that go?" />
     {/if}
 
     <dl class="strip">

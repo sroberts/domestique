@@ -33,9 +33,20 @@ type ActivityFacts struct {
 	Sets        int      `json:"sets,omitempty"`
 	VolumeKg    *int     `json:"volume_kg,omitempty"`
 	AthleteNote string   `json:"athletes_own_notes,omitempty"`
+	Felt        *Felt    `json:"how_it_felt,omitempty"`
 }
 
-const activityPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write one or two sentences about one finished workout: what kind of session it was, then the one thing worth noticing (how hard, how steady, a new best, time in a zone). If the athlete wrote their own notes, pick up on them in a few words. Don't recite figures: at most two numbers.
+// Felt is the athlete's check-in after a workout, in plain words.
+type Felt struct {
+	Effort string `json:"how_hard,omitempty"`
+	Legs   string `json:"legs,omitempty"`
+	Plan   string `json:"to_plan,omitempty"`
+	Pain   string `json:"pain,omitempty"`
+	Fuel   string `json:"fuel,omitempty"`
+	Notes  string `json:"own_words,omitempty"`
+}
+
+const activityPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write one or two sentences about one finished workout: what kind of session it was, then the one thing worth noticing (how hard, how steady, a new best, time in a zone). If the athlete wrote their own notes, pick up on them in a few words. how_it_felt is the athlete's own check-in: weigh it against the numbers (very hard at a modest heart rate, heavy legs, cut short) and say what it tells you, in a few words. Don't recite figures: at most two numbers.
 
 ` + voice + `
 
@@ -63,6 +74,7 @@ type SessionFacts struct {
 	SetsPlan  int            `json:"sets_planned"`
 	PeakHR    *int           `json:"peak_hr,omitempty"`
 	Exercises []ExerciseFact `json:"exercises"`
+	Felt      *Felt          `json:"how_it_felt,omitempty"`
 }
 
 // ExerciseFact is one exercise as lifted.
@@ -83,7 +95,7 @@ type SetFact struct {
 	Effort     string  `json:"effort,omitempty"`
 }
 
-const sessionPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write a short debrief of one finished lifting session, two or three sentences: what went up or held, any missed reps (reps below target_reps), and how heart rate came down between sets when it's given. Name exercises. Don't recite every set: at most three numbers.
+const sessionPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write a short debrief of one finished lifting session, two or three sentences: what went up or held, any missed reps (reps below target_reps), and how heart rate came down between sets when it's given. how_it_felt is the athlete's own check-in: if it's given, weigh it (a session that felt very hard, cut short, or a niggle) in a few words. Name exercises. Don't recite every set: at most three numbers.
 
 ` + voice + `
 
@@ -123,6 +135,8 @@ type WeekFacts struct {
 	// for rides System 1 classified confidently.
 	RideMix   map[string]int `json:"ride_minutes_by_type,omitempty"`
 	Recurring []string       `json:"keeps_coming_up,omitempty"` // Complaint.String()s
+	// Felt is the athlete's check-ins: "Tue, Zwift race: all out, legs dead".
+	Felt []string `json:"how_workouts_felt,omitempty"`
 }
 
 // WeekDay is one day of the week.
@@ -132,7 +146,7 @@ type WeekDay struct {
 	What []string `json:"activities,omitempty"`
 }
 
-const weekPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write the note on their finished training week, three or four sentences: the shape of the week (load, where it came from, how it compared with the week before, and the kind of riding when ride_minutes_by_type is given: all easy, or plenty of intensity), whether the lifting happened as planned, recovery and sleep if given, anything in keeps_coming_up in a few plain words (something the athlete keeps writing about, worth watching, never a diagnosis), and one plain suggestion for next week that follows from the facts. Don't recite figures: at most four numbers.
+const weekPrompt = `You are the directeur sportif for one athlete, a cyclist who also lifts. Write the note on their finished training week, three or four sentences: the shape of the week (load, where it came from, how it compared with the week before, and the kind of riding when ride_minutes_by_type is given: all easy, or plenty of intensity), whether the lifting happened as planned, recovery and sleep if given, how the workouts felt when how_workouts_felt is given (the athlete's own check-ins: say whether hard days felt hard and easy days easy), anything in keeps_coming_up in a few plain words (something the athlete keeps writing about, worth watching, never a diagnosis), and one plain suggestion for next week that follows from the facts. Don't recite figures: at most four numbers.
 
 ` + voice + `
 

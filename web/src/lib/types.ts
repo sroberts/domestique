@@ -186,6 +186,8 @@ export interface Today {
   plan: Template | null;
   /** The day's planned ride. */
   ride?: RideView | null;
+  /** A recent workout the athlete hasn't said how it went. */
+  checkin?: PendingCheckIn | null;
   template: Template | null;
   readiness: Readiness;
   load: LoadDay | null;
@@ -297,6 +299,8 @@ export interface ZwiftWorld {
 
 export interface ActivityDetail {
   activity: Activity;
+  /** How the athlete said it went. */
+  checkin?: CheckInResp;
   metrics: Metrics;
   sources: SourceRecord[];
   channels: Record<string, string>;
@@ -507,4 +511,33 @@ export interface RideView extends RidePlan {
   /** A ride recorded that day. */
   done?: ActivityRow;
   ease?: RideEase;
+}
+
+export type Question = 'effort' | 'legs' | 'plan' | 'pain' | 'fuel';
+
+/** The athlete's check-in after a workout; "" or missing is unanswered. */
+export interface CheckIn {
+  effort?: string;
+  legs?: string;
+  plan?: string;
+  pain?: string;
+  where?: string[];
+  fuel?: string;
+  notes?: string;
+  skipped?: boolean;
+  workout_at?: number;
+  updated_at?: number;
+}
+
+export interface CheckInResp {
+  questions: Question[];
+  checkin: CheckIn | null;
+  minutes: number;
+  /** Session RPE load: CR-10 effort × minutes. */
+  srpe?: number;
+}
+
+export interface PendingCheckIn {
+  activity: ActivityRow;
+  questions: Question[];
 }
