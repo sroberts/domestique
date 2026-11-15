@@ -554,6 +554,10 @@ func (s *Store) MergeSessions(ctx context.Context, keep Session, gone string, mo
 	if _, err := tx.ExecContext(ctx, `UPDATE merged_sessions SET into_id = ? WHERE into_id = ?`, keep.ID, gone); err != nil {
 		return err
 	}
+	// A check-in follows the session it was about, unless the kept one has its own.
+	if err := moveCheckIn(ctx, tx, SessionKey(gone), SessionKey(keep.ID)); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO merged_sessions (from_id, into_id, merged_at) VALUES (?, ?, ?)
 		ON CONFLICT(from_id) DO UPDATE SET into_id = excluded.into_id, merged_at = excluded.merged_at`,
 		gone, keep.ID, keep.UpdatedAt); err != nil {

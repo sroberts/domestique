@@ -279,6 +279,11 @@ func (s *Store) MergeActivities(ctx context.Context, from, to string) error {
 		`UPDATE activity_bikes SET activity_id = ?2 WHERE activity_id = ?1
 			AND NOT EXISTS (SELECT 1 FROM activity_bikes WHERE activity_id = ?2)`,
 		`DELETE FROM activity_bikes WHERE activity_id = ?1`,
+		// A check-in on from moves to to's key (its session's, if it has one).
+		`UPDATE checkins SET key = COALESCE('session:' || (SELECT session_id FROM activities WHERE id = ?2), ?2)
+			WHERE key = ?1 AND NOT EXISTS (SELECT 1 FROM checkins
+				WHERE key = COALESCE('session:' || (SELECT session_id FROM activities WHERE id = ?2), ?2))`,
+		`DELETE FROM checkins WHERE key = ?1`,
 		`DELETE FROM activities WHERE id = ?1`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, from, to); err != nil {

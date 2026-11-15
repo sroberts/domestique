@@ -86,6 +86,16 @@ export async function postForJSON<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** PUT a JSON body and read the JSON answer. */
+export async function putForJSON<T>(path: string, body: unknown): Promise<T> {
+  const res = await request(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return (await res.json()) as T;
+}
+
 export async function deleteJSON(path: string): Promise<void> {
   try {
     await request(path, { method: 'DELETE' });

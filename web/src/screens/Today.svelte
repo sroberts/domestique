@@ -5,11 +5,13 @@
   import EaseOffer from '../components/EaseOffer.svelte';
   import GearReminder from '../components/GearReminder.svelte';
   import AskLink from '../components/AskLink.svelte';
+  import CheckIn from '../components/CheckIn.svelte';
   import RideSheet from '../components/RideSheet.svelte';
   import RunDown from '../components/RunDown.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import { AuthError, fetchToday, localDate } from '../lib/api';
-  import { fetchRidePlans } from '../lib/data';
+  import { checkInPath, fetchRidePlans } from '../lib/data';
+  import { askText } from '../lib/checkin';
   import { activeSession, cacheToday, cachedToday, sessionSets } from '../lib/db';
   import { day, duration, recoveryBand, time, weight } from '../lib/format';
   import { addDays, dateMs, minutesText, rideMeta } from '../lib/rides';
@@ -189,6 +191,16 @@
       <p class="call-detail">{today.readiness.detail}</p>
     </section>
     {#if today.run_down}<RunDown {date} ondismiss={refresh} />{/if}
+    {#if today.checkin && load !== 'stale'}
+      {@const p = today.checkin}
+      {#key p.activity.id}
+        <CheckIn path={checkInPath('activity', p.activity.id)} questions={p.questions}
+          session={p.activity.sport === 'strength' && !!p.activity.session_id}
+          heading={askText(p.activity.sport, p.activity.start_at)}
+          sub={`${p.activity.name} · ${time(p.activity.start_at)} · ${duration(p.activity.moving_s || p.activity.elapsed_s)}`}
+          ondone={() => setTimeout(() => void refresh(), 1200)} />
+      {/key}
+    {/if}
 
     <section class="body" aria-label="Recovery and sleep">
       <dl class="vitals">

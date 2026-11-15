@@ -59,7 +59,12 @@ func (a *API) dayReadiness(r *http.Request, date string) (*store.Recovery, []loa
 		tsb = series[n-1].TSB
 		hasLoad = series[n-1].CTL > 5
 	}
-	return rec, series, strength.AssessReadiness(rec, tsb, hasLoad), nil
+	// How yesterday's workouts felt, from the athlete's check-ins.
+	felt, err := a.Store.CheckInsBetween(ctx, day.AddDate(0, 0, -1).UnixMilli(), day.UnixMilli()-1)
+	if err != nil {
+		return nil, nil, strength.Readiness{}, err
+	}
+	return rec, series, strength.AfterCheckIns(strength.AssessReadiness(rec, tsb, hasLoad), felt), nil
 }
 
 // templateRow is a template with when it was last done, for the list.
