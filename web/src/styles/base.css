@@ -8,6 +8,9 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background: var(--bg);
+  /* Focus and scroll-into-view stop above the fixed action bar and tab bar,
+     so a control near the end (a check-in's Skip) never lands under them. */
+  scroll-padding-bottom: calc(var(--action-height) + var(--space-6) + var(--tabbar-h) + env(safe-area-inset-bottom));
 }
 
 body {

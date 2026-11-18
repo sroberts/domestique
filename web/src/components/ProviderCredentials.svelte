@@ -186,7 +186,7 @@
   </div>
 {:else if p.credentials_from === ''}
   <div class="act">
-    <button class="btn btn-go" type="button" onclick={() => (setup = true)}>Set up {name}</button>
+    <button class="btn btn-setup" type="button" onclick={() => (setup = true)}>Set up {name}</button>
   </div>
 {:else}
   <details class="setup">
@@ -276,6 +276,11 @@
     background: var(--signal);
     color: var(--on-signal);
     border: 0;
+    min-height: var(--tap-min);
+  }
+  /* Each provider has one, so several show at once: plain, not signal
+     (Tape Rule). An open form's Save is the one signal action. */
+  .btn-setup {
     min-height: var(--tap-min);
   }
   .link {

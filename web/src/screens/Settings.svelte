@@ -240,7 +240,7 @@
           <div class="conn-main">
             <p class="conn-name">
               {cap(p.provider)}
-              {#if p.connected}<span class="state on">Connected</span>{:else if p.configured}<span class="state">Not connected</span>{:else}<span class="state">Not set up</span>{/if}
+              {#if p.connected}<span class="conn-state on">Connected</span>{:else if p.configured}<span class="conn-state">Not connected</span>{:else}<span class="conn-state">Not set up</span>{/if}
             </p>
             <p class="muted small">{blurb[p.provider]}</p>
             {#if p.connected}
@@ -432,7 +432,7 @@
     gap: var(--space-2);
     font-weight: 700;
   }
-  .state {
+  .conn-state {
     font-size: var(--size-label);
     font-weight: 600;
     color: var(--text-muted);
@@ -440,7 +440,7 @@
     border: 1px solid var(--line-strong);
     border-radius: var(--radius-s);
   }
-  .state.on {
+  .conn-state.on {
     color: var(--text);
     border-color: var(--zone-3);
   }
@@ -449,10 +449,9 @@
     flex-wrap: wrap;
     gap: var(--space-2);
   }
+  /* Several providers can need connecting at once, so this is a plain
+     button: signal is for the single action on screen (Tape Rule). */
   .btn-connect {
-    background: var(--signal);
-    color: var(--on-signal);
-    border: 0;
     min-height: var(--tap-min);
   }
   .file {
@@ -546,8 +545,8 @@
     color: var(--text-muted);
   }
   .sw-state.on {
-    background: var(--signal);
-    color: var(--on-signal);
+    background: var(--text);
+    color: var(--bg);
   }
   .steps {
     padding-left: 1.25rem;

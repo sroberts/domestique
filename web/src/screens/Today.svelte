@@ -191,16 +191,6 @@
       <p class="call-detail">{today.readiness.detail}</p>
     </section>
     {#if today.run_down}<RunDown {date} ondismiss={refresh} />{/if}
-    {#if today.checkin && load !== 'stale'}
-      {@const p = today.checkin}
-      {#key p.activity.id}
-        <CheckIn path={checkInPath('activity', p.activity.id)} questions={p.questions}
-          session={p.activity.sport === 'strength' && !!p.activity.session_id}
-          heading={askText(p.activity.sport, p.activity.start_at)}
-          sub={`${p.activity.name} · ${time(p.activity.start_at)} · ${duration(p.activity.moving_s || p.activity.elapsed_s)}`}
-          ondone={() => setTimeout(() => void refresh(), 1200)} />
-      {/key}
-    {/if}
 
     <section class="body" aria-label="Recovery and sleep">
       <dl class="vitals">
@@ -276,6 +266,18 @@
       {/if}
     {/if}
     {#if note}<p class="small note" role="status">{note}</p>{/if}
+    <!-- After the plan: the check-in can run to 16 choices, and today's plan
+         comes first. -->
+    {#if today.checkin && load !== 'stale'}
+      {@const p = today.checkin}
+      {#key p.activity.id}
+        <CheckIn path={checkInPath('activity', p.activity.id)} questions={p.questions}
+          session={p.activity.sport === 'strength' && !!p.activity.session_id}
+          heading={askText(p.activity.sport, p.activity.start_at)}
+          sub={`${p.activity.name} · ${time(p.activity.start_at)} · ${duration(p.activity.moving_s || p.activity.elapsed_s)}`}
+          ondone={() => setTimeout(() => void refresh(), 1200)} />
+      {/key}
+    {/if}
 
     <section class="rides" aria-labelledby="rides-h">
       <h2 id="rides-h" class="sec-h">Rides coming up <button class="more" onclick={() => rideSheet?.open(undefined, ride ? addDays(date, 1) : date)}>Plan a ride</button></h2>
@@ -696,7 +698,7 @@
   }
   .ex-change.up::before {
     content: '▲ ';
-    color: var(--signal);
+    color: var(--text);
     font-size: 0.7em;
   }
   .picks {
