@@ -592,7 +592,7 @@
       "refersTo": "recovery-slab",
       "description": "Today's verdict on a solid recovery-coloured slab with dark ink.",
       "html": "<section class=\"ds-slab\"><p class=\"ds-slab-top\"><span class=\"ds-slab-k\">Recovery</span><span class=\"ds-slab-n\">61<small>%</small></span></p><h3>Train, but hold the weights</h3><p>Train as planned, but hold the weights rather than adding load.</p></section>",
-      "css": ":host{--rec-amber:#f2b43d;--on-color:#16171a;}.ds-slab{font-family:'Public Sans',system-ui,sans-serif;padding:16px 16px 24px;border-radius:6px;background:var(--rec-amber);color:var(--on-color);max-width:360px;}.ds-slab-top{display:flex;align-items:baseline;justify-content:space-between;margin:0;}.ds-slab-k{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}.ds-slab-n{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:96px;font-weight:700;line-height:.82;font-variant-numeric:tabular-nums;}.ds-slab-n small{font-size:48px;font-weight:600;}.ds-slab h3{margin:12px 0 4px;font-size:24px;}.ds-slab p{margin:0;}"
+      "css": ":host{--rec-amber:#f0973a;--on-color:#16171a;}.ds-slab{font-family:'Public Sans',system-ui,sans-serif;padding:16px 16px 24px;border-radius:6px;background:var(--rec-amber);color:var(--on-color);max-width:360px;}.ds-slab-top{display:flex;align-items:baseline;justify-content:space-between;margin:0;}.ds-slab-k{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;}.ds-slab-n{font-family:'Barlow Condensed','Arial Narrow',sans-serif;font-size:96px;font-weight:700;line-height:.82;font-variant-numeric:tabular-nums;}.ds-slab-n small{font-size:48px;font-weight:600;}.ds-slab h3{margin:12px 0 4px;font-size:24px;}.ds-slab p{margin:0;}"
     }
   ],
   "narrative": {

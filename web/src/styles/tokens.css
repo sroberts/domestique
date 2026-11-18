@@ -46,7 +46,7 @@
   --map-style: 'dark';
   /* Recovery, at full strength: slabs carry dark ink (all >= 5:1) */
   --rec-green: #4fc283;
-  --rec-amber: #f2b43d;
+  --rec-amber: #f0973a;
   --rec-red: #f0656a;
   --on-color: #16171a;
   /* Ink on a solid sport block */
@@ -95,7 +95,7 @@
   --grid: #e7e2d6;
   --map-style: 'positron';
   --rec-green: #3fae73;
-  --rec-amber: #e9a326;
+  --rec-amber: #e8892a;
   --rec-red: #e5575d;
   --on-color: #1b1c1f;
   --on-sport: #ffffff;

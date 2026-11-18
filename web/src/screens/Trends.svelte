@@ -396,8 +396,8 @@
   }
   .pr {
     padding: 0 0.25rem;
-    background: var(--signal);
-    color: var(--on-signal);
+    border: 1px solid var(--text);
+    color: var(--text);
     border-radius: 2px;
     font-size: var(--size-label);
     font-weight: 700;

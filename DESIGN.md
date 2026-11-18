@@ -25,7 +25,7 @@ colors:
   sport-strength: "#cf7a26"
   sport-other: "#3fa88a"
   recovery-green: "#4fc283"
-  recovery-amber: "#f2b43d"
+  recovery-amber: "#f0973a"
   recovery-red: "#f0656a"
   fitness-violet: "#8c78ec"
   fatigue-rose: "#de5a78"
@@ -201,7 +201,7 @@ A graphite dash and painted bone, with one stripe of team yellow and a zone ramp
 - **Zone Ramp** (Z1 slate `#7d8590`, Z2 blue `#4f8fd9`, Z3 green `#45b07a`, Z4 amber `#f2a33a`, Z5 red `#e5484d`; light theme darkens each step): heart-rate effort, on time-in-zone bars, the heart-rate trace and per-set effort. Always paired with the zone number or label.
 
 ### Tertiary
-- **Recovery** (green `#4fc283`, amber `#f2b43d`, red `#f0656a`; light theme `#3fae73`, `#e9a326`, `#e5575d`): the day's Whoop recovery band, painted as a solid slab behind Today's verdict with dark ink on it (all at least 5:1). The same three hues mark form states: fresh, building, overreaching. Neutral form is zone slate.
+- **Recovery** (green `#4fc283`, amber `#f0973a`, red `#f0656a`; light theme `#3fae73`, `#e8892a`, `#e5575d`): the day's Whoop recovery band, painted as a solid slab behind Today's verdict with dark ink on it (all at least 5:1). The same three hues mark form states: fresh, building, overreaching. Neutral form is zone slate.
 - **Sport Identity** (ride `#4f8fd9`, strength `#cf7a26`, other `#3fa88a`; light theme `#2f6fb9`, `#a65b14`, `#0f7f5c`): which sport something is. Solid blocks behind activity icons, the sport tag on an activity, the route line on its map, effort bars, week stripes, and chart series. Ink on a sport block is graphite in dark mode and white in light mode (all at least 5:1).
 - **Chart Roles** (fitness violet `#8c78ec`, fatigue rose `#de5a78`; light theme `#6a55d8`, `#c9476a`): the fitness and fatigue lines. Power wherever it's drawn uses the fitness violet; they never share a chart. Validated with the dataviz palette checks in both themes.
 - **Danger Red** (`#e5484d`, light theme `#c8323a`): destructive actions and errors only. It shares a value with zone 5; context keeps them apart.

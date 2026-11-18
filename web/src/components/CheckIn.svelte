@@ -128,7 +128,7 @@
     {/if}
     <div class="ci-actions">
       {#if any}
-        <button type="button" class="btn btn-primary" onclick={done}>Done</button>
+        <button type="button" class="btn" onclick={done}>Done</button>
       {:else}
         <button type="button" class="btn btn-quiet" onclick={skip}>Skip</button>
       {/if}

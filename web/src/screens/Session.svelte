@@ -461,7 +461,7 @@
   }
   .rung.current {
     color: var(--text);
-    border-color: var(--signal);
+    border-color: var(--text);
   }
   .rung.skipped {
     text-decoration: line-through;
@@ -503,7 +503,7 @@
     gap: var(--space-3);
   }
   .signal-label {
-    color: var(--signal);
+    color: var(--text);
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
@@ -512,7 +512,7 @@
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 50%;
-    background: var(--signal);
+    background: var(--stop); /* recording, like the red Finish set below */
   }
   .target-mid {
     font-size: var(--size-target);
@@ -606,7 +606,7 @@
   }
   .set-clock {
     font-size: var(--size-target);
-    color: var(--signal);
+    color: var(--text);
   }
   .discard-note {
     font-size: var(--size-label);
