@@ -70,13 +70,21 @@
         <line class="grid" x1={PAD.left} x2={PAD.left + plotW} y1={y1(v)} y2={y1(v)} />
         <text class="tick" x={PAD.left - 6} y={y1(v) + 4} text-anchor="end">{v}</text>
       {/each}
+      <!-- the zero both lines rise from, so a low line reads as low, not as zero -->
+      <line class="zero" x1={PAD.left} x2={PAD.left + plotW} y1={y1(0)} y2={y1(0)} />
+      <text class="tick" x={PAD.left - 6} y={y1(0) + 4} text-anchor="end">0</text>
       <path class="line fit" d={linePath(xs, days.map((d) => y1(d.ctl)))} />
       <path class="line fat" d={linePath(xs, days.map((d) => y1(d.atl)))} />
       <!-- direct end labels, nudged apart only if they'd touch -->
       {#if days.length}
         {@const last = days.at(-1)!}
         {@const ya = y1(last.ctl)}
-        {@const yb = Math.abs(y1(last.atl) - ya) < 14 ? ya + (y1(last.atl) >= ya ? 14 : -14) : y1(last.atl)}
+        {@const lo = PAD.top + 6}
+        {@const hi = H1 - PAD.bottom - 6}
+        <!-- Fatigue moves off Fitness when they'd touch, and toward the
+             middle when the nudge would push it out of its panel. -->
+        {@const away = y1(last.atl) >= ya ? 14 : -14}
+        {@const yb = Math.abs(y1(last.atl) - ya) < 14 ? (ya + away > hi || ya + away < lo ? ya - away : ya + away) : y1(last.atl)}
         <circle class="end fit" cx={xs.at(-1)} cy={ya} r="4" />
         <text class="end-label" x={PAD.left + plotW + 8} y={ya + 4}>Fitness</text>
         <text class="end-label muted" x={PAD.left + plotW + 8} y={yb + 4}>Fatigue</text>
@@ -88,7 +96,10 @@
           {@const bot2 = y2(Math.max(b.lo, tsbLo))}
           {#if bot2 > top2}
             <rect class="band" class:alt={b.label === 'Building' || b.label === 'Fresh'} x={PAD.left} width={plotW} y={top2} height={bot2 - top2} />
-            <text class="band-label" x={PAD.left + plotW + 8} y={(top2 + bot2) / 2 + 4}>{b.label}</text>
+            <!-- a sliver of band has no room for its name without overlapping the next -->
+            {#if bot2 - top2 >= 13}
+              <text class="band-label" x={PAD.left + plotW + 8} y={(top2 + bot2) / 2 + 4}>{b.label}</text>
+            {/if}
           {/if}
         {/each}
         <line class="zero" x1={PAD.left} x2={PAD.left + plotW} y1={y2(0)} y2={y2(0)} />

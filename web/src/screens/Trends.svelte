@@ -10,7 +10,7 @@
   import { Recheck } from '../lib/recheck';
   import { day, time } from '../lib/format';
   import { link } from '../lib/router.svelte';
-  import type { LoadDay, Trends, WeekNote } from '../lib/types';
+  import type { LiftPR, LoadDay, Trends, WeekNote } from '../lib/types';
 
   const ranges = [
     { days: 90, label: '3 months' },
@@ -22,6 +22,14 @@
   /** Days exist but carry no load (lifts waiting on heart rate, no rides
    * with power): a flat line at zero says nothing, so say why instead. */
   let flat = $derived(load.every((d) => !d.ctl && !d.atl && !d.tsb));
+  /** Days since the first day with any load in range. Fitness is a 42-day
+   * average, so under four weeks the chart is a line hugging zero that
+   * reads as "no fitness" rather than "not enough history yet". */
+  let historyDays = $derived.by(() => {
+    const i = load.findIndex((d) => d.tss > 0);
+    return i < 0 ? 0 : load.length - i;
+  });
+  const SHORT_DAYS = 28;
   let trends = $state<Trends | null>(null);
   let stale = $state<number | null>(null);
   let empty = $state(false);
@@ -61,7 +69,18 @@
   let ftpMax = $derived(Math.max(1, ...(trends?.ftp_history.map((f) => f.ftp) ?? [1])));
   let ftpMin = $derived(Math.min(...(trends?.ftp_history.map((f) => f.ftp) ?? [0])));
 
-  function spark(h: [number, number][], w = 96, ht = 28): string {
+  /** How a lift's best has moved since its first session, said plainly
+   * ("up 4 kg since Tue 3 Oct"). Nothing for a lift done once: there's no
+   * earlier best to measure against. */
+  function changeText(l: LiftPR): string {
+    const first = l.history[0];
+    if (!first || l.sessions < 2) return '';
+    const d = Math.round(l.best_e1rm - first[1]);
+    const since = `since ${day(first[0])}`;
+    return d > 0 ? `up ${d} kg ${since}` : `level ${since}`;
+  }
+
+  function spark(h: [number, number][], w = 72, ht = 28): string {
     if (h.length < 2) return '';
     const vs = h.map((p) => p[1]);
     const lo = Math.min(...vs);
@@ -102,6 +121,10 @@
       </div>
       {#if load.length > 1 && flat}
         <p class="note flat-note">No training load in this range yet. It builds from rides with power and lifts with heart rate or Whoop strain, so it fills in as those sync.</p>
+      {:else if load.length > 1 && historyDays < SHORT_DAYS}
+        <p class="note flat-note">
+          {historyDays} {historyDays === 1 ? 'day' : 'days'} of training load so far. Fitness is a six-week average, so its chart appears once there are four weeks to draw. Weekly load below shows what's in so far.
+        </p>
       {:else if load.length > 1}
         <LoadChart days={load} />
         <p class="note">
@@ -161,14 +184,16 @@
           <h2 id="lift-h" class="block-h">Lifts <span class="muted sub-h">estimated one-rep max</span></h2>
           <ul class="lifts">
             {#each trends.lifts as l (l.exercise)}
-              {@const pr = Date.now() - l.best_at < 14 * 86400000}
+              {@const change = changeText(l)}
+              <!-- No PR badge: the change since the first session says it the
+                   way a director would ("up 4 kg since Tue 3 Oct"). -->
               <li>
-                <span class="l-name">{l.exercise}<span class="mono muted sess">{l.sessions} {l.sessions === 1 ? 'session' : 'sessions'}</span></span>
-                <svg class="spark" width="96" height="28" aria-hidden="true"><path d={spark(l.history)} /></svg>
-                <span class="l-best">
-                  <span class="num">{l.best_e1rm.toFixed(0)}</span><span class="unit">kg</span>
-                  {#if pr}<span class="pr">PR</span>{/if}
-                  <span class="mono muted sub">{l.best_set} · {day(l.best_at)}</span>
+                <span class="l-name">{l.exercise}</span>
+                <svg class="spark" width="72" height="28" aria-hidden="true"><path d={spark(l.history)} /></svg>
+                <span class="l-best"><span class="num">{l.best_e1rm.toFixed(0)}</span><span class="unit">kg</span></span>
+                <!-- Each piece keeps its words together; the line breaks between them. -->
+                <span class="mono muted l-meta">
+                  {#if change}<span class="piece l-change">{change}</span><span class="dot" aria-hidden="true">·</span>{/if}<span class="piece">best {l.best_set}, {day(l.best_at)}</span><span class="dot" aria-hidden="true">·</span><span class="piece">{l.sessions} {l.sessions === 1 ? 'session' : 'sessions'}</span>
                 </span>
               </li>
             {/each}
@@ -370,22 +395,33 @@
   .lifts {
     margin-top: 0;
   }
+  /* Name, trend and best on one line; the detail runs full width under
+     them so nothing wraps into a narrow column. */
   .lifts li {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 96px 7rem;
+    grid-template-columns: minmax(0, 1fr) 72px auto;
     align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
+    column-gap: var(--space-3);
+    row-gap: var(--space-1);
+    padding: var(--space-3) 0;
     border-bottom: 1px solid var(--line);
   }
   .l-name {
     font-weight: 600;
     min-width: 0;
   }
-  .l-name .sess {
-    display: block;
-    font-weight: 400;
+  .l-meta {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 0.5em;
     font-size: var(--size-label);
+  }
+  .l-meta .piece {
+    white-space: nowrap;
+  }
+  .l-change {
+    color: var(--text);
   }
   .spark path {
     fill: none;
@@ -393,25 +429,12 @@
     stroke-width: 1.5;
   }
   .l-best {
-    display: grid;
-    grid-template-columns: auto auto 1fr;
+    display: flex;
     align-items: baseline;
-    column-gap: 0.25rem;
-    justify-items: start;
+    justify-content: flex-end;
+    gap: 0.25rem;
   }
   .l-best .num {
     font-size: var(--size-heading);
-  }
-  .pr {
-    padding: 0 0.25rem;
-    border: 1px solid var(--text);
-    color: var(--text);
-    border-radius: 2px;
-    font-size: var(--size-label);
-    font-weight: 700;
-  }
-  .sub {
-    grid-column: 1 / -1;
-    font-size: var(--size-label);
   }
 </style>
