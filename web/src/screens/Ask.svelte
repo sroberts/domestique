@@ -84,6 +84,11 @@
 
   {#if on === false}
     <p class="muted intro">Asking needs an AI model from Outpost, and none is available right now.</p>
+    <!-- Not a dead end: the numbers a question would reach are a tap away. -->
+    <div class="elsewhere">
+      <a class="btn" href="/trends" use:link>Fitness and lift PRs in Trends</a>
+      <a class="btn" href="/activities" use:link>Rides and sessions in Activities</a>
+    </div>
   {:else if on}
     <p class="muted intro">Questions about your rides, lifting, recovery and gear, answered from your own data.</p>
 
@@ -278,6 +283,14 @@
   }
   .ask-form .btn {
     justify-self: start;
+  }
+  .elsewhere {
+    display: grid;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+  .elsewhere .btn {
+    min-height: var(--tap-min);
   }
   .err {
     margin: 0;

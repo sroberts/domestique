@@ -111,6 +111,11 @@
           cooperativeGestures: true,
         });
         m.touchZoomRotate.disableRotation();
+        // The basemap style names a few pattern sprites (wood-pattern) its
+        // sprite sheet lacks; stand in a transparent pixel so they draw nothing.
+        m.on('styleimagemissing', (e: { id: string }) => {
+          if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+        });
         m.on('load', () => {
           // Start the attribution folded to its "i" button; it opens on tap.
           el?.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show');

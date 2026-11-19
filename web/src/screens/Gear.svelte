@@ -562,7 +562,7 @@
     font-size: var(--size-heading);
   }
   .first {
-    max-width: 20rem;
+    width: 100%;
   }
   .linkish {
     padding: 0;

@@ -38,6 +38,10 @@
   });
 
   let plotW = $derived(Math.max(0, width - PAD.left - PAD.right));
+  /** Set numbers over the bands, thinned so none overlap: each sits at its
+   * band's centre at least LABEL_GAP from the last one drawn, and the
+   * selected set's number always shows, its close neighbours making way. */
+  const LABEL_GAP = 18;
   let plotH = $derived(height - PAD.top - PAD.bottom);
   const x = (t: number) => PAD.left + ((t - t0) / (t1 - t0)) * plotW;
   const y = (bpm: number) => PAD.top + (1 - (bpm - lo) / (hi - lo)) * plotH;
@@ -49,6 +53,21 @@
 
   // Split the trace into runs of one zone, so color follows effort. Each run
   // shares its first point with the previous run's last, keeping the line whole.
+  let setLabels = $derived.by(() => {
+    const all = sets
+      .filter((s) => !circ.places.has(s.id))
+      .map((s) => ({ id: s.id, n: s.set_index + 1, cx: x(s.started_at) + Math.max(2, x(s.ended_at) - x(s.started_at)) / 2 }));
+    const sel = all.find((l) => l.id === selected);
+    const out: typeof all = [];
+    let last = -Infinity;
+    for (const l of all) {
+      if (l !== sel && (l.cx - last < LABEL_GAP || (sel && Math.abs(l.cx - sel.cx) < LABEL_GAP))) continue;
+      out.push(l);
+      last = l.cx;
+    }
+    return out;
+  });
+
   let runs = $derived.by(() => {
     const out: { zone: number; d: string }[] = [];
     let cur: { zone: number; pts: string[] } | null = null;
@@ -151,17 +170,16 @@
       {/each}
 
       <!-- set bands: the climbs -->
-      {#each sets as s, i (s.id)}
+      {#each sets as s (s.id)}
         {@const bx = x(s.started_at)}
         {@const bw = Math.max(2, x(s.ended_at) - bx)}
-        {@const prevX = i > 0 ? x(sets[i - 1]!.started_at) : -Infinity}
         <rect class="band" class:active={s.id === selected} x={bx} y={PAD.top} width={bw} height={plotH} />
         {#if s.id === selected}
           <rect class="band-cap" x={bx} y={PAD.top - 3} width={bw} height="3" />
         {/if}
-        {#if !circ.places.has(s.id) && (bx - prevX >= 16 || s.id === selected)}
-          <text class="set-n" class:active={s.id === selected} x={bx + bw / 2} y={PAD.top - 8}>{s.set_index + 1}</text>
-        {/if}
+      {/each}
+      {#each setLabels as l (l.id)}
+        <text class="set-n" class:active={l.id === selected} x={l.cx} y={PAD.top - 8}>{l.n}</text>
       {/each}
 
       <!-- the trace -->
