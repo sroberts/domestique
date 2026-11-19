@@ -34,7 +34,8 @@ colors:
   light-line: "#ddd8cc"
   light-ink: "#1b1c1f"
   light-muted: "#63676e"
-  light-signal: "#a87d00"
+  light-signal: "#e6ac00"
+  light-signal-ink: "#7f5f00"
   light-go: "#1f7a49"
   light-stop: "#c8323a"
 typography:
@@ -194,7 +195,7 @@ It explicitly rejects Strava's orange, social feeds, kudos and leaderboards; neo
 A graphite dash and painted bone, with one stripe of team yellow and a zone ramp that only appears when there's heart rate to show.
 
 ### Primary
-- **Signal Yellow** (`#f2c230`, light theme `#a87d00`): the team-car tape. The primary action button, the active set's plate, focus rings and the current selection. Pressed state is `#d9ab1f`. Text on it is graphite (`#16171a`).
+- **Signal Yellow** (`#f2c230`, light theme `#e6ac00`): the team-car tape. The primary action button, the active set's plate and the current selection. Pressed state is `#d9ab1f` (light `#cc9900`). Text on it is graphite (`#16171a`). Where signal is text or a thin line on the page (the rest clock running over, a radio's dot), it uses Signal Ink: the same yellow in dark mode, `#7f5f00` in light, so it stays readable on cream. Focus rings use the focus token, the same yellow in dark mode and `#8e6a00` in light.
 - **Go and Stop** (green `#4fc283`, red `#f0656a`, pressed `#3fae73` and `#e5484d`; light theme `#1f7a49` and `#c8323a` with white text): the workout's set buttons. Start set is green, Finish set is red, so a glance from the bench says whether a set is running. Dark mode puts graphite text on them (8:1 and 5.8:1); light mode white (both above 5:1). They take the primary action's place and shape and are used nowhere else; Finish session stays signal yellow.
 
 ### Secondary

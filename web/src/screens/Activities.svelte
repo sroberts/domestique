@@ -97,9 +97,9 @@
     <SyncStatus />
   </header>
 
-  <div class="chips" role="radiogroup" aria-label="Show">
+  <div class="filter" role="radiogroup" aria-label="Show" style:--n={filters.length}>
     {#each filters as f (f.id)}
-      <button class="chip" role="radio" aria-checked={filter === f.id} class:on={filter === f.id} onclick={() => (filter = f.id)}>
+      <button role="radio" aria-checked={filter === f.id} class:on={filter === f.id} onclick={() => (filter = f.id)}>
         {f.label}
       </button>
     {/each}
@@ -175,29 +175,35 @@
   h1 {
     font-size: var(--size-heading);
   }
-  .chips {
-    display: flex;
-    gap: var(--space-2);
+  /* One segmented control, like Trends' range and the ride sheet. */
+  .filter {
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
     margin-top: var(--space-4);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .chip {
-    flex: none;
-    min-height: 2.75rem;
-    padding: 0 var(--space-4);
     border: 1px solid var(--line-strong);
-    border-radius: 999px;
+    border-radius: var(--radius-m);
+    overflow: hidden;
+  }
+  .filter button {
+    min-height: 2.75rem;
+    padding: 0 var(--space-2);
+    border: 0;
     background: transparent;
     font-size: var(--size-small);
     font-weight: 600;
     color: var(--text-muted);
     cursor: pointer;
   }
-  .chip.on {
+  .filter button + button {
+    border-left: 1px solid var(--line-strong);
+  }
+  .filter button.on {
     background: var(--text);
-    border-color: var(--text);
     color: var(--bg);
+  }
+  .filter button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
   }
   .notice {
     margin-top: var(--space-4);

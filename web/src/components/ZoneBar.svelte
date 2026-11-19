@@ -15,7 +15,7 @@
   <div class="bar" aria-hidden="true">
     {#each rows as r (r.zone)}
       {#if r.pct >= 0.5}
-        <span style:width={`${r.pct}%`} style:background={r.zone === 0 ? 'var(--line-strong)' : `var(--zone-${r.zone})`}></span>
+        <span class:under={r.zone === 0} style:width={`${r.pct}%`} style:background={r.zone === 0 ? null : `var(--zone-${r.zone})`}></span>
       {/if}
     {/each}
   </div>
@@ -23,7 +23,7 @@
     {#each rows as r (r.zone)}
       <div class:empty={r.s === 0}>
         <dt>
-          <span class="sw" style:background={r.zone === 0 ? 'var(--line-strong)' : `var(--zone-${r.zone})`} aria-hidden="true"></span>
+          <span class="sw" class:under={r.zone === 0} style:background={r.zone === 0 ? null : `var(--zone-${r.zone})`} aria-hidden="true"></span>
           {#if r.zone === 0}<span aria-hidden="true">&lt;Z1</span><span class="visually-hidden">Below zone 1</span>{:else}Z{r.zone}{/if}
         </dt>
         <dd class="mono">{clock(r.s)}</dd>
@@ -74,5 +74,9 @@
     width: 0.625rem;
     height: 0.625rem;
     border-radius: 2px;
+  }
+  /* Below Z1 is an outline, not another grey: time under the zones, not in one. */
+  .under {
+    box-shadow: inset 0 0 0 1.5px var(--zone-1);
   }
 </style>

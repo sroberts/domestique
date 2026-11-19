@@ -375,11 +375,11 @@
     font-size: 0.875em;
     overflow-wrap: anywhere;
   }
+  /* A notice like any other: the words carry the warning, not zone colour. */
   .warn {
     padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--zone-4);
+    border: 1px solid var(--line-strong);
     border-radius: var(--radius-m);
-    background: color-mix(in srgb, var(--zone-4) 8%, transparent);
   }
   .flash {
     margin-top: var(--space-3);
@@ -432,17 +432,18 @@
     gap: var(--space-2);
     font-weight: 700;
   }
+  /* Plain words until connected; connected is a solid tag, the one state
+     worth spotting down the list. */
   .conn-state {
     font-size: var(--size-label);
     font-weight: 600;
     color: var(--text-muted);
-    padding: 0 0.375rem;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-s);
   }
   .conn-state.on {
-    color: var(--text);
-    border-color: var(--zone-3);
+    padding: 0 0.375rem;
+    border-radius: var(--radius-s);
+    background: var(--text);
+    color: var(--bg);
   }
   .conn-act {
     display: flex;

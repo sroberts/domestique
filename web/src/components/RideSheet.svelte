@@ -237,7 +237,7 @@
     color: var(--bg);
   }
   .seg label:has(:focus-visible) {
-    outline: 2px solid var(--signal);
+    outline: 2px solid var(--focus);
     outline-offset: -2px;
   }
   .seg input {

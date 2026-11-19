@@ -352,7 +352,7 @@
       "light-signal": {
         "role": "primary",
         "displayName": "Light Signal",
-        "canonical": "oklch(61.5% 0.126 84)",
+        "canonical": "oklch(77.7% 0.160 84)",
         "tonalRamp": [
           "#1c0300",
           "#3a1c00",
@@ -363,6 +363,11 @@
           "#e5be6d",
           "#ffeaa0"
         ]
+      },
+      "light-signal-ink": {
+        "role": "primary",
+        "displayName": "Light Signal Ink",
+        "canonical": "oklch(50.5% 0.103 86)"
       },
       "recovery-green": {
         "role": "tertiary",

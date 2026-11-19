@@ -176,6 +176,21 @@
     const rec = w?.sets.find((x) => x.exercise_index === s.exerciseIndex && x.set_index === s.setIndex);
     return rec ? compact(rec.reps, rec.weight_kg) : '';
   }
+
+  // Space starts and finishes sets from a keyboard (an iPad on a stand),
+  // unless focus is on a control that already uses it.
+  function onKey(e: KeyboardEvent) {
+    if (!c || e.code !== 'Space' || e.repeat || e.metaKey || e.ctrlKey || e.altKey || busy || dialog?.open) return;
+    const t = e.target as HTMLElement | null;
+    if (t?.closest('button, a, input, textarea, select, [role="button"], [role="radio"], [contenteditable="true"]')) return;
+    if (c.phase === 'ready' || (c.phase === 'rest' && slot)) {
+      e.preventDefault();
+      start();
+    } else if (c.phase === 'active') {
+      e.preventDefault();
+      finishSet();
+    }
+  }
 </script>
 
 <!-- The weight for the set about to start, changeable before it does. It
@@ -210,6 +225,8 @@
 {#snippet endText(e: { circuit: Circuit; rounds: number })}End {circuitName(e.circuit)} after {roundsText(e.rounds)}{/snippet}
 
 <div class="visually-hidden" aria-live="assertive">{announce}</div>
+
+<svelte:window onkeydown={onKey} />
 
 {#if missing}
   <main class="session">
@@ -355,14 +372,16 @@
     {/if}
   </main>
 
+  {#snippet key()}<kbd class="key" aria-hidden="true">Space</kbd>{/snippet}
+
   <ActionBar session>
     {#if c.phase === 'ready'}
-      <button class="btn btn-primary btn-go" onclick={start} disabled={busy}>Start set</button>
+      <button class="btn btn-primary btn-go" onclick={start} disabled={busy} aria-keyshortcuts="Space">Start set{@render key()}</button>
     {:else if c.phase === 'active'}
-      <button class="btn btn-primary btn-stop" onclick={finishSet} disabled={busy}>Finish set</button>
+      <button class="btn btn-primary btn-stop" onclick={finishSet} disabled={busy} aria-keyshortcuts="Space">Finish set{@render key()}</button>
     {:else if c.phase === 'rest' && slot}
-      <button class="btn btn-primary btn-go" onclick={start} disabled={busy}>
-        {newExercise ? `Start ${slot.exercise.name}` : `Start set ${slot.setIndex + 1}`}
+      <button class="btn btn-primary btn-go" onclick={start} disabled={busy} aria-keyshortcuts="Space">
+        {newExercise ? `Start ${slot.exercise.name}` : `Start set ${slot.setIndex + 1}`}{@render key()}
       </button>
     {:else if c.phase === 'last'}
       <button class="btn btn-primary" onclick={finishSession} disabled={busy}>Finish session</button>
@@ -527,7 +546,7 @@
     font-weight: 700;
   }
   .signal {
-    color: var(--signal);
+    color: var(--signal-ink);
   }
   .target-big {
     display: flex;
@@ -601,10 +620,10 @@
   /* Rest over: the clock turns signal and counts up; the solid Start set
      below stays the loudest thing on screen. */
   .rest.over .num {
-    color: var(--signal);
+    color: var(--signal-ink);
   }
   .rest.over .signal-label {
-    color: var(--signal);
+    color: var(--signal-ink);
   }
   .drain.gone {
     visibility: hidden; /* keeps its height: nothing jumps when rest ends */
@@ -779,5 +798,24 @@
   .sheet-btn {
     min-height: var(--tap-min);
     width: 100%;
+  }
+  /* The shortcut shows only where there's likely a keyboard. */
+  .key {
+    display: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .key {
+      display: inline-block;
+      margin-left: var(--space-3);
+      padding: 0 var(--space-2);
+      border: 1px solid currentColor;
+      border-radius: var(--radius-s);
+      font-family: var(--font-mono);
+      font-size: var(--size-label);
+      font-weight: 600;
+      line-height: 1.6;
+      opacity: 0.7;
+      vertical-align: middle;
+    }
   }
 </style>

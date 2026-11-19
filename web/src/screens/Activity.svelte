@@ -542,12 +542,15 @@
     gap: var(--space-2);
     margin: var(--space-3) 0 0;
   }
+  /* Tags are plain words, not boxes: only meaning (sport, form) gets a solid tag. */
   .tag {
     font-family: var(--font-mono);
     font-size: var(--size-small);
-    padding: 0.0625rem 0.375rem;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-s);
+    color: var(--text-muted);
+  }
+  .tags .tag + .tag::before {
+    content: '· ';
+    color: var(--text-muted);
   }
   .ride-type {
     color: var(--text);

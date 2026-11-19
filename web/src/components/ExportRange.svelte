@@ -9,19 +9,26 @@
   let to = $state(today);
   let files = $state<'generated' | 'originals'>('generated');
 
-  function preset(kind: 'year' | '12m' | 'last') {
+  type Kind = 'year' | '12m' | 'last';
+  const PRESETS: { k: Kind; label: string }[] = [
+    { k: 'year', label: 'This year' },
+    { k: '12m', label: 'Last 12 months' },
+    { k: 'last', label: 'Last year' },
+  ];
+
+  function rangeOf(kind: Kind): [string, string] {
     const d = new Date();
-    if (kind === 'year') {
-      from = `${d.getFullYear()}-01-01`;
-      to = today;
-    } else if (kind === '12m') {
-      from = localDate(new Date(d.getFullYear() - 1, d.getMonth(), d.getDate() + 1));
-      to = today;
-    } else {
-      from = `${d.getFullYear() - 1}-01-01`;
-      to = `${d.getFullYear() - 1}-12-31`;
-    }
+    if (kind === 'year') return [`${d.getFullYear()}-01-01`, today];
+    if (kind === '12m') return [localDate(new Date(d.getFullYear() - 1, d.getMonth(), d.getDate() + 1)), today];
+    return [`${d.getFullYear() - 1}-01-01`, `${d.getFullYear() - 1}-12-31`];
   }
+
+  function preset(kind: Kind) {
+    [from, to] = rangeOf(kind);
+  }
+
+  // The preset the dates match, if any: picking dates by hand selects none.
+  let active = $derived(PRESETS.find((p) => rangeOf(p.k).join() === `${from},${to}`)?.k ?? null);
 
   // The server takes at most five years at a time.
   let problem = $derived.by(() => {
@@ -34,10 +41,10 @@
 </script>
 
 <div class="exp">
-  <div class="presets" role="group" aria-label="Quick ranges">
-    <button class="btn btn-quiet" type="button" onclick={() => preset('year')}>This year</button>
-    <button class="btn btn-quiet" type="button" onclick={() => preset('12m')}>Last 12 months</button>
-    <button class="btn btn-quiet" type="button" onclick={() => preset('last')}>Last year</button>
+  <div class="presets" role="radiogroup" aria-label="Quick ranges">
+    {#each PRESETS as p (p.k)}
+      <button type="button" role="radio" aria-checked={active === p.k} class:on={active === p.k} onclick={() => preset(p.k)}>{p.label}</button>
+    {/each}
   </div>
   <div class="dates">
     <label>
@@ -77,10 +84,36 @@
     gap: var(--space-3);
     margin-top: var(--space-3);
   }
+  /* The same segmented control as Activities and Trends. */
   .presets {
-    display: flex;
-    flex-wrap: wrap;
-    margin-left: calc(var(--space-2) * -1);
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 30rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-m);
+    overflow: hidden;
+  }
+  .presets button {
+    min-height: 2.75rem;
+    padding: 0 var(--space-2);
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: var(--size-small);
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .presets button + button {
+    border-left: 1px solid var(--line-strong);
+  }
+  .presets button.on {
+    background: var(--text);
+    color: var(--bg);
+  }
+  .presets button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
   }
   .dates {
     display: grid;
@@ -122,7 +155,7 @@
     height: 1.25rem;
     margin-top: 0.125rem;
     flex: none;
-    accent-color: var(--signal);
+    accent-color: var(--signal-ink);
   }
   .opt > span {
     display: grid;
