@@ -275,15 +275,10 @@
     {/if}
 
     {#if suggested && source === 'server'}
-      <div class="merge-hint">
-        <p>Looks like the rest of <strong>{suggested.name}</strong> at {time(suggested.started_at)}. Merge them into one session?</p>
-        <button class="btn" onclick={() => openMerge(suggested)}>Merge…</button>
-      </div>
-    {/if}
-
-    {#if checkin && summary}
-      <CheckIn path={checkInPath('session', summary.session.id)} questions={checkin.questions} initial={checkin.checkin}
-        srpe={checkin.srpe ?? 0} session heading="How did that go?" />
+      <p class="merge-hint">
+        Looks like the rest of <strong>{suggested.name}</strong> at {time(suggested.started_at)}.
+        <button class="link" onclick={() => openMerge(suggested)}>Merge them…</button>
+      </p>
     {/if}
 
     <dl class="strip">
@@ -308,7 +303,7 @@
             <p class="ro-stats">
               <span><span class="num">{selStat.peak_bpm}</span> <span class="unit">peak</span></span>
               <span class="zone-tag"><span class="sw" style:background={`var(--zone-${Math.max(1, selStat.zone)})`} aria-hidden="true"></span>Z{selStat.zone}</span>
-              <span><span class="num">−{selStat.recovery_drop}</span> <span class="unit">in {selStat.recovery_window_s} s</span></span>
+              <span><span class="num">{dropText(selStat.recovery_drop)}</span> <span class="unit">in {selStat.recovery_window_s} s</span></span>
             </p>
           {:else}
             <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
@@ -322,6 +317,12 @@
         <HrAlignment sessionId={id} alignment={summary.alignment} onchange={load} />
       {/if}
     </section>
+
+    <!-- After the payoff: the session ends on the effort, then asks how it felt. -->
+    {#if checkin && summary}
+      <CheckIn path={checkInPath('session', summary.session.id)} questions={checkin.questions} initial={checkin.checkin}
+        srpe={checkin.srpe ?? 0} session heading="How did that go?" />
+    {/if}
 
     {#if summary.hr_status === 'ready'}
       <section class="block" aria-labelledby="z-h">
@@ -680,20 +681,27 @@
   .edit-row .btn {
     font-size: var(--size-small);
   }
+  /* A quiet line, not a card: admin stays out of the payoff's way. */
   .merge-hint {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-m);
+    margin-top: var(--space-2);
     font-size: var(--size-small);
+    color: var(--text-muted);
   }
-  .merge-hint p {
-    flex: 1 1 14rem;
+  .merge-hint strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .merge-hint .link {
+    min-height: 2.75rem;
+    padding: 0 var(--space-1);
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    cursor: pointer;
   }
   .merge-row {
     padding-bottom: var(--space-6);
