@@ -21,6 +21,11 @@
   let busy = $state(false);
   let dialog = $state<HTMLDialogElement | null>(null);
   let announce = $state('');
+  /** The logged set whose steppers are open ("Fix"), and the slot whose
+   * next-set weight stepper is open ("Change weight"). Corrections are by
+   * exception: closed, rest is the clock, ±15 s and Start set. */
+  let fixing = $state<string | null>(null);
+  let weighing = $state<number | null>(null);
 
   $effect(() => {
     let cancelled = false;
@@ -175,19 +180,29 @@
 
 <!-- The weight for the set about to start, changeable before it does. It
      carries to the rest of the exercise; the plan's weight stays the target. -->
-{#snippet nextWeight(label: string)}
+{#snippet nextWeight()}
   {#if w && slot && target}
+    {@const open = weighing === slot.index}
     <div class="next-weight">
-      <Stepper
-        {label}
-        unit={target.weight_kg === 0 ? 'Weight' : 'kg'}
-        value={target.weight_kg === 0 ? 'BW' : weight(target.weight_kg)}
-        canDecrease={target.weight_kg > 0}
-        onstep={(d) => w!.adjustNext(d)}
-      />
-      <p class="muted next-planned" aria-live="polite">
-        {#if target.weight_kg !== slot.target.weight_kg}Planned {slot.target.weight_kg === 0 ? 'bodyweight' : `${weight(slot.target.weight_kg)} kg`}{/if}
-      </p>
+      <div class="toggle-row">
+        <button class="btn btn-quiet toggle" aria-expanded={open} aria-controls="next-weight-step" onclick={() => (weighing = open ? null : slot.index)}>
+          {open ? 'Done' : 'Change weight'}
+        </button>
+        <p class="muted next-planned" aria-live="polite">
+          {#if target.weight_kg !== slot.target.weight_kg}Planned {slot.target.weight_kg === 0 ? 'bodyweight' : `${weight(slot.target.weight_kg)} kg`}{/if}
+        </p>
+      </div>
+      {#if open}
+        <div id="next-weight-step" class="half">
+          <Stepper
+            label="Next set weight"
+            unit={target.weight_kg === 0 ? 'Weight' : 'kg'}
+            value={target.weight_kg === 0 ? 'BW' : weight(target.weight_kg)}
+            canDecrease={target.weight_kg > 0}
+            onstep={(d) => w!.adjustNext(d)}
+          />
+        </div>
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -242,7 +257,7 @@
             <span class="times num" aria-hidden="true">×</span>
             <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
           </div>
-          {@render nextWeight('Weight')}
+          {@render nextWeight()}
         {:else if c.phase === 'active' && slot && target}
           <Plate n={slot.setIndex + 1} of={exerciseSlots.length} {unit} active />
           <div class="in-set">
@@ -283,23 +298,33 @@
 
     {#if correctable && w.lastSet}
       {@const ls = w.lastSet}
+      {@const open = fixing === ls.id}
       <section class="logged" aria-labelledby="logged-h">
-        <h2 id="logged-h" class="logged-h">
-          <span>Logged</span>
-          <span class="mono muted">{ls.exercise_name} · {setWord(ls.exercise_index, ls.set_index)}</span>
-        </h2>
-        <div class="steppers">
-          <Stepper label="Reps" value={String(ls.reps)} canDecrease={ls.reps > 0} onstep={(d) => w!.adjustLast('reps', d)} />
-          <Stepper
-            label="Weight"
-            unit={ls.weight_kg === 0 ? 'Weight' : 'kg'}
-            value={ls.weight_kg === 0 ? 'BW' : weight(ls.weight_kg)}
-            canDecrease={ls.weight_kg > 0}
-            onstep={(d) => w!.adjustLast('weight_kg', d * weightStep(ls.weight_kg, d))}
-          />
+        <!-- One line: what was logged. The steppers open only to fix it. -->
+        <div class="toggle-row">
+          <h2 id="logged-h" class="logged-h">
+            <span class="label">Logged</span>
+            <span class="num logged-num">{setText(ls.reps, ls.weight_kg)}</span>
+            <span class="mono muted logged-where">{ls.exercise_name} · {setWord(ls.exercise_index, ls.set_index)}</span>
+          </h2>
+          <button class="btn btn-quiet toggle" aria-expanded={open} aria-controls="logged-fix" onclick={() => (fixing = open ? null : ls.id)}>
+            {open ? 'Done' : 'Fix'}
+          </button>
         </div>
-        <!-- Space reserved so the note appearing never shifts the screen mid-glance. -->
-        <p class="muted adj" aria-live="polite">
+        {#if open}
+          <div id="logged-fix" class="steppers">
+            <Stepper label="Logged reps" unit="Reps" value={String(ls.reps)} canDecrease={ls.reps > 0} onstep={(d) => w!.adjustLast('reps', d)} />
+            <Stepper
+              label="Logged weight"
+              unit={ls.weight_kg === 0 ? 'Weight' : 'kg'}
+              value={ls.weight_kg === 0 ? 'BW' : weight(ls.weight_kg)}
+              canDecrease={ls.weight_kg > 0}
+              onstep={(d) => w!.adjustLast('weight_kg', d * weightStep(ls.weight_kg, d))}
+            />
+          </div>
+        {/if}
+        <!-- Open, space is reserved so the note appearing never shifts the screen mid-glance. -->
+        <p class="muted adj" class:reserve={open} aria-live="polite">
           {#if ls.reps !== ls.target_reps || ls.weight_kg !== ls.target_weight_kg}Target was {setText(ls.target_reps, ls.target_weight_kg)}{ls.weight_kg !== ls.target_weight_kg && w.carries(ls) ? '. New weight carries to the next sets.' : '.'}{/if}
         </p>
       </section>
@@ -322,7 +347,7 @@
         {:else}
           <p class="next-main">Set {slot.setIndex + 1} of {exerciseSlots.length} · <span class="num next-num">{setText(target.reps, target.weight_kg)}</span></p>
         {/if}
-        {@render nextWeight(`${slot.exercise.name} weight`)}
+        {@render nextWeight()}
         {#if betweenRounds && w.endable}
           <button class="btn btn-quiet end-circuit" onclick={endCircuit} disabled={busy}>{@render endText(w.endable)}</button>
         {/if}
@@ -606,17 +631,34 @@
     padding-top: var(--space-4);
     border-top: 1px solid var(--line);
   }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+  .toggle {
+    min-height: var(--tap-min);
+    min-width: 5rem;
+    margin-right: calc(var(--space-3) * -1);
+    flex: none;
+  }
   .logged-h {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2);
+    column-gap: var(--space-3);
+    row-gap: var(--space-1);
+    min-width: 0;
     font-size: var(--size-body);
-  }
-  .logged-h .mono {
-    font-size: var(--size-small);
     font-weight: 400;
+  }
+  .logged-num {
+    font-size: var(--size-lead);
+    font-weight: 600;
+  }
+  .logged-where {
+    font-size: var(--size-small);
   }
   .steppers {
     display: grid;
@@ -638,21 +680,33 @@
     text-align: center;
   }
   .adj {
-    min-height: 2.4em;
-    margin-top: var(--space-2);
+    margin-top: var(--space-1);
     font-size: var(--size-label);
+  }
+  .adj:empty {
+    display: none;
+  }
+  .adj.reserve {
+    display: block;
+    min-height: 2.4em;
   }
   .next-weight {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: end;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
   .next .next-weight {
-    margin-top: var(--space-3);
+    margin-top: var(--space-1);
+  }
+  .next-weight .toggle-row {
+    justify-content: flex-start;
+  }
+  .next-weight .toggle {
+    margin: 0 0 0 calc(var(--space-3) * -1);
+  }
+  .half {
+    width: min(100%, 20rem);
   }
   .next-planned {
-    padding-bottom: var(--space-3);
     font-size: var(--size-label);
   }
   .next {
