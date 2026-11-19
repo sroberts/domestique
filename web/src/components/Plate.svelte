@@ -14,7 +14,8 @@
 <p class="plate-row">
   <span class="visually-hidden">{unit} {n} of {of}</span>
   <span class="plate num" class:active aria-hidden="true">{n}</span>
-  <span class="num total" aria-hidden="true">of {of}</span>
+  <!-- Circuits say "rounds" so the plate never reads as the exercise count. -->
+  <span class="num total" aria-hidden="true">of {of}{unit === 'Round' ? (of === 1 ? ' round' : ' rounds') : ''}</span>
 </p>
 
 <style>

@@ -49,21 +49,35 @@
   let restFraction = $derived(c && c.phase === 'rest' && c.rest_s > 0 ? Math.max(0, Math.min(1, restLeft / c.rest_s)) : 0);
   let restOver = $derived(c?.phase === 'rest' && restLeft <= 0);
   let newExercise = $derived(!!(w?.lastSet && slot && w.lastSet.exercise_index !== slot.exerciseIndex));
+  /** The exercise the header and ladder show. Resting after an exercise's
+   * last set, that's the one just done: the rest belongs to it, and Next
+   * below names what comes after. */
+  let shown = $derived.by(() => {
+    const ls = w?.lastSet;
+    if (!w || !slot || c?.phase !== 'rest' || !newExercise || !ls) return slot;
+    return w.slots.find((s) => s.exerciseIndex === ls.exercise_index && s.setIndex === ls.set_index) ?? slot;
+  });
+  let shownSlots = $derived(w && shown ? w.slots.filter((s) => s.exerciseIndex === shown.exerciseIndex) : []);
+  let circuits = $derived(w ? circuitsOf(w.session.plan) : []);
+  /** "Circuit B", lettered as the editor and summary letter them. */
+  const circuitName = (circ: Circuit) => `Circuit ${circuitLetter(circuits.findIndex((x) => x.start === circ.start))}`;
   // Circuits count rounds, not sets, and say what comes after this exercise.
   let unit = $derived<'Set' | 'Round'>(slot?.circuit ? 'Round' : 'Set');
-  let then = $derived(w && slot?.circuit ? w.nextAfter(slot.index) : null);
+  let then = $derived(w && shown?.circuit ? w.nextAfter(shown.index) : null);
   /** Where a circuit goes after this exercise: the next one in the round,
    * rest before the next round, or whatever follows the circuit. */
   let thenText = $derived.by(() => {
-    if (!slot?.circuit || !then) return '';
-    if (then.circuit?.start !== slot.circuit.start) return then.exercise.name;
-    return then.setIndex === slot.setIndex ? then.exercise.name : 'rest';
+    if (!shown?.circuit || !then) return '';
+    if (then.circuit?.start !== shown.circuit.start) return then.exercise.name;
+    return then.setIndex === shown.setIndex ? then.exercise.name : 'rest';
   });
+  // Why today's sets differ from the template ("Eased for today", a held
+  // weight) beats the standing note: it explains a short ladder like 1 of 1.
   let posText = $derived(
-    !w || !slot ? ''
-    : slot.circuit
-      ? [`Circuit · ${slot.exerciseIndex - slot.circuit.start + 1} of ${slot.circuit.end - slot.circuit.start}`, thenText && `then ${thenText}`, slot.exercise.notes].filter(Boolean).join(' · ')
-      : [`Lift ${slot.exerciseIndex + 1} of ${w.session.plan.length}`, slot.exercise.notes].filter(Boolean).join(' · '),
+    !w || !shown ? ''
+    : shown.circuit
+      ? [`${circuitName(shown.circuit)} · exercise ${shown.exerciseIndex - shown.circuit.start + 1} of ${shown.circuit.end - shown.circuit.start}`, thenText && `then ${thenText}`, shown.exercise.change || shown.exercise.notes].filter(Boolean).join(' · ')
+      : [`Lift ${shown.exerciseIndex + 1} of ${w.session.plan.length}`, shown.exercise.change || shown.exercise.notes].filter(Boolean).join(' · '),
   );
   /** "set 2", or "round 2" for a set done in a circuit. */
   const setWord = (exerciseIndex: number, setIndex: number) =>
@@ -127,9 +141,6 @@
 
   // A circuit's rounds can change mid-session: one more after the last
   // planned round, or stop with the rounds done so far.
-  let circuits = $derived(w ? circuitsOf(w.session.plan) : []);
-  /** "Circuit B", lettered as the editor and summary letter them. */
-  const circuitName = (circ: Circuit) => `Circuit ${circuitLetter(circuits.findIndex((x) => x.start === circ.start))}`;
   const addRound = () =>
     act(async () => {
       const circ = w!.roundsDone!;
@@ -169,8 +180,8 @@
     <div class="next-weight">
       <Stepper
         {label}
-        unit={target.weight_kg === 0 ? 'BW' : 'kg'}
-        value={target.weight_kg === 0 ? '0' : weight(target.weight_kg)}
+        unit={target.weight_kg === 0 ? 'Weight' : 'kg'}
+        value={target.weight_kg === 0 ? 'BW' : weight(target.weight_kg)}
         canDecrease={target.weight_kg > 0}
         onstep={(d) => w!.adjustNext(d)}
       />
@@ -204,14 +215,14 @@
       <div class="sync-row"><SyncStatus /></div>
     {/if}
 
-    {#if slot && c.phase !== 'last'}
+    {#if shown && c.phase !== 'last'}
       <section class="exercise" aria-label="Current exercise">
-        <h1 class="ex-name">{slot.exercise.name}</h1>
+        <h1 class="ex-name">{shown.exercise.name}</h1>
         <p class="mono ex-pos">
           {posText}
         </p>
-        <ol class="ladder" aria-label="Sets" style:--n={exerciseSlots.length}>
-          {#each exerciseSlots as s (s.index)}
+        <ol class="ladder" aria-label={shown.circuit ? 'Rounds' : 'Sets'} style:--n={shownSlots.length}>
+          {#each shownSlots as s (s.index)}
             {@const st = ladderState(s)}
             <li class="rung {st}" aria-current={st === 'current' ? 'step' : undefined}>
               <span class="rung-n mono">{s.setIndex + 1}</span>
@@ -245,19 +256,20 @@
           </div>
         {:else if c.phase === 'rest'}
           <div class="rest" class:over={restOver}>
-            <p class="label" class:signal-label={restOver}>{restOver ? 'Rest over' : 'Rest'}</p>
-            <p class="num live" class:signal={restOver} aria-label={restOver ? `${Math.floor(-restLeft)} seconds over` : `${Math.ceil(restLeft)} seconds left`}>
-              {restOver ? `+${fmtClock(-restLeft)}` : fmtClock(Math.ceil(restLeft))}
-            </p>
-            <div class="drain" class:gone={restOver} role="progressbar" aria-label="Rest remaining" aria-valuemin={0} aria-valuemax={c.rest_s} aria-valuenow={Math.max(0, Math.ceil(restLeft))}>
-              <div class="drain-fill" style:transform={`scaleX(${restFraction})`}></div>
-            </div>
-            <div class="rest-tools">
-              <span class="mono muted">of {fmtClock(c.rest_s)}</span>
+            <p class="label rest-label"><span class:signal-label={restOver}>{restOver ? 'Rest over' : 'Rest'}</span> <span class="mono muted">of {fmtClock(c.rest_s)}</span></p>
+            <!-- Clock and its adjusters share a row: rest carries the logged
+                 and next sets too, and they need the height. -->
+            <div class="rest-row">
+              <p class="num live" class:signal={restOver} aria-label={restOver ? `${Math.floor(-restLeft)} seconds over` : `${Math.ceil(restLeft)} seconds left`}>
+                {restOver ? `+${fmtClock(-restLeft)}` : fmtClock(Math.ceil(restLeft))}
+              </p>
               <span class="rest-adjust">
                 <button class="btn" onclick={() => w!.addRest(-15)} disabled={c.rest_s <= 15} aria-label="15 seconds less rest">−15 s</button>
                 <button class="btn" onclick={() => w!.addRest(15)} aria-label="15 seconds more rest">+15 s</button>
               </span>
+            </div>
+            <div class="drain" class:gone={restOver} role="progressbar" aria-label="Rest remaining" aria-valuemin={0} aria-valuemax={c.rest_s} aria-valuenow={Math.max(0, Math.ceil(restLeft))}>
+              <div class="drain-fill" style:transform={`scaleX(${restFraction})`}></div>
             </div>
           </div>
         {:else if c.phase === 'last'}
@@ -280,8 +292,8 @@
           <Stepper label="Reps" value={String(ls.reps)} canDecrease={ls.reps > 0} onstep={(d) => w!.adjustLast('reps', d)} />
           <Stepper
             label="Weight"
-            unit={ls.weight_kg === 0 ? 'BW' : 'kg'}
-            value={ls.weight_kg === 0 ? '0' : weight(ls.weight_kg)}
+            unit={ls.weight_kg === 0 ? 'Weight' : 'kg'}
+            value={ls.weight_kg === 0 ? 'BW' : weight(ls.weight_kg)}
             canDecrease={ls.weight_kg > 0}
             onstep={(d) => w!.adjustLast('weight_kg', d * weightStep(ls.weight_kg, d))}
           />
@@ -472,10 +484,18 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    /* Anchor the numbers just above the action, in the eye line of the thumb. */
-    justify-content: flex-end;
+    /* Centred in what's left, so a tall phone splits the spare height above
+       and below instead of leaving one empty block under the ladder. */
+    justify-content: center;
     gap: var(--space-5);
     padding: var(--space-6) 0;
+  }
+  /* Rest carries more (logged set, next set, its weight): keep the clock
+     tight so the next weight clears the action bar without scrolling. */
+  .resting .hero {
+    flex: 0 0 auto;
+    gap: var(--space-3);
+    padding: var(--space-4) 0 var(--space-3);
   }
   .live {
     font-size: var(--size-live);
@@ -537,12 +557,17 @@
     transition: transform 250ms linear;
     will-change: transform;
   }
-  .rest-tools {
+  .rest-label .mono {
+    margin-left: var(--space-2);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .rest-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: var(--space-3);
-    font-size: var(--size-small);
   }
   .rest-adjust {
     display: flex;
@@ -553,7 +578,7 @@
   .rest.over .num {
     color: var(--signal);
   }
-  .rest.over .label {
+  .rest.over .signal-label {
     color: var(--signal);
   }
   .drain.gone {
@@ -631,7 +656,7 @@
     font-size: var(--size-label);
   }
   .next {
-    margin-top: var(--space-5);
+    margin-top: var(--space-4);
     padding-bottom: var(--space-2);
   }
   .again {
