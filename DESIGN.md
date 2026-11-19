@@ -8,7 +8,7 @@ colors:
   tape-line: "#2e3138"
   tape-line-strong: "#444852"
   bone: "#ece8df"
-  dust: "#8a8f98"
+  dust: "#949aa3"
   signal-yellow: "#f2c230"
   signal-yellow-press: "#d9ab1f"
   go-green: "#4fc283"
@@ -33,7 +33,7 @@ colors:
   light-surface: "#ffffff"
   light-line: "#ddd8cc"
   light-ink: "#1b1c1f"
-  light-muted: "#6b6f76"
+  light-muted: "#63676e"
   light-signal: "#a87d00"
   light-go: "#1f7a49"
   light-stop: "#c8323a"
@@ -211,8 +211,8 @@ A graphite dash and painted bone, with one stripe of team yellow and a zone ramp
 - **Graphite Surface** (`#1f2126`) and **Raised** (`#272a30`): inputs, segment buttons, the export menu. The only second layer; there is no third.
 - **Tape Line** (`#2e3138`) and **Strong** (`#444852`): 1px rules between rows and sections, and button outlines. These do the structural work that cards would do elsewhere.
 - **Bone** (`#ece8df`): all primary text, and the race-number plate at rest. Warm, not pure white, so a dark screen doesn't glare in a dim gym.
-- **Dust** (`#8a8f98`): labels, units, secondary metadata and inactive tabs.
-- **Light theme**: background `#f4f1ea`, surface `#ffffff`, rules `#ddd8cc`, ink `#1b1c1f`, muted `#6b6f76`. The plate inverts to ink-on-light.
+- **Dust** (`#949aa3`, at least 5:1 on every surface): labels, units, secondary metadata and inactive tabs.
+- **Light theme**: background `#f4f1ea`, surface `#ffffff`, rules `#ddd8cc`, ink `#1b1c1f`, muted `#63676e`. The plate inverts to ink-on-light.
 
 ### Named Rules
 **The Tape Rule.** Signal yellow is only for "do this now" or "this one is active": the single primary action on screen, the plate of the set in progress, focus and selection. It never fills a card, a header, a chart series or decoration. If two things on one screen are yellow, one of them is wrong. During a workout the set buttons are green (start) and red (finish) instead; they're still the single primary action for that state.

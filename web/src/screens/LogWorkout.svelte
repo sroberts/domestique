@@ -130,6 +130,11 @@
 
   {#if aiOn === false}
     <p class="lead muted">Reading a workout from text needs a model from Outpost, and none is available right now.</p>
+    <!-- Not a dead end: a recorded workout can still come in as a file. -->
+    <div class="elsewhere">
+      <a class="btn" href="/settings" use:link>Import a watch or app file in Settings</a>
+      <a class="btn btn-quiet" href="/workouts" use:link>Back to workouts</a>
+    </div>
   {:else}
     <p class="lead muted">Write down what you did. You'll check it before anything is saved.</p>
     <label class="fl" for="log-text">What did you do?</label>
@@ -354,5 +359,13 @@
   }
   .icon:hover {
     color: var(--text);
+  }
+  .elsewhere {
+    display: grid;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+  }
+  .elsewhere .btn {
+    min-height: var(--tap-min);
   }
 </style>

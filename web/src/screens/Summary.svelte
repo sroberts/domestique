@@ -20,6 +20,10 @@
   import { Workout, earlyText, endedEarly, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
   import type { CheckInResp, MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
 
+  /** Heart rate change after a set: a fall reads −12, a rise +2 (still
+   * climbing when the next set began). */
+  const dropText = (d: number) => (d > 0 ? `−${d}` : d < 0 ? `+${-d}` : '0');
+
   let { id }: { id: string } = $props();
   // Back goes where you came from; on a direct load, to this tab's list.
   const back = backTarget({ href: '/activities', label: 'Activities' });
@@ -365,14 +369,14 @@
                     <span class="zone-tag"><span class="num">{st.peak_bpm}</span><span class="sw" style:background={`var(--zone-${Math.max(1, st.zone)})`} aria-hidden="true"></span><span class="zl">Z{st.zone}</span><span class="visually-hidden"> bpm</span></span>
                   {:else}<span class="dim">–</span>{/if}
                 </span>
-                <span role="cell" class="r">{#if st?.has_hr}<span class="num">−{st.recovery_drop}</span>{:else}<span class="dim">–</span>{/if}</span>
+                <span role="cell" class="r">{#if st?.has_hr}<span class="num">{dropText(st.recovery_drop)}</span><span class="unit"> bpm</span>{:else}<span class="dim">–</span>{/if}</span>
                 <span role="cell" class="r mono">{st?.rest_s ? clock(st.rest_s) : '–'}</span>
               </div>
               {#if workout && s.id === selected}
                 {#if editing === s.id}
                   <div class="edit">
                     <Stepper label="Reps" value={String(s.reps)} canDecrease={s.reps > 0} onstep={(d) => step(s, 'reps', d)} />
-                    <Stepper label="Weight" unit={s.weight_kg === 0 ? 'BW' : 'kg'} value={weight(s.weight_kg) === 'BW' ? '0' : weight(s.weight_kg)} canDecrease={s.weight_kg > 0} onstep={(d) => step(s, 'weight_kg', d)} />
+                    <Stepper label="Weight" unit={s.weight_kg === 0 ? 'Weight' : 'kg'} value={weight(s.weight_kg)} canDecrease={s.weight_kg > 0} onstep={(d) => step(s, 'weight_kg', d)} />
                     <button class="btn" onclick={() => (editing = null)}>Done editing</button>
                   </div>
                 {:else}

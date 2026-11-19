@@ -734,9 +734,9 @@
   .ride-ease {
     margin-top: var(--space-3);
     padding: var(--space-3) var(--space-4);
-    border-left: 3px solid var(--rec-amber);
+    border: 1px solid var(--line-strong);
     background: var(--surface-raised);
-    border-radius: 0 var(--radius-m) var(--radius-m) 0;
+    border-radius: var(--radius-m);
   }
   .ride-ease .mono {
     margin-top: var(--space-1);

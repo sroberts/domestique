@@ -19,6 +19,9 @@
   ];
   let range = $state(90);
   let load = $state<LoadDay[]>([]);
+  /** Days exist but carry no load (lifts waiting on heart rate, no rides
+   * with power): a flat line at zero says nothing, so say why instead. */
+  let flat = $derived(load.every((d) => !d.ctl && !d.atl && !d.tsb));
   let trends = $state<Trends | null>(null);
   let stale = $state<number | null>(null);
   let empty = $state(false);
@@ -97,7 +100,9 @@
           {/each}
         </div>
       </div>
-      {#if load.length > 1}
+      {#if load.length > 1 && flat}
+        <p class="note flat-note">No training load in this range yet. It builds from rides with power and lifts with heart rate or Whoop strain, so it fills in as those sync.</p>
+      {:else if load.length > 1}
         <LoadChart days={load} />
         <p class="note">
           Fitness is a 42-day average of daily load, fatigue a 7-day one, and form is yesterday's fitness minus yesterday's fatigue (how fresh you start the day), so it can differ from today's two numbers. Rides count
@@ -158,7 +163,7 @@
             {#each trends.lifts as l (l.exercise)}
               {@const pr = Date.now() - l.best_at < 14 * 86400000}
               <li>
-                <span class="l-name">{l.exercise}<span class="mono muted sess">{l.sessions} sessions</span></span>
+                <span class="l-name">{l.exercise}<span class="mono muted sess">{l.sessions} {l.sessions === 1 ? 'session' : 'sessions'}</span></span>
                 <svg class="spark" width="96" height="28" aria-hidden="true"><path d={spark(l.history)} /></svg>
                 <span class="l-best">
                   <span class="num">{l.best_e1rm.toFixed(0)}</span><span class="unit">kg</span>
@@ -266,6 +271,9 @@
   .seg button.on {
     background: var(--text);
     color: var(--bg);
+  }
+  .flat-note {
+    font-size: var(--size-small);
   }
   .note {
     margin-top: var(--space-3);

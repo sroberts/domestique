@@ -112,17 +112,32 @@ export type Theme = 'dark' | 'light';
 class ThemeState {
   value = $state<Theme>('dark');
 
+  /** True once the athlete has picked a theme; until then it follows the OS. */
+  #chosen = false;
+
   constructor() {
     try {
-      if (localStorage.getItem('domestique:theme') === 'light') this.value = 'light';
+      const saved = localStorage.getItem('domestique:theme');
+      if (saved === 'light' || saved === 'dark') {
+        this.value = saved;
+        this.#chosen = true;
+      }
     } catch {
-      /* storage blocked: stay dark */
+      /* storage blocked: follow the OS */
     }
+    const os = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: light)') : null;
+    if (!this.#chosen && os?.matches) this.value = 'light';
+    os?.addEventListener('change', (e) => {
+      if (this.#chosen) return;
+      this.value = e.matches ? 'light' : 'dark';
+      this.#apply();
+    });
     this.#apply();
   }
 
   toggle(): void {
     this.value = this.value === 'dark' ? 'light' : 'dark';
+    this.#chosen = true;
     try {
       localStorage.setItem('domestique:theme', this.value);
     } catch {
