@@ -12,12 +12,12 @@
   import ZoneBar from '../components/ZoneBar.svelte';
   import { AuthError, HTTPError, OfflineError, fetchSummary, mergeSessions, mergedInto, previewMerge } from '../lib/api';
   import { checkInPath, fetchCheckIn } from '../lib/data';
-  import { pendingFor } from '../lib/db';
+  import { discardSession, pendingFor } from '../lib/db';
   import { sync } from '../lib/sync.svelte';
   import { sessionExports } from '../lib/export';
   import { clock, day, duration, roundsText, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
-  import { Workout, earlyText, endedEarly, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
+  import { Workout, earlyText, emptySession, endedEarly, isReal, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
   import type { CheckInResp, MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
 
   /** Heart rate change after a set: a fall reads −12, a rise +2 (still
@@ -218,6 +218,18 @@
     }
   }
 
+  // Nothing in it counted: offer to throw it away, with one confirming tap.
+  let isEmpty = $derived(!!summary?.session.finished_at && emptySession(summary?.progress));
+  let confirmDiscard = $state(false);
+  let discarding = $state(false);
+  async function discard() {
+    if (discarding) return;
+    discarding = true;
+    await discardSession(id);
+    sync.kick();
+    router.go('/', { replace: true });
+  }
+
   /** "4 rounds" for a circuit exercise, "5 sets" otherwise. */
   const countText = (n: number, circuit?: string) => (circuit ? roundsText(n) : `${n} ${n === 1 ? 'set' : 'sets'}`);
 
@@ -262,7 +274,26 @@
     <p class="mono meta">
       {day(summary.session.started_at)} · {time(summary.session.started_at)}–{time(end)} · {duration(summary.duration_s)}
     </p>
-    {#if endedEarly(summary.progress)}
+    {#if isEmpty}
+      <section class="empty" aria-labelledby="empty-h">
+        <h2 id="empty-h" class="empty-h">Nothing here counted</h2>
+        <p class="muted">
+          {summary.progress.logged ? `${summary.progress.logged === 1 ? 'The set was' : `All ${summary.progress.logged} sets were`} too short to count as lifting: a set needs at least 5\u00a0s, and 2\u00a0s a rep.` : 'No sets were logged.'}
+          If it was started by mistake, discard it.
+        </p>
+        {#if confirmDiscard}
+          <div class="empty-actions">
+            <button class="btn btn-danger" onclick={discard} disabled={discarding}>{discarding ? 'Discarding…' : 'Discard session'}</button>
+            <button class="btn btn-quiet" onclick={() => (confirmDiscard = false)}>Keep it</button>
+          </div>
+          <p class="small muted">It goes from history and training load on every device.</p>
+        {:else}
+          <div class="empty-actions">
+            <button class="btn" onclick={() => (confirmDiscard = true)}>Discard this session…</button>
+          </div>
+        {/if}
+      </section>
+    {:else if endedEarly(summary.progress)}
       <p class="early">{earlyText(summary.progress)}</p>
     {/if}
 
@@ -319,7 +350,7 @@
     </section>
 
     <!-- After the payoff: the session ends on the effort, then asks how it felt. -->
-    {#if checkin && summary}
+    {#if checkin && summary && !isEmpty}
       <CheckIn path={checkInPath('session', summary.session.id)} questions={checkin.questions} initial={checkin.checkin}
         srpe={checkin.srpe ?? 0} session heading="How did that go?" />
     {/if}
@@ -363,6 +394,7 @@
                     <span class="mono off"><span class="visually-hidden">target </span>/{s.weight_kg === s.target_weight_kg ? s.target_reps : `${s.target_reps}×${weight(s.target_weight_kg)}`}</span>
                   {/if}
                   {#if summary.efforts?.[s.id]}<span class="effort"><span class="visually-hidden">effort </span>{summary.efforts[s.id]!.level}</span>{/if}
+                  {#if !isReal(s)}<span class="mono uncounted">not counted</span>{/if}
                   {#if p}<span class="ex-in">{s.exercise_name}</span>{/if}
                 </span>
                 <span role="cell" class="r">
@@ -565,13 +597,37 @@
     color: var(--text-muted);
   }
   .early {
-    display: inline-block;
-    margin-top: var(--space-2);
-    padding: 0.125rem var(--space-2);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-s);
+    margin-top: var(--space-1);
     font-size: var(--size-small);
     font-weight: 600;
+    color: var(--text-muted);
+  }
+  /* Ruled, not boxed: the one question this screen asks first. */
+  .empty {
+    display: grid;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--line-strong);
+  }
+  .empty-h {
+    font-size: var(--size-body);
+  }
+  .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+  .empty-actions .btn {
+    min-height: var(--tap-min);
+  }
+  .empty .small {
+    font-size: var(--size-small);
+  }
+  .uncounted {
+    margin-left: var(--space-1);
+    font-size: var(--size-label);
+    color: var(--text-muted);
   }
   .summary {
     overflow-x: clip;

@@ -235,14 +235,26 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		resp.Sleep = &sl[len(sl)-1]
 	}
 	a.todayAI(r, &resp, series, day)
-	latest, err := a.Store.ListActivities(ctx, store.ActivityQuery{Limit: 4})
+	// A few spare, so sessions where nothing counted (started by mistake,
+	// or every set too short) can drop out and still leave four.
+	latest, err := a.Store.ListActivities(ctx, store.ActivityQuery{Limit: 8})
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	if resp.Latest, err = a.rows(r, latest); err != nil {
+	rows, err := a.rows(r, latest)
+	if err != nil {
 		a.fail(w, r, err)
 		return
+	}
+	resp.Latest = []ActivityRow{}
+	for _, x := range rows {
+		if x.Progress != nil && x.Progress.Done == 0 {
+			continue
+		}
+		if resp.Latest = append(resp.Latest, x); len(resp.Latest) == 4 {
+			break
+		}
 	}
 	resp.Athlete = load.Current(ctx, a.Store, a.MaxHR)
 	if a.Coach != nil && !a.demoOn(r) {

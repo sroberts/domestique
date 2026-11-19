@@ -2,7 +2,7 @@
   import SportIcon from './SportIcon.svelte';
   import { duration, km, relDay, time } from '../lib/format';
   import { link } from '../lib/router.svelte';
-  import { earlyText, endedEarly } from '../lib/workout.svelte';
+  import { earlyText, emptySession, emptyText, endedEarly } from '../lib/workout.svelte';
   import type { ActivityRow } from '../lib/types';
 
   let { a, showDay = true }: { a: ActivityRow; showDay?: boolean } = $props();
@@ -31,7 +31,9 @@
   <span class="main">
     <span class="name">{a.name}</span>
     <span class="meta mono">{meta}</span>
-    {#if endedEarly(a.progress)}
+    {#if emptySession(a.progress)}
+      <span class="early">{emptyText(a.progress!)}</span>
+    {:else if endedEarly(a.progress)}
       <span class="early">{earlyText(a.progress!)}</span>
     {/if}
   </span>
@@ -113,11 +115,8 @@
     font-size: var(--size-label);
     color: var(--text-muted);
   }
+  /* Plain words, not a tag: it's a fact about the session, not a control. */
   .early {
-    justify-self: start;
-    padding: 0 var(--space-2);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-s);
     font-size: var(--size-label);
     font-weight: 600;
     color: var(--text-muted);
