@@ -41,6 +41,11 @@
   let texts = $derived(questionTexts(questions, session));
   let hurting = $derived(c.pain === 'niggle' || c.pain === 'pain');
   let any = $derived(answered(c));
+  // One question first ("How hard?"); the rest open once it's answered, or
+  // straight away when coming back to a check-in that has answers.
+  // svelte-ignore state_referenced_locally
+  let revealed = $state(answered(initial));
+  let shown = $derived(revealed ? texts : texts.slice(0, 1));
 
   async function save(body: CheckIn): Promise<boolean> {
     clearTimeout(timer);
@@ -69,6 +74,7 @@
 
   function pick(k: Question, v: string) {
     c[k] = c[k] === v ? '' : v; // a second tap clears it
+    revealed = true;
     if (k === 'pain' && !(c.pain === 'niggle' || c.pain === 'pain')) c.where = [];
     soon();
   }
@@ -101,10 +107,10 @@
       <h2 id="ci-h" class="ci-h">{heading}</h2>
       {#if sub}<p class="small muted">{sub}</p>{/if}
     </div>
-    {#each texts as q (q.k)}
+    {#each shown as q (q.k)}
       <fieldset class="q">
         <legend class="label">{q.label}</legend>
-        <div class="chips">
+        <div class="chips scale" style:--cols={q.answers.length > 4 ? 3 : q.answers.length}>
           {#each q.answers as a (a.v)}
             <button type="button" class="chip" aria-pressed={c[q.k] === a.v} onclick={() => pick(q.k, a.v)}>{a.label}</button>
           {/each}
@@ -123,7 +129,7 @@
         <span class="label">Notes</span>
         <textarea bind:value={c.notes} oninput={soon} rows="2" maxlength="500" placeholder="Anything else"></textarea>
       </label>
-    {:else}
+    {:else if revealed}
       <button type="button" class="link" onclick={() => (notesOpen = true)}>Add a note</button>
     {/if}
     <div class="ci-actions">
@@ -151,11 +157,11 @@
 </section>
 
 <style>
+  /* Ruled like the rest of the dash, not boxed. */
   .checkin {
-    margin-top: var(--space-4);
-    padding: var(--space-4);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-m);
+    margin-top: var(--space-6);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--line-strong);
     display: grid;
     gap: var(--space-3);
   }
@@ -175,8 +181,14 @@
     flex-wrap: wrap;
     gap: var(--space-1);
   }
+  /* Answers sit in equal columns: four across, or five as three and two,
+     so the last one is never orphaned at full width and looking loudest. */
+  .scale {
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  }
   .chip {
-    flex: 1 1 4.5rem;
+    flex: 1 1 auto;
     min-height: var(--tap-min);
     padding: 0 var(--space-2);
     border: 1px solid var(--line-strong);
@@ -233,6 +245,12 @@
   .ci-actions .btn {
     min-height: var(--tap-min);
     min-width: 7rem;
+  }
+  /* Skip is a quiet text button: its words line up with the questions. */
+  .ci-actions .btn-quiet {
+    min-width: 0;
+    margin-left: calc(var(--space-2) * -1);
+    padding: 0 var(--space-2);
   }
   .status {
     color: var(--text-muted);
