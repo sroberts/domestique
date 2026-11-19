@@ -16,6 +16,8 @@
   --text-muted: #949aa3;
   --signal: #f2c230;
   --signal-press: #d9ab1f;
+  /* Signal as text or a thin line on the page, where a fill colour is too faint. */
+  --signal-ink: #f2c230;
   --on-signal: #16171a;
   /* Start and end a set (>= 5:1 with their ink) */
   --go: #4fc283;
@@ -66,8 +68,9 @@
   --line-strong: #c4bead;
   --text: #1b1c1f;
   --text-muted: #63676e;
-  --signal: #a87d00;
-  --signal-press: #8e6a00;
+  --signal: #e6ac00;
+  --signal-press: #cc9900;
+  --signal-ink: #7f5f00;
   --on-signal: #1b1c1f;
   --go: #1f7a49;
   --go-press: #18663c;

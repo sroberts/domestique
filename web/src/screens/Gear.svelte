@@ -619,9 +619,7 @@
     color: var(--text-muted);
   }
   .tag {
-    padding: 0 0.375rem;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-s);
+    margin-left: var(--space-2);
     font-size: var(--size-label);
     font-weight: 600;
     color: var(--text-muted);
@@ -854,7 +852,7 @@
   .check input {
     width: 1.25rem;
     height: 1.25rem;
-    accent-color: var(--signal);
+    accent-color: var(--signal-ink);
   }
   .err {
     color: var(--danger);

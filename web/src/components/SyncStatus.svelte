@@ -56,7 +56,7 @@
   .signin {
     min-height: 2.75rem;
     padding: 0 var(--space-3);
-    border: 1px solid var(--signal);
+    border: 1px solid var(--signal-ink);
     border-radius: var(--radius-m);
     background: transparent;
     color: var(--text);

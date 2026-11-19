@@ -259,9 +259,7 @@
   .tag {
     font-size: var(--size-small);
     font-weight: 600;
-    padding: 0 var(--space-2);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-s);
+    color: var(--text-muted);
   }
   .meta {
     margin-top: var(--space-1);

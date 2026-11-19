@@ -159,6 +159,8 @@
     }
     return out;
   });
+  // Rest only shows when some set has one (a single set, or a circuit, may not).
+  let hasRest = $derived((summary?.set_stats ?? []).some((x) => x.rest_s > 0));
   let sel = $derived(summary?.sets.find((s) => s.id === selected) ?? null);
   let selStat = $derived(sel ? stats.get(sel.id) : undefined);
   let end = $derived(summary ? (summary.session.finished_at ?? summary.sets.at(-1)?.ended_at ?? summary.session.started_at) : 0);
@@ -307,7 +309,7 @@
 
     {#if suggested && source === 'server'}
       <p class="merge-hint">
-        Looks like the rest of <strong>{suggested.name}</strong> at {time(suggested.started_at)}.
+        Looks like the rest of <strong>{suggested.name}</strong> at&nbsp;{time(suggested.started_at)}.
         <button class="link" onclick={() => openMerge(suggested)}>Merge them…</button>
       </p>
     {/if}
@@ -340,7 +342,7 @@
             <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
           {/if}
         {:else}
-          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Touch the trace to read a set.' : 'Each band is a set, in order. Touch one to read it.'}{places.size ? ' Wider, fainter bands are circuit rounds.' : ''}</p>
+          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Pick a set on the trace or in the table to read it.' : 'Each band is a set, in order. Pick one to read it.'}{places.size ? ' Wider, fainter bands are circuit rounds.' : ''}</p>
         {/if}
       </div>
       <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
@@ -355,22 +357,27 @@
         srpe={checkin.srpe ?? 0} session heading="How did that go?" />
     {/if}
 
+    <!-- Wide screens: sets beside zones, rather than one stretched column. -->
+    <div class="lower">
     {#if summary.hr_status === 'ready'}
-      <section class="block" aria-labelledby="z-h">
-        <h2 id="z-h" class="block-h">Time in zones <span class="mono muted">avg {summary.avg_bpm} bpm · max HR {summary.max_hr}</span></h2>
+      <section class="block zones-block" aria-labelledby="z-h">
+        <h2 id="z-h" class="block-h">Time in zones <span class="mono muted">avg {summary.avg_bpm} bpm · zones from max {summary.max_hr}</span></h2>
         <ZoneBar seconds={summary.zone_seconds} />
+        {#if summary.peak_bpm > summary.max_hr}
+          <p class="muted foot">Peak {summary.peak_bpm} is above the max HR of {summary.max_hr} that zones use. <a href="/settings" use:link>Change it in Settings</a></p>
+        {/if}
       </section>
     {/if}
 
-    <section class="block" aria-labelledby="sets-h">
+    <section class="block sets-block" aria-labelledby="sets-h">
       <h2 id="sets-h" class="block-h">Sets</h2>
-      <div class="table" role="table" aria-label="Sets with heart rate">
+      <div class="table" class:no-rest={!hasRest} role="table" aria-label="Sets with heart rate">
         <div class="tr th" role="row">
           <span role="columnheader" class="label">Set</span>
           <span role="columnheader" class="label">Done</span>
           <span role="columnheader" class="label r">Peak</span>
           <span role="columnheader" class="label r">Recovery</span>
-          <span role="columnheader" class="label r">Rest</span>
+          {#if hasRest}<span role="columnheader" class="label r">Rest</span>{/if}
         </div>
         {#each groups as g, gi (gi)}
           <div class="group" role="rowgroup">
@@ -403,7 +410,7 @@
                   {:else}<span class="dim">–</span>{/if}
                 </span>
                 <span role="cell" class="r">{#if st?.has_hr}<span class="num">{dropText(st.recovery_drop)}</span><span class="unit"> bpm</span>{:else}<span class="dim">–</span>{/if}</span>
-                <span role="cell" class="r mono">{st?.rest_s ? clock(st.rest_s) : '–'}</span>
+                {#if hasRest}<span role="cell" class="r mono">{st?.rest_s ? clock(st.rest_s) : '–'}</span>{/if}
               </div>
               {#if workout && s.id === selected}
                 {#if editing === s.id}
@@ -426,6 +433,7 @@
         <p class="muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
       {/if}
     </section>
+    </div>
 
     {#if summary.same_day?.length && source === 'server'}
       <section class="block merge-row">
@@ -489,6 +497,26 @@
   @media (min-width: 900px) {
     .summary {
       max-width: var(--page-wide);
+    }
+    .lower {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+      grid-template-areas: 'sets zones';
+      gap: 0 var(--space-6);
+      align-items: start;
+    }
+    .sets-block {
+      grid-area: sets;
+    }
+    .zones-block {
+      grid-area: zones;
+    }
+    .lower .zones-block :global(.legend) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    /* The check-in reads as a short form, not a banner across the page. */
+    .summary :global(.checkin) {
+      max-width: 40rem;
     }
   }
   .top {
@@ -673,6 +701,9 @@
     border-radius: var(--radius-s);
     cursor: pointer;
   }
+  .no-rest .tr {
+    grid-template-columns: 2rem 1fr 4.25rem 4.5rem;
+  }
   .tr.th {
     cursor: default;
     padding-bottom: var(--space-1);
@@ -747,8 +778,12 @@
     color: var(--text);
     font-weight: 600;
   }
+  /* A full-size target that doesn't push the line apart. */
   .merge-hint .link {
+    display: inline-flex;
+    align-items: center;
     min-height: 2.75rem;
+    margin-block: -0.75rem;
     padding: 0 var(--space-1);
     border: 0;
     background: none;
