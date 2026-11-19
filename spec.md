@@ -182,7 +182,7 @@ Structured as a design context for impeccable. Direction: **Team Car**, the insi
 2. Live Set: exercise, set X of Y, target reps and weight, one big log button
 3. Rest: draining timer bar with next set preview
 4. Session Summary: heart rate trace with each set shaded as a band
-5. Ride Detail: power, heart rate, cadence, merged source badges
+5. Ride Detail: route map, power, heart rate, cadence, merged source badges
 6. Trends: fitness, fatigue, and form chart, power curve, lift PRs
 7. Gear: component mileage and battery reminders
 
@@ -200,8 +200,11 @@ Structured as a design context for impeccable. Direction: **Team Car**, the insi
 - One-time import of Strava bulk export archive into the same store
 - Run in parallel with Strava until the data matches, then stop uploads
 
-## Open Questions
+## Decided
 
-- How to handWill this support strong mapping of my bike rides especially? le clock drift between the phone and Whoop when aligning sets
-- Whether to add a lightweight web dashboard in v2
-- How to classify strength sessions from Whoop for training load
+Questions left open in the first draft, and how the build settled them.
+
+- **Clock drift between the phone and Whoop when aligning sets.** Every API response carries the server's time, and the phone estimates its offset from each quick round trip (median of the last seven). The offset goes up with the session, and ingest moves the set times onto server time before matching them against Whoop's heart rate. Whoop's own timestamps are taken as true.
+- **Maps for rides.** Ride Detail draws GPS rides on MapLibre with OpenFreeMap tiles (no key, no tracking), loaded only when a ride has a route. Made-up Zwift worlds use Zwift's own map instead; offline, the route still draws on a plain background.
+- **A web dashboard in v2.** Not needed: the PWA is the dashboard, with Trends, Activities and Gear alongside the strength flow.
+- **Load for Whoop strength sessions.** Strain maps onto the TSS scale (strain 14 is about an hour at threshold), capped at an hour at threshold per hour; circuits raise the cap toward the heart-rate ceiling. Ride TSS from power wins when there is enough of it, and entries judged stray carry no load.
