@@ -150,6 +150,7 @@ type todayResp struct {
 	RunDown   bool      `json:"run_down,omitempty"` // ask "feeling run down?"
 	aiPending bool
 	felt      []string // how yesterday's workouts felt, for the coach
+	day       dayState // what the call was decided from, for the coach
 }
 
 func (a *API) today(w http.ResponseWriter, r *http.Request) {
@@ -163,12 +164,13 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
 		return
 	}
-	rec, series, readiness, err := a.dayReadiness(r, date)
+	ds, err := a.dayReadiness(r, date)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
-	resp := todayResp{Date: date, Recovery: rec, Readiness: readiness}
+	series := ds.Series
+	resp := todayResp{Date: date, Recovery: ds.Rec, Readiness: ds.Readiness, day: ds}
 	if id, err := a.Store.GetPlan(ctx, date); err == nil {
 		t, err := a.Store.GetTemplate(ctx, id)
 		if err != nil && !errors.Is(err, store.ErrNotFound) {

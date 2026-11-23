@@ -247,12 +247,12 @@ func (a *API) easeDay(w http.ResponseWriter, r *http.Request) {
 			a.fail(w, r, err)
 			return
 		}
-		_, _, readiness, err := a.dayReadiness(r, date)
+		ds, err := a.dayReadiness(r, date)
 		if err != nil {
 			a.fail(w, r, err)
 			return
 		}
-		p, err := strength.Prescribe(ctx, a.Store, t, readiness)
+		p, err := strength.Prescribe(ctx, a.Store, t, ds.Readiness)
 		if err != nil {
 			a.fail(w, r, err)
 			return
