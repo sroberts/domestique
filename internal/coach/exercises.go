@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -30,26 +31,60 @@ func (a *AI) SameExercise(ctx context.Context, name string, known []string) (str
 	if len(known) > MaxKnown {
 		return "", 0, fmt.Errorf("%d known names: at most %d", len(known), MaxKnown)
 	}
-	ans, err := a.sameExercise(ctx, name, known)
-	for err != nil && tooLong(err) && len(known) > 1 {
-		// The names offered count against System 1's cap on a question:
-		// offer the nearest half (callers order them best first) and ask again.
-		known = known[:len(known)/2]
-		ans, err = a.sameExercise(ctx, name, known)
-	}
+	parts, err := a.askSame(ctx, name, known)
 	if err != nil {
 		return "", 0, err
 	}
-	s := ans["same"]
-	if s.Type != "choice" || s.Choice == NewExercise {
+	var to string
+	var p float64
+	matches := 0
+	for _, x := range parts {
+		s := x.ans
+		if s.Type != "choice" || s.Choice == NewExercise {
+			continue
+		}
+		if !slices.Contains(x.known, s.Choice) {
+			return "", 0, fmt.Errorf("system 1 answered an exercise it wasn't offered: %q", s.Choice)
+		}
+		matches++
+		to, p = s.Choice, s.Probabilities[s.Choice]
+	}
+	// Split up, each question offers fewer names, so its answer reads as
+	// surer than the whole question's would. Trust only a match with the
+	// nearest name that no other part disputes.
+	if len(parts) > 1 && (matches != 1 || to != known[0]) {
 		return "", 0, nil
 	}
-	for _, k := range known {
-		if k == s.Choice {
-			return k, s.Probabilities[k], nil
-		}
+	return to, p, nil
+}
+
+type samePart struct {
+	known []string
+	ans   Answer
+}
+
+// askSame puts the question with known as the options. System 1 caps a
+// question's length, the options included: refused as too long, it asks
+// again in two halves (the nearer half first), down to one name a
+// question, so every name is still offered and the answer holds for all.
+func (a *AI) askSame(ctx context.Context, name string, known []string) ([]samePart, error) {
+	ans, err := a.sameExercise(ctx, name, known)
+	if err == nil {
+		return []samePart{{known, ans["same"]}}, nil
 	}
-	return "", 0, fmt.Errorf("system 1 answered an exercise it wasn't offered: %q", s.Choice)
+	if !tooLong(err) || len(known) == 1 {
+		return nil, err
+	}
+	h := (len(known) + 1) / 2
+	near, err := a.askSame(ctx, name, known[:h])
+	if err != nil {
+		return nil, err
+	}
+	far, err := a.askSame(ctx, name, known[h:])
+	if err != nil {
+		return nil, err
+	}
+	return append(near, far...), nil
 }
 
 // exerciseQ is kept short: System 1 caps a question's instructions, and

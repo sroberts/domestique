@@ -6,41 +6,114 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 )
 
-// System 1 caps a question's length, options included. Refused, the
-// question is asked again with the nearest half of the names, until it fits.
-func TestSameExerciseFitsTheCap(t *testing.T) {
-	var offered []int
+var sixNames = []string{"Romanian Deadlift", "Deadlift", "Back Squat", "Bench Press", "Pull-Up", "Overhead Press"}
+
+// capServer refuses any question offering more than max names, and
+// answers the rest with match (or "new exercise" when it isn't offered).
+// It records the names offered per call.
+func capServer(t *testing.T, max int, match func(offered []string) string) (*AI, *[][]string) {
+	t.Helper()
+	var calls [][]string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Questions map[string]struct {
-				Instructions string            `json:"instructions"`
-				Criteria     map[string]string `json:"criteria"`
+				Criteria map[string]string `json:"criteria"`
 			} `json:"questions"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		q := body.Questions["same"]
-		n := len(q.Criteria) - 1 // less "new exercise"
-		offered = append(offered, n)
-		if n > 1 {
+		var offered []string
+		for k := range body.Questions["same"].Criteria {
+			if k != NewExercise {
+				offered = append(offered, k)
+			}
+		}
+		sort.Strings(offered)
+		calls = append(calls, offered)
+		if len(offered) > max {
 			w.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(w, `{"error":"question 0: instructions with the question type have 57 tokens; limit is 31 with these options"}`)
 			return
 		}
-		fmt.Fprint(w, `{"model":"laya","answers":{"same":{"type":"choice","choice":"Romanian Deadlift","probabilities":{"Romanian Deadlift":0.97,"new exercise":0.03}}}}`)
+		c := match(offered)
+		if c == "" {
+			c = NewExercise
+		}
+		fmt.Fprintf(w, `{"model":"laya","answers":{"same":{"type":"choice","choice":%q,"probabilities":{%q:0.97}}}}`, c, c)
 	}))
-	defer srv.Close()
-	a := &AI{URL: srv.URL, Token: "t", HTTP: &http.Client{Timeout: 5 * time.Second}}
-	known := []string{"Romanian Deadlift", "Deadlift", "Back Squat", "Bench Press", "Pull-Up", "Overhead Press"}
-	got, p, err := a.SameExercise(context.Background(), "RDL", known)
+	t.Cleanup(srv.Close)
+	return &AI{URL: srv.URL, Token: "t", HTTP: &http.Client{Timeout: 5 * time.Second}}, &calls
+}
+
+func offers(name string) func([]string) string {
+	return func(o []string) string {
+		for _, k := range o {
+			if k == name {
+				return name
+			}
+		}
+		return ""
+	}
+}
+
+// Refused as too long, the question is split in halves until it fits, and
+// every name is still offered: the nearest half first, through two names.
+func TestSameExerciseFitsTheCap(t *testing.T) {
+	a, calls := capServer(t, 1, offers("Romanian Deadlift"))
+	got, p, err := a.SameExercise(context.Background(), "RDL", sixNames)
 	if err != nil || got != "Romanian Deadlift" || p != 0.97 {
 		t.Fatalf("got %q %v %v", got, p, err)
 	}
-	if fmt.Sprint(offered) != "[6 3 1]" {
-		t.Errorf("names offered per try: %v, want [6 3 1]", offered)
+	var sizes []int
+	seen := map[string]bool{}
+	for _, c := range *calls {
+		sizes = append(sizes, len(c))
+		if len(c) == 1 {
+			seen[c[0]] = true
+		}
+	}
+	if fmt.Sprint(sizes) != "[6 3 2 1 1 1 3 2 1 1 1]" {
+		t.Errorf("names offered per call: %v", sizes)
+	}
+	if len(seen) != len(sixNames) {
+		t.Errorf("only %d of %d names offered on their own", len(seen), len(sixNames))
+	}
+}
+
+// A split question offers fewer names, so its answers read as surer: a
+// match with anything but the nearest name isn't trusted.
+func TestSameExerciseSplitOnlyTrustsTheNearest(t *testing.T) {
+	a, _ := capServer(t, 3, offers("Bench Press"))
+	if got, _, err := a.SameExercise(context.Background(), "Bench", sixNames); err != nil || got != "" {
+		t.Fatalf("got %q %v, want no match", got, err)
+	}
+	// Asked whole, the same answer stands.
+	a, _ = capServer(t, 6, offers("Bench Press"))
+	if got, _, err := a.SameExercise(context.Background(), "Bench", sixNames); err != nil || got != "Bench Press" {
+		t.Fatalf("whole question: got %q %v", got, err)
+	}
+}
+
+// Two parts each claiming a match is no answer.
+func TestSameExerciseSplitDisputed(t *testing.T) {
+	a, _ := capServer(t, 3, func(o []string) string { return o[0] })
+	if got, _, err := a.SameExercise(context.Background(), "Romanian DL", sixNames); err != nil || got != "" {
+		t.Fatalf("got %q %v, want no match", got, err)
+	}
+}
+
+// Too long even with one name, the refusal is returned.
+func TestSameExerciseTooLongForOne(t *testing.T) {
+	a, calls := capServer(t, 0, offers(""))
+	if _, _, err := a.SameExercise(context.Background(), "RDL", sixNames[:2]); err == nil {
+		t.Fatal("want the refusal")
+	}
+	if len(*calls) != 2 { // two names, then the nearer one alone
+		t.Errorf("%d calls, want 2", len(*calls))
 	}
 }
 
