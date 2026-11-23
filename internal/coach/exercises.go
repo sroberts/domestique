@@ -2,7 +2,9 @@ package coach
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"unicode"
@@ -28,17 +30,13 @@ func (a *AI) SameExercise(ctx context.Context, name string, known []string) (str
 	if len(known) > MaxKnown {
 		return "", 0, fmt.Errorf("%d known names: at most %d", len(known), MaxKnown)
 	}
-	criteria := map[string]string{NewExercise: "a different exercise from all of these"}
-	for _, k := range known {
-		criteria[k] = fmt.Sprintf("the same exercise as %q, written another way", k)
+	ans, err := a.sameExercise(ctx, name, known)
+	for err != nil && tooLong(err) && len(known) > 1 {
+		// The names offered count against System 1's cap on a question:
+		// offer the nearest half (callers order them best first) and ask again.
+		known = known[:len(known)/2]
+		ans, err = a.sameExercise(ctx, name, known)
 	}
-	ans, _, err := a.SystemOne(ctx, map[string]any{"new_name": name, "exercises_the_athlete_logs": known}, map[string]Question{
-		"same": {Type: "choice", Criteria: criteria, Instructions: fmt.Sprintf(
-			"The athlete just logged an exercise called %q. Is it one of the exercises they already log, written another way "+
-				"(an abbreviation, a plural, a typo, a different word order, the equipment named differently), or a different exercise? "+
-				"A variation that trains differently is a different exercise: front squat is not back squat, incline bench is not flat bench, "+
-				"dumbbell press is not barbell press, Romanian deadlift is not deadlift.", name)},
-	})
 	if err != nil {
 		return "", 0, err
 	}
@@ -52,6 +50,27 @@ func (a *AI) SameExercise(ctx context.Context, name string, known []string) (str
 		}
 	}
 	return "", 0, fmt.Errorf("system 1 answered an exercise it wasn't offered: %q", s.Choice)
+}
+
+// exerciseQ is kept short: System 1 caps a question's instructions, and
+// the options offered count against the cap. The new name is in the state.
+const exerciseQ = "Is new_name one of these exercises written another way (abbreviation, plural, typo, word order)? " +
+	"A variation is different: front squat is not back squat, incline bench is not flat bench."
+
+func (a *AI) sameExercise(ctx context.Context, name string, known []string) (map[string]Answer, error) {
+	criteria := map[string]string{NewExercise: "a different exercise, or a variation of one"}
+	for _, k := range known {
+		criteria[k] = "the same as " + k
+	}
+	ans, _, err := a.SystemOne(ctx, map[string]any{"new_name": name, "exercises_the_athlete_logs": known},
+		map[string]Question{"same": {Type: "choice", Criteria: criteria, Instructions: exerciseQ}})
+	return ans, err
+}
+
+// tooLong reports System 1 refusing a question as longer than its cap.
+func tooLong(err error) bool {
+	var se *StatusError
+	return errors.As(err, &se) && se.Status == http.StatusBadRequest && strings.Contains(se.Message, "tokens; limit is")
 }
 
 // Nearest picks the known names most like name, at most n, best first, by
