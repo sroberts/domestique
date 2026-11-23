@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -34,37 +35,97 @@ func (a *API) dateParam(r *http.Request) (string, bool) {
 	return date, validDate(date)
 }
 
-// dayReadiness is the recovery, recent load and readiness call for a date:
+// dayState is the recovery, recent load and readiness call for a date:
 // what both Today and any prescription are judged against.
-func (a *API) dayReadiness(r *http.Request, date string) (*store.Recovery, []load.Day, strength.Readiness, error) {
+type dayState struct {
+	Rec       *store.Recovery
+	Series    []load.Day
+	Readiness strength.Readiness
+	Morning   strength.Morning
+	// Mornings are the scored mornings before today, oldest first, for
+	// saying what changed: up to baseDays of them.
+	Mornings []store.Recovery
+}
+
+// baseDays is how far back the athlete's norm looks.
+const baseDays = 28
+
+func (a *API) dayReadiness(r *http.Request, date string) (dayState, error) {
 	ctx := r.Context()
 	if a.demoOn(r) {
 		if err := a.Demo.EnsureDay(ctx, date); err != nil {
-			return nil, nil, strength.Readiness{}, err
+			return dayState{}, err
 		}
 	}
-	var rec *store.Recovery
-	if x, err := a.Store.GetRecovery(ctx, date); err == nil {
-		rec = &x
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return nil, nil, strength.Readiness{}, err
-	}
+	var st dayState
 	day, _ := time.ParseInLocation("2006-01-02", date, a.loc())
-	series, err := load.Daily(ctx, a.Store, day.AddDate(0, 0, -13), day, a.loc())
+	recs, err := a.Store.RecoveryRange(ctx, day.AddDate(0, 0, -baseDays).Format("2006-01-02"), date)
 	if err != nil {
-		return nil, nil, strength.Readiness{}, err
+		return dayState{}, err
 	}
-	tsb, hasLoad := 0.0, false
-	if n := len(series); n > 0 {
-		tsb = series[n-1].TSB
-		hasLoad = series[n-1].CTL > 5
+	for _, x := range recs {
+		if x.Date == date {
+			st.Rec = &x
+		} else if x.Date < date {
+			st.Mornings = append(st.Mornings, x)
+		}
 	}
+	sort.Slice(st.Mornings, func(i, j int) bool { return st.Mornings[i].Date < st.Mornings[j].Date })
+	st.Series, err = load.Daily(ctx, a.Store, day.AddDate(0, 0, -13), day, a.loc())
+	if err != nil {
+		return dayState{}, err
+	}
+	sleeps, err := a.Store.SleepRange(ctx, day.AddDate(0, 0, -baseDays).Format("2006-01-02"), date)
+	if err != nil {
+		return dayState{}, err
+	}
+	m := strength.Morning{Rec: st.Rec, Base: baseline(st.Mornings, sleeps, date)}
+	if n := len(st.Series); n > 0 {
+		m.TSB = st.Series[n-1].TSB
+		m.HasLoad = st.Series[n-1].CTL > 5
+	}
+	for _, sl := range sleeps {
+		if sl.Date == date { // the last of the night's records, as Today shows
+			m.SleepH = float64(sl.AsleepS) / 3600
+		}
+	}
+	st.Morning = m
 	// How yesterday's workouts felt, from the athlete's check-ins.
 	felt, err := a.Store.CheckInsBetween(ctx, day.AddDate(0, 0, -1).UnixMilli(), day.UnixMilli()-1)
 	if err != nil {
-		return nil, nil, strength.Readiness{}, err
+		return dayState{}, err
 	}
-	return rec, series, strength.AfterCheckIns(strength.AssessReadiness(rec, tsb, hasLoad), felt), nil
+	st.Readiness = strength.AfterCheckIns(strength.AssessReadiness(m), felt)
+	return st, nil
+}
+
+// baseline is the athlete's norm from earlier mornings, or nil with too few.
+// Sleep before date counts toward it once a week of nights is known.
+func baseline(mornings []store.Recovery, sleeps []store.Sleep, date string) *strength.Baseline {
+	var hrv, rhr []float64
+	for _, x := range mornings {
+		if x.HRVms > 0 && x.RestingHR > 0 {
+			hrv, rhr = append(hrv, x.HRVms), append(rhr, float64(x.RestingHR))
+		}
+	}
+	if len(hrv) < strength.BaselineDays {
+		return nil
+	}
+	b := &strength.Baseline{Days: len(hrv), HRVms: median(hrv), RestingHR: median(rhr)}
+	night := map[string]float64{}
+	for _, sl := range sleeps {
+		if sl.Date < date && sl.AsleepS > 0 {
+			night[sl.Date] = math.Max(night[sl.Date], float64(sl.AsleepS)/3600)
+		}
+	}
+	if len(night) >= 7 {
+		hs := make([]float64, 0, len(night))
+		for _, h := range night {
+			hs = append(hs, h)
+		}
+		b.SleepH = median(hs)
+	}
+	return b
 }
 
 // templateRow is a template with when it was last done, for the list.
@@ -186,11 +247,12 @@ func (a *API) prescribed(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
-	_, _, readiness, err := a.dayReadiness(r, date)
+	ds, err := a.dayReadiness(r, date)
 	if err != nil {
 		a.fail(w, r, err)
 		return
 	}
+	readiness := ds.Readiness
 	p, err := strength.Prescribe(r.Context(), a.Store, t, readiness)
 	if err != nil {
 		a.fail(w, r, err)

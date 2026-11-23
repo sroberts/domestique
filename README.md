@@ -43,8 +43,12 @@ background, the app checks again shortly, and results are kept in
 and after a failure the same work waits 15 minutes.
 
 **The LLM** writes, in a directeur sportif's voice:
-- **Today's readiness call:** a rewording of the rule-based call. The rules
-  still decide the level and the day's weights.
+- **Today's readiness call:** a rewording of the rule-based call, leading
+  with what sets the morning apart (recovery against yesterday's, HRV and
+  resting heart rate against your own four-week norm, a short night). The
+  rules still decide the level and the day's weights: Whoop's recovery sets
+  the band, your own norm moves a score near a band's edge, and a high score
+  with HRV at your norm is a day to push.
 - **A note on each workout** (activity page), and **a debrief of each lifting
   session** (session summary), from their metrics and your own description.
 - **A note on last week** (Trends, and the `get_week_note` MCP tool).

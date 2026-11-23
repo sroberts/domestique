@@ -25,36 +25,6 @@ func call(level, title, detail string) Readiness {
 	return Readiness{Level: level, Title: title, Detail: detail}
 }
 
-// AssessReadiness combines the morning recovery score with training form.
-// rec may be nil; tsb is today's form (fitness minus fatigue).
-func AssessReadiness(rec *store.Recovery, tsb float64, hasLoad bool) Readiness {
-	score := -1
-	if rec != nil {
-		score = rec.Score
-	}
-	switch {
-	case score >= 0 && score < 34:
-		return call("easy", "Ease off today", fmt.Sprintf("Recovery is %d%%. Drop the last set of each lift and hold the weights, or swap the session for an easy spin in zone 1–2.", score))
-	case hasLoad && tsb < -30:
-		return call("easy", "Carrying a lot of fatigue", fmt.Sprintf("Form is %.0f. Keep today easy: hold the weights, no intervals.", tsb))
-	case (score >= 34 && score < 67) || (hasLoad && tsb < -20):
-		detail := "Train as planned, but hold the weights rather than adding load."
-		if score >= 0 {
-			detail = fmt.Sprintf("Recovery is %d%%. ", score) + detail
-		}
-		return call("hold", "Train, but hold the weights", detail)
-	case score >= 67 && hasLoad && tsb > 5:
-		return call("push", "Fresh and recovered", fmt.Sprintf("Recovery %d%%, form %+.0f. A good day for intensity or a heavier top set.", score, tsb))
-	case score >= 67 && hasLoad:
-		return call("normal", "Train as planned", fmt.Sprintf("Recovery %d%% and form %+.0f: nothing in the way of today's plan.", score, tsb))
-	case score >= 67:
-		return call("normal", "Train as planned", fmt.Sprintf("Recovery is %d%%.", score))
-	case hasLoad:
-		return call("normal", "Train as planned", fmt.Sprintf("No recovery score yet; form is %+.0f.", tsb))
-	}
-	return call("normal", "Train as planned", "No recovery score yet.")
-}
-
 // increment is the load step for an exercise: bigger for lower-body compounds.
 func increment(name string) float64 {
 	l := strings.ToLower(name)

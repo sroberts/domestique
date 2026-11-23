@@ -33,6 +33,15 @@ type Facts struct {
 	Felt     []string `json:"how_yesterday_felt,omitempty"`
 	RideDone bool     `json:"planned_ride_done,omitempty"`
 	Recent   []Event  `json:"recent_activities,omitempty"`
+
+	// The athlete's own norm (medians over the last four weeks of mornings)
+	// and earlier mornings, so the call can say what's different today.
+	HRVNorm  *int  `json:"hrv_ms_norm,omitempty"`
+	RHRNorm  *int  `json:"resting_hr_norm,omitempty"`
+	Previous []int `json:"recovery_pct_previous_mornings,omitempty"` // oldest first, yesterday last
+	// Changed says, in plain words worked out here, what sets this morning
+	// apart: the model leads with it rather than doing the arithmetic.
+	Changed []string `json:"what_changed,omitempty"`
 }
 
 // Event is one recent activity.
@@ -62,12 +71,15 @@ const system = `You are the directeur sportif for one athlete, a cyclist who als
 
 The decision is already made and is given to you as "level", "title" and "detail". Do not change it: never suggest harder or easier training than it says, and keep any instruction it gives (hold the weights, drop a set, ride easy). Your job is to say it better, using the facts. Never mention "level", or the field names.
 
+what_changed says what sets this morning apart from the last few and from the athlete's own norm (hrv_ms_norm, resting_hr_norm). Lead with the item from it that best explains the call, in your own words, and don't recite the list. When it says the morning is much like the last few, a few words saying so are enough.
+
 Say what to do first, then why. Use one or two numbers at most, the ones behind the call, and never list figures. Name the planned session (lifting), the planned ride, or yesterday's effort when it helps. how_yesterday_felt is the athlete's own word on yesterday (heavy or dead legs, pain): when the call mentions it, keep it. With neither planned_session nor planned_ride there is no plan: don't speak of one. Keep a number's sign as given (form +7, form -12).
 
 ` + voice + `
 
 Examples of the voice, not of today:
 {"title": "Hold the weights", "detail": "Recovery is 48% after yesterday's 90 minutes on the bike. Do Lower A as written, no added load."}
+{"title": "Back on track", "detail": "Up to 71% from 30% yesterday, and HRV is back at your norm. Do Upper B as planned."}
 {"title": "Easy spin only", "detail": "Recovery is 22%. Skip the intervals; an hour in zone 2 at most."}
 
 Reply with only a JSON object, no other text:
