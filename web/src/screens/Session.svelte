@@ -814,7 +814,6 @@
       font-size: var(--size-label);
       font-weight: 600;
       line-height: 1.6;
-      opacity: 0.7;
       vertical-align: middle;
     }
   }
