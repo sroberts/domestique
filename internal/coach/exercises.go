@@ -32,6 +32,12 @@ func (a *AI) SameExercise(ctx context.Context, name string, known []string) (str
 		return "", 0, fmt.Errorf("%d known names: at most %d", len(known), MaxKnown)
 	}
 	parts, err := a.askSame(ctx, name, known)
+	if errors.Is(err, errUnfit) {
+		// Too long even with one name: the same names would be refused
+		// the same way every sweep, so it's no answer (kept), not an
+		// error (asked again, up to 2*MaxKnown-1 requests each time).
+		return "", 0, nil
+	}
 	if err != nil {
 		return "", 0, err
 	}
@@ -67,13 +73,17 @@ type samePart struct {
 // question's length, the options included: refused as too long, it asks
 // again in two halves (the nearer half first), down to one name a
 // question, so every name is still offered and the answer holds for all.
+// Refused with one name, it stops there with errUnfit.
 func (a *AI) askSame(ctx context.Context, name string, known []string) ([]samePart, error) {
 	ans, err := a.sameExercise(ctx, name, known)
 	if err == nil {
 		return []samePart{{known, ans["same"]}}, nil
 	}
-	if !tooLong(err) || len(known) == 1 {
+	if !tooLong(err) {
 		return nil, err
+	}
+	if len(known) == 1 {
+		return nil, fmt.Errorf("%w: %w", errUnfit, err)
 	}
 	h := (len(known) + 1) / 2
 	near, err := a.askSame(ctx, name, known[:h])
@@ -101,6 +111,9 @@ func (a *AI) sameExercise(ctx context.Context, name string, known []string) (map
 		map[string]Question{"same": {Type: "choice", Criteria: criteria, Instructions: exerciseQ}})
 	return ans, err
 }
+
+// errUnfit is a question System 1 refuses as too long even offering one name.
+var errUnfit = errors.New("exercise question too long for system 1")
 
 // tooLong reports System 1 refusing a question as longer than its cap.
 func tooLong(err error) bool {

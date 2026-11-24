@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -115,14 +116,53 @@ func TestSameExerciseSplitNotOffered(t *testing.T) {
 	}
 }
 
-// Too long even with one name, the refusal is returned.
+// Too long even with one name, it's no answer, not an error: the sweep
+// keeps an answer but asks again after an error, and the same names would
+// be refused the same way every sweep.
 func TestSameExerciseTooLongForOne(t *testing.T) {
 	a, calls := capServer(t, 0, offers(""))
-	if _, _, err := a.SameExercise(context.Background(), "RDL", sixNames[:2]); err == nil {
-		t.Fatal("want the refusal")
+	if got, _, err := a.SameExercise(context.Background(), "RDL", sixNames[:2]); err != nil || got != "" {
+		t.Fatalf("got %q %v, want no answer", got, err)
 	}
 	if len(*calls) != 2 { // two names, then the nearer one alone
 		t.Errorf("%d calls, want 2", len(*calls))
+	}
+}
+
+// One name too long to offer even alone, however far down the list, means
+// no answer: a match from the parts before it isn't trusted, as not every
+// name was offered.
+func TestSameExerciseOneNameTooLong(t *testing.T) {
+	long := "Overhead Press " + strings.Repeat("x", 400)
+	known := append(append([]string{}, sixNames[:5]...), long)
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var body struct {
+			Questions map[string]struct {
+				Criteria map[string]string `json:"criteria"`
+			} `json:"questions"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		crit := body.Questions["same"].Criteria
+		if _, ok := crit[long]; ok {
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"question 0: instructions with the question type have 140 tokens; limit is 31 with these options"}`)
+			return
+		}
+		c := NewExercise
+		if _, ok := crit["Romanian Deadlift"]; ok {
+			c = "Romanian Deadlift"
+		}
+		fmt.Fprintf(w, `{"model":"laya","answers":{"same":{"type":"choice","choice":%q,"probabilities":{%q:0.97}}}}`, c, c)
+	}))
+	defer srv.Close()
+	a := &AI{URL: srv.URL, Token: "t", HTTP: &http.Client{Timeout: 5 * time.Second}}
+	if got, _, err := a.SameExercise(context.Background(), "RDL", known); err != nil || got != "" {
+		t.Fatalf("got %q %v, want no answer", got, err)
+	}
+	if calls != 5 { // 6, 3 (near), 3 (far), 2, then the long name alone
+		t.Errorf("%d calls, want 5", calls)
 	}
 }
 
