@@ -106,6 +106,15 @@ func TestSameExerciseSplitDisputed(t *testing.T) {
 	}
 }
 
+// Split up, an answer must be one of the names that part offered, not one
+// offered only in another part.
+func TestSameExerciseSplitNotOffered(t *testing.T) {
+	a, _ := capServer(t, 3, func([]string) string { return "Deadlift" })
+	if _, _, err := a.SameExercise(context.Background(), "DL", sixNames); err == nil {
+		t.Fatal("want an error for a name the part didn't offer")
+	}
+}
+
 // Too long even with one name, the refusal is returned.
 func TestSameExerciseTooLongForOne(t *testing.T) {
 	a, calls := capServer(t, 0, offers(""))
