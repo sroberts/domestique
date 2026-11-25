@@ -31,8 +31,10 @@
     padding: var(--space-3) var(--gutter) calc(var(--space-3) + env(safe-area-inset-bottom));
     background: linear-gradient(to top, var(--bg) 70%, transparent);
   }
+  /* The screens pad their column by the gutter; the bar pads itself, so its
+     column is the page width less both gutters, or it overhangs the page. */
   .inner {
-    max-width: var(--page-narrow);
+    max-width: calc(var(--page-narrow) - 2 * var(--gutter));
     margin: 0 auto;
   }
   .stack {
@@ -41,7 +43,7 @@
   }
   @media (min-width: 700px) and (min-height: 700px) {
     .inner.session {
-      max-width: 46rem;
+      max-width: calc(46rem - 2 * var(--gutter));
     }
     .spacer.session {
       height: calc(var(--action-height) * 1.25 + var(--space-6) + env(safe-area-inset-bottom));
@@ -53,7 +55,7 @@
   }
   @media (min-width: 900px) {
     .inner.column {
-      max-width: var(--page-wide);
+      max-width: calc(var(--page-wide) - 2 * var(--gutter));
       display: grid;
       grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
       column-gap: var(--space-7);

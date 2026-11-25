@@ -145,7 +145,7 @@
   {:else if answered(c)}
     <div class="folded">
       <p><span class="label">How it felt</span> {feltText(c, session)}{#if load > 0}<span class="mono srpe"> · {load} sRPE</span>{/if}</p>
-      <button type="button" class="link" onclick={() => (editing = true)}>Change</button>
+      <button type="button" class="link" onclick={() => (editing = true)}>Change<span class="visually-hidden"> how it felt</span></button>
     </div>
     {#if c.notes}<p class="small muted notes">{c.notes}</p>{/if}
   {:else}
