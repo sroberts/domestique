@@ -39,6 +39,8 @@
   --zone-4: #f2a33a;
   --zone-5: #e5484d;
   --danger: #e5484d;
+  /* Danger as text on any surface, sheets included (>= 4.5:1 on raised). */
+  --danger-ink: #f0656a;
   --focus: #f2c230;
   /* Sport identity in charts (validated for CVD on surface) */
   --sport-ride: #4f8fd9;
@@ -91,6 +93,7 @@
   --zone-4: #c77a12;
   --zone-5: #c8323a;
   --danger: #c8323a;
+  --danger-ink: #c8323a;
   --focus: #8e6a00;
   --sport-ride: #2f6fb9;
   --sport-strength: #a65b14;

@@ -119,6 +119,6 @@
     color: var(--text-muted);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
 </style>

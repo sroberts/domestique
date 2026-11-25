@@ -294,7 +294,7 @@
   }
   .err {
     margin: 0;
-    color: var(--danger);
+    color: var(--danger-ink);
     font-size: var(--size-small);
   }
 </style>

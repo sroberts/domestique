@@ -305,6 +305,6 @@
     cursor: pointer;
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
 </style>

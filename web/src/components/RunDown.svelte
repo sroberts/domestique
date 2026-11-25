@@ -55,6 +55,6 @@
     margin-left: calc(-1 * var(--space-2));
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
 </style>

@@ -211,8 +211,8 @@ a {
 }
 
 .btn-danger {
-  border-color: var(--danger);
-  color: var(--danger);
+  border-color: var(--danger-ink);
+  color: var(--danger-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {

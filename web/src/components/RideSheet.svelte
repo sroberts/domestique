@@ -249,7 +249,7 @@
     font-size: var(--size-small);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
   .sheet-actions {
     display: grid;
@@ -260,6 +260,6 @@
     width: 100%;
   }
   .danger {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
 </style>

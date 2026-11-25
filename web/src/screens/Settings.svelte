@@ -369,7 +369,7 @@
     margin-top: var(--space-2);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
   code {
     font-size: 0.875em;
