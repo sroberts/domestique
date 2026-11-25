@@ -117,12 +117,20 @@
 
   const totalOf = (s: LocalSession) => s.plan.reduce((n, e) => n + e.sets.length, 0);
 
-  function summarizeSets(sets: { reps: number; weight_kg: number }[]): { reps: string; kg: string } {
-    const reps = new Set(sets.map((s) => s.reps));
-    const kgs = new Set(sets.map((s) => s.weight_kg));
-    const repText = reps.size === 1 ? `${sets.length} × ${sets[0]!.reps}` : `${sets.length} sets`;
-    const kgText = kgs.size === 1 ? weight(sets[0]!.weight_kg) : `${weight(Math.min(...kgs))}–${weight(Math.max(...kgs))}`;
-    return { reps: repText, kg: kgText };
+  /** "3 sets" and "10 × 12": reps × kg, the way the session writes a set. */
+  function summarizeSets(sets: { reps: number; weight_kg: number }[]): { count: string; load: string; bw: boolean } {
+    const range = (xs: number[], f: (n: number) => string) => {
+      const lo = Math.min(...xs), hi = Math.max(...xs);
+      return lo === hi ? f(lo) : `${f(lo)}–${f(hi)}`;
+    };
+    const kgs = sets.map((s) => s.weight_kg);
+    const bw = kgs.every((k) => k === 0);
+    const reps = range(sets.map((s) => s.reps), String);
+    return {
+      count: `${sets.length} ${sets.length === 1 ? 'set' : 'sets'}`,
+      load: `${reps} × ${bw ? 'BW' : range(kgs, weight)}`,
+      bw,
+    };
   }
 
   /** h:mm, rounding to the minute first so 7:59:40 reads 8:00, not 7:60. */
@@ -218,8 +226,8 @@
             {@const s = summarizeSets(ex.sets)}
             <li>
               <span class="ex-name">{ex.name}</span>
-              <span class="num ex-reps">{s.reps}</span>
-              <span class="ex-kg"><span class="num">{s.kg}</span>{#if s.kg !== 'BW'}<span class="unit">kg</span>{/if}</span>
+              <span class="ex-count">{s.count}</span>
+              <span class="ex-kg"><span class="num">{s.load}</span>{#if !s.bw}<span class="unit">kg</span>{/if}</span>
               {#if ex.change}
                 <span class="ex-change" class:up={ex.change.startsWith('Up')}>{ex.change}</span>
               {:else if ex.notes}
@@ -670,7 +678,7 @@
   }
   .sheet li {
     display: grid;
-    grid-template-columns: 1fr auto 5rem;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: baseline;
     column-gap: var(--space-4);
     padding: var(--space-3) 0;
@@ -679,7 +687,10 @@
   .ex-name {
     font-weight: 600;
   }
-  .ex-reps,
+  .ex-count {
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
   .ex-kg .num {
     font-size: var(--size-heading);
   }

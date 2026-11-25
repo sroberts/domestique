@@ -3,6 +3,7 @@
   // planned session. Taking it changes today's plan only; the workout itself
   // stays as written. Once taken, this shrinks to a line with a way back.
   import { deleteJSON, HTTPError, postJSON } from '../lib/api';
+  import { setText } from '../lib/format';
   import type { EaseView, Exercise } from '../lib/types';
 
   let {
@@ -19,12 +20,12 @@
   const path = $derived(`/v1/plans/${date}/ease`);
 
   function sets(ex: Exercise): string {
+    // "3 sets · 10 × 12 kg": reps × kg, the way the session writes a set.
     const reps = new Set(ex.sets.map((s) => s.reps));
     const kgs = new Set(ex.sets.map((s) => s.weight_kg));
-    const r = reps.size === 1 ? `${ex.sets.length} × ${ex.sets[0]!.reps}` : `${ex.sets.length} sets`;
-    if (kgs.size !== 1) return r;
-    const kg = ex.sets[0]!.weight_kg;
-    return kg === 0 ? `${r} · BW` : `${r} · ${kg} kg`;
+    const n = `${ex.sets.length} ${ex.sets.length === 1 ? 'set' : 'sets'}`;
+    if (reps.size !== 1 || kgs.size !== 1) return n;
+    return `${n} · ${setText(ex.sets[0]!.reps, ex.sets[0]!.weight_kg)}`;
   }
 
   // Only the lifts the easier session changes, before and after.
