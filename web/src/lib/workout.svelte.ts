@@ -305,42 +305,39 @@ export class Workout {
 }
 
 /** Mirrors strength.Real on the server: a set logged faster than 5 s, or
- * 2 s a rep, was tapped through rather than lifted. */
+ * 2 s a rep, looks tapped through rather than lifted. */
 export function isReal(s: SetRecord): boolean {
   return s.ended_at - s.started_at >= Math.max(5, 2 * s.reps) * 1000;
 }
 
+/** Every logged set counts; quick ones are tallied, not dropped. */
 export function progressOf(plan: Exercise[], sets: SetRecord[]): Progress {
-  return { done: sets.filter(isReal).length, logged: sets.length, planned: plan.reduce((n, e) => n + e.sets.length, 0) };
+  return { done: sets.length, short: sets.filter((s) => !isReal(s)).length, planned: plan.reduce((n, e) => n + e.sets.length, 0) };
 }
 
 // Each piece stays whole when a row wraps; only the separators may break.
 const keep = (t: string) => t.replaceAll(' ', '\u00a0');
 
-/** "Ended early · 3 of 12 sets · 2 too short", for a row or a header. */
+/** "Ended early · 9 of 12 sets", for a row or a header. */
 export function earlyText(p: Progress): string {
-  const quick = p.logged - p.done;
-  return [keep('Ended early'), keep(`${p.done} of ${p.planned} sets`), quick > 0 ? keep(`${quick} too short`) : '']
-    .filter(Boolean)
-    .join(' · ');
+  return [keep('Ended early'), keep(`${p.done} of ${p.planned} sets`)].join(' · ');
 }
 
-/** "Nothing counted · 3 sets too short", for a session where no set counted. */
+/** "Nothing lifted · 3 sets too quick", for a session tapped through. */
 export function emptyText(p: Progress): string {
-  return [keep('Nothing counted'), p.logged ? keep(uncountedText(p)) : ''].filter(Boolean).join(' · ');
+  return [keep('Nothing lifted'), p.done ? keep(`${p.done} ${p.done === 1 ? 'set' : 'sets'} too quick`) : ''].filter(Boolean).join(' · ');
 }
 
-/** "2 sets too short". */
-export function uncountedText(p: Progress): string {
-  const n = p.logged - p.done;
-  return `${n} ${n === 1 ? 'set' : 'sets'} too short`;
+/** "1 set timed short": a note, not a verdict. */
+export function shortText(p: Progress): string {
+  return `${p.short} ${p.short === 1 ? 'set' : 'sets'} timed short`;
 }
 
-/** A finished session with nothing that counts as lifting: worth discarding. */
-export const emptySession = (p: Progress | undefined) => !!p && p.done === 0;
+/** A finished session with nothing lifted (no sets, or only taps): worth discarding. */
+export const emptySession = (p: Progress | undefined) => !!p && (p.done === 0 || p.short === p.done);
 
-/** True when the session lifted under the plan: shown as "Ended early". */
+/** True when sets were left undone: shown as "Ended early". */
 export const endedEarly = (p: Progress | undefined) => !!p && p.planned > 0 && p.done < p.planned;
 
 /** Enough lifted to call it done: half the planned sets, as progression counts it. */
-export const complete = (p: Progress | undefined) => !p || p.planned === 0 || p.done * 2 >= p.planned;
+export const complete = (p: Progress | undefined) => !p || (!emptySession(p) && (p.planned === 0 || p.done * 2 >= p.planned));

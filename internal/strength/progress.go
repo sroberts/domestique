@@ -53,12 +53,13 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 			return t, err
 		}
 		// Only sessions that really trained this lift count: a session ended
-		// after one set, or sets tapped through in seconds, say nothing about
-		// whether the weight should go up.
+		// after one set, or one tapped through in seconds, says nothing about
+		// whether the weight should go up. A quick set among real ones still
+		// counts: it was a slow tap on Finish, not a missing set.
 		var hist [][]store.Set
 		for _, h := range raw {
-			if c := Counted(h); len(c)*2 >= len(ex.Sets) && len(c) > 0 {
-				hist = append(hist, c)
+			if len(h) > 0 && len(h)*2 >= len(ex.Sets) && !Tapped(h) {
+				hist = append(hist, h)
 			}
 		}
 		change := ""
@@ -180,20 +181,30 @@ func Counted(sets []store.Set) []store.Set {
 	return out
 }
 
-// Progress is how much of a session's plan was actually lifted.
+// Tapped reports a session tapped through rather than lifted: sets were
+// logged, and every one of them was too quick to be real. One quick set in
+// a session that was lifted is a slow tap on Finish, not a fake set.
+func Tapped(sets []store.Set) bool {
+	return len(sets) > 0 && len(Counted(sets)) == 0
+}
+
+// Progress is how much of a session's plan was logged.
 type Progress struct {
-	Done    int `json:"done"`   // sets that were really lifted
-	Logged  int `json:"logged"` // every set logged, taps included
+	Done    int `json:"done"`  // every set logged
+	Short   int `json:"short"` // of those, timed too quick to be real
 	Planned int `json:"planned"`
 }
 
-// Complete is true when at least half the planned sets were lifted: enough
+// Complete is true when at least half the planned sets were done: enough
 // to call today's session done.
-func (p Progress) Complete() bool { return p.Planned == 0 || p.Done*2 >= p.Planned }
+func (p Progress) Complete() bool { return !p.Empty() && (p.Planned == 0 || p.Done*2 >= p.Planned) }
 
-// ProgressOf counts real sets against the plan.
+// Empty is true when nothing was lifted: no sets, or only taps.
+func (p Progress) Empty() bool { return p.Done == 0 || p.Short == p.Done }
+
+// ProgressOf counts logged sets against the plan.
 func ProgressOf(plan []store.Exercise, sets []store.Set) Progress {
-	p := Progress{Done: len(Counted(sets)), Logged: len(sets)}
+	p := Progress{Done: len(sets), Short: len(sets) - len(Counted(sets))}
 	for _, e := range plan {
 		p.Planned += len(e.Sets)
 	}

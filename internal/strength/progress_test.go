@@ -41,35 +41,71 @@ func TestPrescribeBodyweightBuildsOnLastTarget(t *testing.T) {
 	}
 }
 
-// A session ended after one set (or sets tapped through in seconds) must not
-// read as "every set hit" and add load.
-func TestPrescribeIgnoresAbortedSession(t *testing.T) {
+// putSession stores a finished session of Squat sets at 100 kg x 6, one per
+// duration given (ms).
+func putSession(t *testing.T, st *store.Store, id string, start int64, durs ...int64) {
+	t.Helper()
 	ctx := context.Background()
-	st, err := store.Open(ctx, t.TempDir())
-	if err != nil {
+	fin := start + 400_000
+	if err := st.PutSession(ctx, store.Session{ID: id, TemplateID: "t", Name: "A", Plan: []store.Exercise{{Name: "Squat"}},
+		StartedAt: start, FinishedAt: &fin, UpdatedAt: 1}); err != nil {
 		t.Fatal(err)
 	}
-	defer st.Close()
-	fin := int64(400_000)
-	if err := st.PutSession(ctx, store.Session{ID: "s1", TemplateID: "t", Name: "A", Plan: []store.Exercise{{Name: "Squat"}},
-		StartedAt: 1000, FinishedAt: &fin, UpdatedAt: 1}); err != nil {
-		t.Fatal(err)
-	}
-	// One real set of four, plus one tapped through in a second.
-	for i, d := range []int64{30_000, 1_000} {
-		if err := st.PutSet(ctx, store.Set{ID: fmt.Sprint("x", i), SessionID: "s1", ExerciseName: "Squat", SetIndex: i,
-			TargetReps: 6, Reps: 6, WeightKg: 100, StartedAt: int64(100_000 + i*120_000), EndedAt: int64(100_000+i*120_000) + d, UpdatedAt: 1}); err != nil {
+	for i, d := range durs {
+		at := start + 100_000 + int64(i)*120_000
+		if err := st.PutSet(ctx, store.Set{ID: fmt.Sprint(id, i), SessionID: id, ExerciseName: "Squat", SetIndex: i,
+			TargetReps: 6, Reps: 6, WeightKg: 100, StartedAt: at, EndedAt: at + d, UpdatedAt: 1}); err != nil {
 			t.Fatal(err)
 		}
 	}
+}
+
+func prescribeSquat(t *testing.T, st *store.Store) store.Exercise {
+	t.Helper()
 	four := []store.TargetSet{{Reps: 6, WeightKg: 100}, {Reps: 6, WeightKg: 100}, {Reps: 6, WeightKg: 100}, {Reps: 6, WeightKg: 100}}
 	tpl := store.Template{ID: "t", Name: "A", Exercises: []store.Exercise{{Name: "Squat", Sets: four}}}
-	out, err := Prescribe(ctx, st, tpl, Readiness{Level: "normal"})
+	out, err := Prescribe(context.Background(), st, tpl, Readiness{Level: "normal"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := out.Exercises[0].Sets[0].WeightKg; got != 100 || out.Exercises[0].Change != "" {
-		t.Fatalf("aborted session changed the prescription: %v kg, %q", got, out.Exercises[0].Change)
+	return out.Exercises[0]
+}
+
+func openStore(t *testing.T) *store.Store {
+	t.Helper()
+	st, err := store.Open(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	return st
+}
+
+// A session ended after one set must not read as "every set hit" and add load.
+func TestPrescribeIgnoresAbortedSession(t *testing.T) {
+	st := openStore(t)
+	putSession(t, st, "s1", 1000, 30_000)
+	if ex := prescribeSquat(t, st); ex.Sets[0].WeightKg != 100 || ex.Change != "" {
+		t.Fatalf("aborted session changed the prescription: %v kg, %q", ex.Sets[0].WeightKg, ex.Change)
+	}
+}
+
+// A session tapped through in seconds says nothing about the lift.
+func TestPrescribeIgnoresTappedSession(t *testing.T) {
+	st := openStore(t)
+	putSession(t, st, "s1", 1000, 1_000, 1_000, 1_000, 1_000)
+	if ex := prescribeSquat(t, st); ex.Sets[0].WeightKg != 100 || ex.Change != "" {
+		t.Fatalf("tapped session changed the prescription: %v kg, %q", ex.Sets[0].WeightKg, ex.Change)
+	}
+}
+
+// One quick set among real ones is a slow tap on Finish: the session still
+// hit every set, so the load goes up.
+func TestPrescribeCountsAQuickSet(t *testing.T) {
+	st := openStore(t)
+	putSession(t, st, "s1", 1000, 30_000, 30_000, 2_000, 30_000)
+	if ex := prescribeSquat(t, st); ex.Sets[0].WeightKg != 105 || !strings.HasPrefix(ex.Change, "Up 5 kg") {
+		t.Fatalf("got %v kg, %q; want up 5 kg", ex.Sets[0].WeightKg, ex.Change)
 	}
 }
 
@@ -100,13 +136,19 @@ func TestProgressComplete(t *testing.T) {
 	plan := []store.Exercise{{Sets: make([]store.TargetSet, 4)}, {Sets: make([]store.TargetSet, 4)}}
 	real := store.Set{Reps: 5, StartedAt: 0, EndedAt: 30_000}
 	tap := store.Set{Reps: 5, StartedAt: 0, EndedAt: 1_000}
-	p := ProgressOf(plan, []store.Set{real, real, real, tap, tap, tap})
-	if p.Done != 3 || p.Planned != 8 || p.Complete() {
-		t.Fatalf("3 real of 8 planned: got %+v complete=%v", p, p.Complete())
+	p := ProgressOf(plan, []store.Set{real, real, real})
+	if p.Done != 3 || p.Short != 0 || p.Planned != 8 || p.Complete() {
+		t.Fatalf("3 of 8 planned: got %+v complete=%v", p, p.Complete())
 	}
-	p = ProgressOf(plan, []store.Set{real, real, real, real})
-	if !p.Complete() {
-		t.Fatalf("4 of 8 should count as done: %+v", p)
+	// Quick sets among real ones still count.
+	p = ProgressOf(plan, []store.Set{real, real, real, tap})
+	if p.Done != 4 || p.Short != 1 || !p.Complete() || p.Empty() {
+		t.Fatalf("4 of 8 with one quick: got %+v complete=%v", p, p.Complete())
+	}
+	// Only taps: nothing was lifted.
+	p = ProgressOf(plan, []store.Set{tap, tap, tap, tap})
+	if !p.Empty() || p.Complete() {
+		t.Fatalf("all taps: got %+v empty=%v complete=%v", p, p.Empty(), p.Complete())
 	}
 }
 
