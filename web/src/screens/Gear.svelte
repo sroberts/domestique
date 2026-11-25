@@ -683,7 +683,7 @@
     font-weight: 600;
   }
   .s-due {
-    color: var(--danger);
+    color: var(--danger-ink);
     font-weight: 600;
   }
   .meter {
@@ -855,7 +855,7 @@
     accent-color: var(--signal-ink);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
   .sheet-actions {
     display: grid;
@@ -871,6 +871,6 @@
     border: 0;
   }
   .danger {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
 </style>

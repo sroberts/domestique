@@ -226,7 +226,7 @@
     min-height: 1.3em;
   }
   .status.error {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
   .empty {
     display: grid;

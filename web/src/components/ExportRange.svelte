@@ -164,7 +164,7 @@
     font-size: var(--size-small);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
   }
   .dl {
     justify-self: start;

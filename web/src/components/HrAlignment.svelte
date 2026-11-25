@@ -91,6 +91,6 @@
   }
   .err {
     margin-top: var(--space-2);
-    color: var(--danger);
+    color: var(--danger-ink);
   }
 </style>

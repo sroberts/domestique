@@ -1068,7 +1068,7 @@
     border-color: var(--danger);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
     font-size: var(--size-small);
   }
   .exercises {

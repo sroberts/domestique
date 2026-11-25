@@ -273,7 +273,7 @@
     color: var(--text-muted);
   }
   .err {
-    color: var(--danger);
+    color: var(--danger-ink);
     font-size: var(--size-small);
     min-height: 1.3em;
   }

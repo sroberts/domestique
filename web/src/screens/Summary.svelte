@@ -870,7 +870,7 @@
     font-size: var(--size-small);
   }
   .merge-error {
-    color: var(--danger);
+    color: var(--danger-ink);
     font-size: var(--size-small);
   }
   .foot {
