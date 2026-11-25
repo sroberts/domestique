@@ -693,7 +693,9 @@
   }
   .tr {
     display: grid;
-    grid-template-columns: 2rem 1fr 4.25rem 4.5rem 3.5rem;
+    /* minmax(0, …): the Done column gives way on a phone instead of pushing
+       Peak, Recovery and Rest off the edge. */
+    grid-template-columns: 2rem minmax(0, 1fr) 4.25rem 4.5rem 3.5rem;
     align-items: baseline;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-2);
@@ -702,7 +704,7 @@
     cursor: pointer;
   }
   .no-rest .tr {
-    grid-template-columns: 2rem 1fr 4.25rem 4.5rem;
+    grid-template-columns: 2rem minmax(0, 1fr) 4.25rem 4.5rem;
   }
   .tr.th {
     cursor: default;
@@ -740,7 +742,8 @@
     font-size: var(--size-small);
     color: var(--text-muted);
   }
-  .done {
+  /* Each piece stays whole; the target, effort and tags wrap under the set. */
+  .done > span {
     white-space: nowrap;
   }
   .done .num,
