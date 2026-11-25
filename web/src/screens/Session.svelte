@@ -137,6 +137,7 @@
   // A session with nothing (or almost nothing) in it can be thrown away
   // rather than kept as training.
   let discardable = $derived(!!w && (w.sets.length <= 1 || sessionElapsed < 120));
+  let discardArmed = $state(false);
   const skipExercise = () =>
     act(async () => {
       dialog?.close();
@@ -388,31 +389,38 @@
     {/if}
   </ActionBar>
 
-  <dialog bind:this={dialog} class="sheet" aria-labelledby="end-h" onclick={(e) => e.target === dialog && dialog?.close()}>
+  <dialog bind:this={dialog} class="sheet" aria-labelledby="end-h" onclick={(e) => e.target === dialog && dialog?.close()} onclose={() => (discardArmed = false)}>
     <div class="sheet-inner">
-      <h2 id="end-h">End early?</h2>
+      <h2 id="end-h">{c.phase === 'last' ? 'Finish?' : 'End early?'}</h2>
       {#if c.phase === 'active'}
         <p class="muted">The set in progress won't be logged.</p>
       {/if}
-      <div class="sheet-actions">
-        {#if w.endable}
-          <button class="btn sheet-btn" onclick={endCircuit}>{@render endText(w.endable)}</button>
-        {/if}
-        {#if slot && c.phase !== 'active' && c.phase !== 'last'}
-          <button class="btn sheet-btn" onclick={skipExercise}>Skip the rest of {slot.exercise.name}</button>
-        {/if}
-        <button class="btn sheet-btn" class:btn-danger={!discardable} onclick={() => { dialog?.close(); finishSession(); }}>
-          Finish session now
+      {#if c.phase !== 'last' && (w.endable || (slot && c.phase !== 'active'))}
+        <div class="sheet-group" role="group" aria-labelledby="plan-h">
+          <h3 id="plan-h" class="label">Change the plan</h3>
+          {#if w.endable}
+            <button class="btn sheet-btn" onclick={endCircuit}>{@render endText(w.endable)}</button>
+          {/if}
+          {#if slot && c.phase !== 'active'}
+            <button class="btn sheet-btn" onclick={skipExercise}>Skip the rest of {slot.exercise.name}</button>
+          {/if}
+        </div>
+      {/if}
+      <div class="sheet-group" role="group" aria-labelledby="stop-h">
+        <h3 id="stop-h" class="label">Stop</h3>
+        <button class="btn sheet-btn" onclick={() => { dialog?.close(); finishSession(); }}>
+          {c.phase === 'last' ? 'Finish session' : 'Finish session now'}
         </button>
         {#if discardable}
-          <button class="btn btn-danger sheet-btn" onclick={discard}>
-            Discard session{w.sets.length ? ` (${w.sets.length} ${w.sets.length === 1 ? "set" : "sets"})` : ''}
+          <!-- Two taps: the first arms it, so a sweaty thumb can't throw a session away. -->
+          <button class="btn sheet-btn" class:btn-danger={!discardArmed} class:btn-stop={discardArmed} onclick={() => (discardArmed ? discard() : (discardArmed = true))} aria-describedby="discard-note">
+            {discardArmed ? 'Tap again to discard' : `Discard session${w.sets.length ? ` (${w.sets.length} ${w.sets.length === 1 ? 'set' : 'sets'})` : ''}`}
           </button>
-          <p class="muted discard-note">Discarding removes it from history and training load.</p>
+          <p id="discard-note" class="muted discard-note">Discarding removes it from history and training load.</p>
         {/if}
-        <!-- svelte-ignore a11y_autofocus -->
-        <button class="btn sheet-btn" autofocus onclick={() => dialog?.close()}>Keep going</button>
       </div>
+      <!-- svelte-ignore a11y_autofocus -->
+      <button class="btn sheet-btn keep" autofocus onclick={() => dialog?.close()}>Keep going</button>
     </div>
   </dialog>
 {/if}
@@ -790,10 +798,16 @@
   .sheet-inner h2 {
     font-size: var(--size-heading);
   }
-  .sheet-actions {
+  .sheet-group {
     display: grid;
     gap: var(--space-2);
-    margin-top: var(--space-2);
+  }
+  .sheet-group h3 {
+    color: var(--text-muted);
+  }
+  /* Set apart from the groups: the safe way out. */
+  .keep {
+    margin-top: var(--space-3);
   }
   .sheet-btn {
     min-height: var(--tap-min);
