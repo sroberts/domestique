@@ -25,7 +25,7 @@ One Outpost service with three importers, a normalization layer, a dedup engine,
 
 - Official Whoop Developer API, OAuth 2.0
 - Webhooks for new workouts, recovery, and sleep, plus a nightly backfill poll
-- Data: strain, heart rate zones, recovery, HRV, sleep
+- Data: strain, heart rate zones, recovery, HRV, sleep (stages, need, naps; see Sleep)
 
 ### Wahoo Importer
 
@@ -42,7 +42,7 @@ One Outpost service with three importers, a normalization layer, a dedup engine,
 ## Storage
 
 - Raw files: FIT and JSON stored unmodified on disk, content-addressed by SHA-256
-- SQLite tables: activities, streams (per-second samples), recovery, sleep, sources, sync\_state
+- SQLite tables: activities, streams (per-second samples), recovery, sleep, evenings, sources, sync\_state
 - Every activity keeps a link to all of its source records
 
 ## Deduplication
@@ -109,7 +109,50 @@ Two things already capture part of the extra cost. Strength load comes from Whoo
 - Do not add a multiplier at launch. A guessed factor on top of strain would count the heart rate twice
 - Record each session's circuit share (fraction of working time spent in circuits), then compare next-morning Whoop recovery against sessions of similar strain. If circuits leave recovery consistently lower, add an uplift sized to that gap, starting no higher than 10%
 
-## Interfaces## Interfaces
+## Sleep
+
+Sleep sits beside training, not under it: what Whoop measures overnight, what the athlete did in the evening, and when to go to bed. It lives in Domestique because the Whoop data and the readiness rules that use it are already here.
+
+**Data.** Keep everything Whoop scores for a sleep, not only time asleep and performance:
+
+- Time in bed, awake, light, deep (slow wave), REM, and without data; disturbances and sleep cycles; respiratory rate
+- Sleep performance, efficiency and consistency
+- Whoop's sleep need, split into baseline, debt, recent strain and recent naps
+- Naps are stored and marked as naps. A night is still the main sleep for its wake-up date, as now; naps show on that day but don't add to the night
+- The raw Whoop sleep JSON is kept with the other raw files, so a field added later doesn't need a re-sync
+- After the migration, one re-sync of the whole sleep history fills in the new fields for past nights
+
+**Sleep screen.** Opened by tapping last night's sleep on Today; Trends gets a sleep panel that links to it. No new tab.
+
+- Last night: a stage bar (awake, light, deep, REM), time asleep against need, efficiency, disturbances, respiratory rate against the athlete's norm, bed and wake times
+- History over 2, 4 or 12 weeks: time asleep against need each night; bed and wake times, with how far they stray from their median in minutes
+- Sleep debt: the last seven nights' shortfall against Whoop's baseline need. Baseline, not total need, because total need already includes debt
+- Sleep and recovery, as plain medians with counts: next-morning recovery after nights more than an hour short of baseline need against the rest, and sleep after heavy training days (load at least 1.5 times fitness) against the rest. Each shows once both sides have five nights
+- REST `/v1/sleep` and `/v1/sleep/trends`; MCP `get_sleep` (nights in a date range, with naps) and `get_sleep_trends` (regularity, debt, the comparisons)
+
+**Evening log.** One tap per item, to see later what goes with a bad night.
+
+- Items: caffeine after 2 pm, alcohol, late meal, screens in bed, stressed, ill
+- Late training isn't asked: it's filled in when a workout ended within three hours of that night's bedtime
+- A card on Today from 18:00 until noon the next day, saved against the evening's date. Every tap saves; "Nothing tonight" records a clear evening
+- Only logged evenings count. An evening with no log is unknown, not clear, so it is never counted as "without"
+- Once an item has eight logged evenings with it and eight without, the Sleep screen shows the medians side by side: time asleep, efficiency, and next-morning recovery, with both counts. Numbers only, never a claim that one caused the other
+- REST and MCP `save_evening` / `get_evening`
+
+**Bedtime target.** On Today from 16:00: "Bed by 22:40", with one line on why ("Hard ride today, and 1.2 h short this week").
+
+- Wake time: an optional wake time per weekday in Settings, otherwise the median wake time of the last 14 nights on the same kind of day (weekday or weekend)
+- Tonight's need: Whoop scores need only after the night, so it is estimated. Start from Whoop's latest baseline, add a third of the sleep debt (at most an hour) and 30 minutes after a heavy training day. These are starting values: each morning, compare the estimate with the need Whoop scored and tune them
+- Time in bed is the need divided by the median efficiency of the last 14 nights. Bed by is the wake time minus that, to the nearest five minutes
+- The target is advice. It doesn't change readiness, which still reads last night's sleep against the athlete's norm
+
+**Decisions:**
+
+- Nudges are in-app only for now: the target and the evening card on Today. Phone notifications need Web Push (keys, per-device subscriptions, a scheduler, and the gateway letting the push endpoint through), and come later in their own change
+- Build order: keep all of Whoop's data and re-sync; the Sleep screen and its REST/MCP; the evening log; the bedtime target
+- Whoop is the only sleep source. Another source would go through the same table, with its own `source`
+
+## Interfaces
 
 - REST: list and query activities, streams, recovery, and training load
 - MCP tools: get\_recent\_activities, get\_training\_load, get\_recovery, get\_activity\_detail
