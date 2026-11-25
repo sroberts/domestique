@@ -61,7 +61,7 @@
           <span class="muted">None</span>
         {/if}
       </p>
-      {#if ab.bikes.length}<button class="btn btn-quiet" onclick={open}>Change</button>{/if}
+      {#if ab.bikes.length}<button class="btn btn-quiet" onclick={open}>Change<span class="visually-hidden"> bike</span></button>{/if}
     {:else}
       <label class="pick">
         <span class="label">Bike for this ride</span>

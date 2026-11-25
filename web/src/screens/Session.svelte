@@ -274,7 +274,7 @@
                the plate and target stay put when Start set is tapped. -->
           <div class="in-set">
             <p class="in-set-clock reserve" aria-hidden="true"><span class="label">In set</span> <span class="num set-clock">0:00</span></p>
-            <div class="target-big" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
+            <div class="target-big" role="group" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
               <div class="tb"><span class="num live">{target.reps}</span><span class="label">Reps</span></div>
               <span class="times num" aria-hidden="true">×</span>
               <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
@@ -286,7 +286,7 @@
           <div class="in-set">
             <p class="in-set-clock"><span class="label signal-label"><span class="live-dot" aria-hidden="true"></span>In set</span>
               <span class="num set-clock" aria-label={`${Math.floor(phaseElapsed)} seconds`}>{fmtClock(phaseElapsed)}</span></p>
-            <div class="target-big" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
+            <div class="target-big" role="group" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
               <div class="tb"><span class="num live">{target.reps}</span><span class="label">Reps</span></div>
               <span class="times num" aria-hidden="true">×</span>
               <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
@@ -736,8 +736,9 @@
   .next-weight .toggle-row {
     justify-content: flex-start;
   }
+  /* Pulled left by its own padding, so the words line up with the page. */
   .next-weight .toggle {
-    margin: 0 0 0 calc(var(--space-3) * -1);
+    margin: 0 0 0 calc(var(--space-2) * -1);
   }
   .half {
     width: min(100%, 20rem);
