@@ -270,10 +270,15 @@
       <section class="hero" in:fly={{ y: 8, duration: 150, easing: quintOut }}>
         {#if c.phase === 'ready' && slot && target}
           <Plate n={slot.setIndex + 1} of={exerciseSlots.length} {unit} />
-          <div class="target-big" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
-            <div class="tb"><span class="num live">{target.reps}</span><span class="label">Reps</span></div>
-            <span class="times num" aria-hidden="true">×</span>
-            <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
+          <!-- Same frame as the set in progress, its clock row held empty, so
+               the plate and target stay put when Start set is tapped. -->
+          <div class="in-set">
+            <p class="in-set-clock reserve" aria-hidden="true"><span class="label">In set</span> <span class="num set-clock">0:00</span></p>
+            <div class="target-big" aria-label={`Target ${setText(target.reps, target.weight_kg)}`}>
+              <div class="tb"><span class="num live">{target.reps}</span><span class="label">Reps</span></div>
+              <span class="times num" aria-hidden="true">×</span>
+              <div class="tb"><span class="num live">{weight(target.weight_kg)}</span><span class="label">{target.weight_kg === 0 ? 'Bodyweight' : 'Kg'}</span></div>
+            </div>
           </div>
           {@render nextWeight()}
         {:else if c.phase === 'active' && slot && target}
@@ -536,11 +541,12 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    /* Centred in what's left, so a tall phone splits the spare height above
-       and below instead of leaving one empty block under the ladder. */
-    justify-content: center;
+    /* Anchored at the top, not centred: the plate is a glance target and
+       must not move when the clock row or the Logged strip comes and goes.
+       The top padding grows with the screen so a tall phone isn't top-heavy. */
+    justify-content: flex-start;
     gap: var(--space-5);
-    padding: var(--space-6) 0;
+    padding: clamp(var(--space-5), 6dvh, var(--space-8)) 0 var(--space-6);
   }
   /* Rest carries more (logged set, next set, its weight): keep the clock
      tight so the next weight clears the action bar without scrolling. */
@@ -692,6 +698,9 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--space-3);
     margin-top: var(--space-3);
+  }
+  .in-set-clock.reserve {
+    visibility: hidden;
   }
   .in-set-clock {
     display: flex;
