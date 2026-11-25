@@ -66,9 +66,10 @@ export interface Alignment {
 }
 
 export interface Progress {
-  /** Sets really lifted; taps under 5 s (or 2 s a rep) don't count. */
+  /** Every set logged. */
   done: number;
-  logged: number;
+  /** Of those, timed under 5 s (or 2 s a rep): noted, still counted. */
+  short: number;
   planned: number;
 }
 

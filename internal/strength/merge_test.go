@@ -63,7 +63,7 @@ func TestMergePlanCircuitRoundsCarryOn(t *testing.T) {
 			t.Fatalf("set %s still on %s", s.ID, s.SessionID)
 		}
 	}
-	if p := ProgressOf(plan, append(logged("a", circuit, map[int]int{0: 1, 1: 1}), moved...)); p.Planned != 8 || p.Logged != 8 {
+	if p := ProgressOf(plan, append(logged("a", circuit, map[int]int{0: 1, 1: 1}), moved...)); p.Planned != 8 || p.Done != 8 {
 		t.Fatalf("progress %+v, want 8 of 8", p)
 	}
 }

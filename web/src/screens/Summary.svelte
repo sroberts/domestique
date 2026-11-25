@@ -17,7 +17,7 @@
   import { sessionExports } from '../lib/export';
   import { clock, day, duration, roundsText, setText, thousands, time, weight } from '../lib/format';
   import { backTarget, link, router } from '../lib/router.svelte';
-  import { Workout, earlyText, emptySession, endedEarly, isReal, progressOf, roundsOf, type CircuitPlace } from '../lib/workout.svelte';
+  import { Workout, earlyText, emptySession, endedEarly, isReal, progressOf, roundsOf, shortText, type CircuitPlace } from '../lib/workout.svelte';
   import type { CheckInResp, MergePreview, SessionRef, SetRecord, SetStat, Summary } from '../lib/types';
 
   /** Heart rate change after a set: a fall reads −12, a rise +2 (still
@@ -278,9 +278,9 @@
     </p>
     {#if isEmpty}
       <section class="empty" aria-labelledby="empty-h">
-        <h2 id="empty-h" class="empty-h">Nothing here counted</h2>
+        <h2 id="empty-h" class="empty-h">Nothing lifted</h2>
         <p class="muted">
-          {summary.progress.logged ? `${summary.progress.logged === 1 ? 'The set was' : `All ${summary.progress.logged} sets were`} too short to count as lifting: a set needs at least 5\u00a0s, and 2\u00a0s a rep.` : 'No sets were logged.'}
+          {summary.progress.done ? `${summary.progress.done === 1 ? 'The set was' : `All ${summary.progress.done} sets were`} too quick to be lifting: under 5\u00a0s, or 2\u00a0s a rep.` : 'No sets were logged.'}
           If it was started by mistake, discard it.
         </p>
         {#if confirmDiscard}
@@ -295,8 +295,11 @@
           </div>
         {/if}
       </section>
-    {:else if endedEarly(summary.progress)}
-      <p class="early">{earlyText(summary.progress)}</p>
+    {:else}
+      {#if endedEarly(summary.progress)}<p class="early">{earlyText(summary.progress)}</p>{/if}
+      {#if summary.progress.short}
+        <p class="muted short-note">{shortText(summary.progress)}, under 5&nbsp;s or 2&nbsp;s a rep. It still counts.</p>
+      {/if}
     {/if}
 
     {#if source === 'local'}
@@ -401,7 +404,7 @@
                     <span class="mono off"><span class="visually-hidden">target </span>/{s.weight_kg === s.target_weight_kg ? s.target_reps : `${s.target_reps}×${weight(s.target_weight_kg)}`}</span>
                   {/if}
                   {#if summary.efforts?.[s.id]}<span class="effort"><span class="visually-hidden">effort </span>{summary.efforts[s.id]!.level}</span>{/if}
-                  {#if !isReal(s)}<span class="mono uncounted">not counted</span>{/if}
+                  {#if !isReal(s)}<span class="mono uncounted">quick</span>{/if}
                   {#if p}<span class="ex-in">{s.exercise_name}</span>{/if}
                 </span>
                 <span role="cell" class="r">
@@ -629,6 +632,10 @@
     font-size: var(--size-small);
     font-weight: 600;
     color: var(--text-muted);
+  }
+  .short-note {
+    margin-top: var(--space-1);
+    font-size: var(--size-small);
   }
   /* Ruled, not boxed: the one question this screen asks first. */
   .empty {

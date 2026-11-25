@@ -251,7 +251,7 @@ func (a *API) today(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Latest = []ActivityRow{}
 	for _, x := range rows {
-		if x.Progress != nil && x.Progress.Done == 0 {
+		if x.Progress != nil && x.Progress.Empty() {
 			continue
 		}
 		if resp.Latest = append(resp.Latest, x); len(resp.Latest) == 4 {

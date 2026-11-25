@@ -110,7 +110,7 @@ func TestMergeSessions(t *testing.T) {
 		t.Fatal("finish should be the second part's")
 	}
 	code, sum := summaryOf(t, h, "first")
-	if code != 200 || string(sum["progress"]) != `{"done":8,"logged":8,"planned":8}` {
+	if code != 200 || string(sum["progress"]) != `{"done":8,"short":0,"planned":8}` {
 		t.Fatalf("summary %d progress %s", code, sum["progress"])
 	}
 

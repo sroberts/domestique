@@ -587,11 +587,15 @@ func (a *API) getTrends(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, r, err)
 		return
 	}
+	bySession := map[string][]store.Set{}
+	for _, s := range sets {
+		bySession[s.SessionID] = append(bySession[s.SessionID], s)
+	}
 	lifts := map[string]*liftPR{}
 	lastSession := map[string]string{}
 	for _, s := range sets {
-		if s.Reps <= 0 || s.Reps > 12 || s.WeightKg <= 0 || !strength.Real(s) {
-			continue // tapped-through sets aren't lifts, and mustn't become PRs
+		if s.Reps <= 0 || s.Reps > 12 || s.WeightKg <= 0 || strength.Tapped(bySession[s.SessionID]) {
+			continue // a session tapped through isn't lifting, and mustn't set PRs
 		}
 		key := strings.ToLower(s.ExerciseName)
 		p := lifts[key]
