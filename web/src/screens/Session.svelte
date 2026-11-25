@@ -76,14 +76,32 @@
     if (then.circuit?.start !== shown.circuit.start) return then.exercise.name;
     return then.setIndex === shown.setIndex ? then.exercise.name : 'rest';
   });
-  // Why today's sets differ from the template ("Eased for today", a held
-  // weight) beats the standing note: it explains a short ladder like 1 of 1.
-  let posText = $derived(
-    !w || !shown ? ''
-    : shown.circuit
-      ? [`${circuitName(shown.circuit)} · exercise ${shown.exerciseIndex - shown.circuit.start + 1} of ${shown.circuit.end - shown.circuit.start}`, thenText && `then ${thenText}`, shown.exercise.change || shown.exercise.notes].filter(Boolean).join(' · ')
-      : [`Lift ${shown.exerciseIndex + 1} of ${w.session.plan.length}`, shown.exercise.change || shown.exercise.notes].filter(Boolean).join(' · '),
-  );
+  /** "A2": a circuit exercise's place, lettered as the editor and summary letter it. */
+  const place = (circ: Circuit, exerciseIndex: number) =>
+    `${circuitLetter(circuits.findIndex((x) => x.start === circ.start))}${exerciseIndex - circ.start + 1}`;
+  // Where this is and what's next, kept to one line: the numbers are the
+  // hero. Progression notes stay on Today; only "Eased for today" stays,
+  // since it explains a short ladder like 1 of 1.
+  let posText = $derived.by(() => {
+    if (!w || !shown) return '';
+    const eased = shown.exercise.change?.startsWith('Eased') ? shown.exercise.change : '';
+    return (
+      shown.circuit
+        ? [place(shown.circuit, shown.exerciseIndex), thenText && `then ${thenText}`, eased]
+        : [`Lift ${shown.exerciseIndex + 1} of ${w.session.plan.length}`, eased]
+    )
+      .filter(Boolean)
+      .join(' · ');
+  });
+  /** The splits board: a lift's sets, or in a circuit this round's
+   * exercises, so the highlight moves on as the round does. */
+  let ladderSlots = $derived.by(() => {
+    if (!w || !shown) return [];
+    const circ = shown.circuit;
+    if (!circ) return shownSlots;
+    return w.slots.filter((s) => s.exerciseIndex >= circ.start && s.exerciseIndex < circ.end && s.setIndex === shown.setIndex);
+  });
+  let formOpen = $state(false);
   /** "set 2", or "round 2" for a set done in a circuit. */
   const setWord = (exerciseIndex: number, setIndex: number) =>
     `${w?.slots.find((s) => s.exerciseIndex === exerciseIndex)?.circuit ? 'round' : 'set'} ${setIndex + 1}`;
@@ -173,6 +191,12 @@
 
   const compact = (reps: number, kg: number) => `${reps}×${weight(kg)}`;
 
+  /** The weight a round's rung shows: as logged once done, else the target. */
+  function rungWeight(s: Slot, st: string): string {
+    const rec = st === 'done' ? w?.sets.find((x) => x.exercise_index === s.exerciseIndex && x.set_index === s.setIndex) : undefined;
+    return weight(rec ? rec.weight_kg : w!.target(s).weight_kg);
+  }
+
   function doneText(s: Slot): string {
     const rec = w?.sets.find((x) => x.exercise_index === s.exerciseIndex && x.set_index === s.setIndex);
     return rec ? compact(rec.reps, rec.weight_kg) : '';
@@ -250,16 +274,28 @@
 
     {#if shown && c.phase !== 'last'}
       <section class="exercise" aria-label="Current exercise">
-        <h1 class="ex-name">{shown.exercise.name}</h1>
-        <p class="mono ex-pos">
-          {posText}
-        </p>
-        <ol class="ladder" aria-label={shown.circuit ? 'Rounds' : 'Sets'} style:--n={shownSlots.length}>
-          {#each shownSlots as s (s.index)}
+        {#key shown.exerciseIndex}
+          <h1 class="ex-name" in:fly={{ y: 6, duration: 150, easing: quintOut }}>{shown.exercise.name}</h1>
+        {/key}
+        <p class="mono ex-pos">{posText}</p>
+        {#if shown.exercise.notes && c.phase !== 'active'}
+          <!-- The coach's cue, there when wanted, never over the numbers mid-set. -->
+          <div class="cue">
+            <button class="btn btn-quiet cue-toggle" aria-expanded={formOpen} aria-controls="form-cue" onclick={() => (formOpen = !formOpen)}>Form cue</button>
+            {#if formOpen}<p id="form-cue" class="cue-text">{shown.exercise.notes}</p>{/if}
+          </div>
+        {/if}
+        <ol class="ladder" class:round={!!shown.circuit} aria-label={shown.circuit ? 'This round' : 'Sets'} style:--n={ladderSlots.length}>
+          {#each ladderSlots as s (s.index)}
             {@const st = ladderState(s)}
             <li class="rung {st}" aria-current={st === 'current' ? 'step' : undefined}>
-              <span class="rung-n mono">{s.setIndex + 1}</span>
-              <span class="rung-v mono">{st === 'done' ? doneText(s) : st === 'skipped' ? 'Skipped' : compact(w.target(s).reps, w.target(s).weight_kg)}</span>
+              <span class="rung-n mono">{s.circuit ? place(s.circuit, s.exerciseIndex) : s.setIndex + 1}</span>
+              {#if s.circuit}
+                <!-- A round's rungs are narrow: the weight to grab, the target is the hero. -->
+                <span class="rung-v mono">{st === 'skipped' ? 'Skip' : rungWeight(s, st)}</span>
+              {:else}
+                <span class="rung-v mono">{st === 'done' ? doneText(s) : st === 'skipped' ? 'Skipped' : compact(w.target(s).reps, w.target(s).weight_kg)}</span>
+              {/if}
             </li>
           {/each}
         </ol>
@@ -311,7 +347,7 @@
             </div>
           </div>
         {:else if c.phase === 'last'}
-          <div class="done">
+          <div class="all-in">
             <h1 class="done-title">All sets in.</h1>
             <p class="muted">Check the last set, then finish. Heart rate attaches when your watch syncs.</p>
           </div>
@@ -486,8 +522,30 @@
   .exercise {
     margin-top: var(--space-4);
   }
+  /* Big enough to catch the change at a glance: in a circuit the name is
+     often all that differs from one set to the next. */
   .ex-name {
-    font-size: var(--size-heading);
+    font-size: var(--size-stat);
+    line-height: 1.1;
+  }
+  .cue {
+    margin-top: var(--space-1);
+  }
+  .cue-toggle {
+    min-height: 2.75rem;
+    margin-left: calc(var(--space-2) * -1);
+    font-size: var(--size-small);
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+  .cue-text {
+    max-width: 60ch;
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
+  /* A round of a circuit can hold many exercises: tighter rungs. */
+  .ladder.round .rung {
+    padding: var(--space-1);
   }
   .ex-pos {
     margin-top: var(--space-1);
@@ -647,7 +705,8 @@
     min-width: 4rem;
     font-size: var(--size-small);
   }
-  .done {
+  /* Not .done: that's also a finished rung, and its gap would grow the ladder. */
+  .all-in {
     display: grid;
     gap: var(--space-3);
   }
