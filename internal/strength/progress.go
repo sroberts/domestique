@@ -25,6 +25,33 @@ func call(level, title, detail string) Readiness {
 	return Readiness{Level: level, Title: title, Detail: detail}
 }
 
+// Kettlebells come in fixed sizes; the next step up is the next bell.
+var kettlebells = []float64{4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 44, 48}
+
+func isKettlebell(name string) bool {
+	l := " " + strings.ToLower(name) + " "
+	return strings.Contains(l, "kettle") || strings.Contains(l, " kb ")
+}
+
+// nextLoad is the weight after a session where every set hit. Kettlebells
+// (by the exercise's or the workout's name) go to the next bell. A whole
+// weight off the 2.5 kg plate grid, like 16 or 14, is a fixed weight
+// (dumbbell or bell): 2 kg up. Anything else adds plates.
+func nextLoad(exercise, workout string, last float64) float64 {
+	if isKettlebell(exercise) || isKettlebell(workout) {
+		for _, k := range kettlebells {
+			if k > last {
+				return k
+			}
+		}
+		return last + 4
+	}
+	if last == math.Trunc(last) && math.Mod(last, 2.5) != 0 {
+		return math.Floor(last/2)*2 + 2
+	}
+	return last + increment(exercise)
+}
+
 // increment is the load step for an exercise: bigger for lower-body compounds.
 func increment(name string) float64 {
 	l := strings.ToLower(name)
@@ -104,8 +131,8 @@ func Prescribe(ctx context.Context, st *store.Store, t store.Template, r Readine
 					w = 2.5
 				}
 			default:
-				w = lastW + increment(ex.Name)
-				change = fmt.Sprintf("Up %s kg: every set hit on %s", fmtKg(increment(ex.Name)), when)
+				w = nextLoad(ex.Name, t.Name, lastW)
+				change = fmt.Sprintf("Up %s kg: every set hit on %s", fmtKg(w-lastW), when)
 			}
 			for j := range ex.Sets {
 				ex.Sets[j].WeightKg = w

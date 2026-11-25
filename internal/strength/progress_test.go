@@ -194,3 +194,25 @@ func TestCircuitShare(t *testing.T) {
 		t.Fatalf("no circuits: %v", got)
 	}
 }
+
+func TestNextLoad(t *testing.T) {
+	cases := []struct {
+		ex, workout string
+		last, want  float64
+	}{
+		{"Clean", "Kettle Bell Complex A", 16, 18},
+		{"KB Swing", "Conditioning", 24, 26},
+		{"Kettlebell Swing", "", 28, 32},
+		{"Goblet Squat", "Kettlebell day", 48, 52},
+		{"Curl", "Arms", 14, 16}, // a fixed dumbbell weight
+		{"Curl", "Arms", 13, 14}, // odd whole kg: up to the next even
+		{"Bench Press", "Upper A", 80, 82.5},
+		{"Back Squat", "Lower A", 100, 105},
+		{"Bench Press", "Upper A", 42.5, 45},
+	}
+	for _, c := range cases {
+		if got := nextLoad(c.ex, c.workout, c.last); got != c.want {
+			t.Errorf("nextLoad(%q, %q, %v) = %v, want %v", c.ex, c.workout, c.last, got, c.want)
+		}
+	}
+}
