@@ -151,7 +151,13 @@ Outpost's models change. It goes through Outpost when `OUTPOST_AI_URL` and
 It exits 1 if any answer would be acted on wrongly at today's bars. On
 Laya and d1 (November 2026), no question has a wrong action at its bar.
 Neither model can yet grade set effort reliably, so it mostly stays blank,
-and neither tells sports apart from numbers alone.
+and neither tells sports apart from numbers alone. Only d1 matches exercise
+names written another way; Laya always answers "new exercise", which is
+safe but counts nothing together. System 1 caps a question's length, the
+options offered included, so a refused exercise question is split in
+halves, down to one name a question; once split, only an undisputed match
+with the nearest name counts. A question still too long with one name is
+kept as no answer, so it isn't asked again every sweep.
 
 Zwift's "🗺️ Route in World" line is read into the activity's route without
 any model. Earlier imports are backfilled once at startup.

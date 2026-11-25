@@ -2,7 +2,10 @@ package coach
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"unicode"
@@ -28,30 +31,94 @@ func (a *AI) SameExercise(ctx context.Context, name string, known []string) (str
 	if len(known) > MaxKnown {
 		return "", 0, fmt.Errorf("%d known names: at most %d", len(known), MaxKnown)
 	}
-	criteria := map[string]string{NewExercise: "a different exercise from all of these"}
-	for _, k := range known {
-		criteria[k] = fmt.Sprintf("the same exercise as %q, written another way", k)
+	parts, err := a.askSame(ctx, name, known)
+	if errors.Is(err, errUnfit) {
+		// Too long even with one name: the same names would be refused
+		// the same way every sweep, so it's no answer (kept), not an
+		// error (asked again, up to 2*MaxKnown-1 requests each time).
+		return "", 0, nil
 	}
-	ans, _, err := a.SystemOne(ctx, map[string]any{"new_name": name, "exercises_the_athlete_logs": known}, map[string]Question{
-		"same": {Type: "choice", Criteria: criteria, Instructions: fmt.Sprintf(
-			"The athlete just logged an exercise called %q. Is it one of the exercises they already log, written another way "+
-				"(an abbreviation, a plural, a typo, a different word order, the equipment named differently), or a different exercise? "+
-				"A variation that trains differently is a different exercise: front squat is not back squat, incline bench is not flat bench, "+
-				"dumbbell press is not barbell press, Romanian deadlift is not deadlift.", name)},
-	})
 	if err != nil {
 		return "", 0, err
 	}
-	s := ans["same"]
-	if s.Type != "choice" || s.Choice == NewExercise {
+	var to string
+	var p float64
+	matches := 0
+	for _, x := range parts {
+		s := x.ans
+		if s.Type != "choice" || s.Choice == NewExercise {
+			continue
+		}
+		if !slices.Contains(x.known, s.Choice) {
+			return "", 0, fmt.Errorf("system 1 answered an exercise it wasn't offered: %q", s.Choice)
+		}
+		matches++
+		to, p = s.Choice, s.Probabilities[s.Choice]
+	}
+	// Split up, each question offers fewer names, so its answer reads as
+	// surer than the whole question's would. Trust only a match with the
+	// nearest name that no other part disputes.
+	if len(parts) > 1 && (matches != 1 || to != known[0]) {
 		return "", 0, nil
 	}
-	for _, k := range known {
-		if k == s.Choice {
-			return k, s.Probabilities[k], nil
-		}
+	return to, p, nil
+}
+
+type samePart struct {
+	known []string
+	ans   Answer
+}
+
+// askSame puts the question with known as the options. System 1 caps a
+// question's length, the options included: refused as too long, it asks
+// again in two halves (the nearer half first), down to one name a
+// question, so every name is still offered and the answer holds for all.
+// Refused with one name, it stops there with errUnfit.
+func (a *AI) askSame(ctx context.Context, name string, known []string) ([]samePart, error) {
+	ans, err := a.sameExercise(ctx, name, known)
+	if err == nil {
+		return []samePart{{known, ans["same"]}}, nil
 	}
-	return "", 0, fmt.Errorf("system 1 answered an exercise it wasn't offered: %q", s.Choice)
+	if !tooLong(err) {
+		return nil, err
+	}
+	if len(known) == 1 {
+		return nil, fmt.Errorf("%w: %w", errUnfit, err)
+	}
+	h := (len(known) + 1) / 2
+	near, err := a.askSame(ctx, name, known[:h])
+	if err != nil {
+		return nil, err
+	}
+	far, err := a.askSame(ctx, name, known[h:])
+	if err != nil {
+		return nil, err
+	}
+	return append(near, far...), nil
+}
+
+// exerciseQ is kept short: System 1 caps a question's instructions, and
+// the options offered count against the cap. The new name is in the state.
+const exerciseQ = "Is new_name one of these exercises written another way (abbreviation, plural, typo, word order)? " +
+	"A variation is different: front squat is not back squat, incline bench is not flat bench."
+
+func (a *AI) sameExercise(ctx context.Context, name string, known []string) (map[string]Answer, error) {
+	criteria := map[string]string{NewExercise: "a different exercise, or a variation of one"}
+	for _, k := range known {
+		criteria[k] = "the same as " + k
+	}
+	ans, _, err := a.SystemOne(ctx, map[string]any{"new_name": name, "exercises_the_athlete_logs": known},
+		map[string]Question{"same": {Type: "choice", Criteria: criteria, Instructions: exerciseQ}})
+	return ans, err
+}
+
+// errUnfit is a question System 1 refuses as too long even offering one name.
+var errUnfit = errors.New("exercise question too long for system 1")
+
+// tooLong reports System 1 refusing a question as longer than its cap.
+func tooLong(err error) bool {
+	var se *StatusError
+	return errors.As(err, &se) && se.Status == http.StatusBadRequest && strings.Contains(se.Message, "tokens; limit is")
 }
 
 // Nearest picks the known names most like name, at most n, best first, by
