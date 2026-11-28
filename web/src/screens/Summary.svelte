@@ -33,6 +33,12 @@
   // (The screen is keyed by id, so reading it once is correct.)
   // svelte-ignore state_referenced_locally
   const justFinished = consumeJustFinished(id);
+  // Straight from a session it ends like one: no tab bar, just Done, so the
+  // sets have the room (and no tab says Activities while you came from Today).
+  $effect(() => {
+    router.immersive = justFinished;
+    return () => (router.immersive = false);
+  });
   function consumeJustFinished(sid: string): boolean {
     try {
       if (sessionStorage.getItem('domestique:just-finished') !== sid) return false;
@@ -93,6 +99,8 @@
         });
         for (const l of workout.sets) if (!s.sets.some((x) => x.id === l.id)) s.sets.push({ ...l });
         s.sets.sort((a, b) => a.started_at - b.started_at);
+        // Just finished, the finish may not have synced yet: the phone knows.
+        if (workout.session.finished_at && !s.session.finished_at) s.session = { ...s.session, finished_at: workout.session.finished_at };
         recompute(s);
         s.progress = progressOf(s.session.plan, s.sets);
       }
@@ -221,6 +229,7 @@
   }
 
   // Nothing in it counted: offer to throw it away, with one confirming tap.
+  let hasHR = $derived(summary?.hr_status === 'ready');
   let isEmpty = $derived(!!summary?.session.finished_at && emptySession(summary?.progress));
   let confirmDiscard = $state(false);
   let discarding = $state(false);
@@ -326,52 +335,8 @@
 
     {#if summary.note?.text}<CoachNote text={summary.note.text} />{/if}
 
-    <section class="hr" aria-labelledby="hr-h">
-      <h2 id="hr-h" class="block-h">Heart rate by set</h2>
-      <div class="readout" aria-live="polite">
-        {#if sel}
-          {@const p = places.get(sel.id)}
-          <p class="ro-main">
-            <span>{p ? `Round ${p.round} · ${p.pos} ${sel.exercise_name}` : `Set ${sel.set_index + 1} · ${sel.exercise_name}`}</span>
-            {#if summary.efforts?.[sel.id]}<span class="effort">looked {summary.efforts[sel.id]!.level}</span>{/if}
-          </p>
-          {#if selStat?.has_hr}
-            <p class="ro-stats">
-              <span><span class="num">{selStat.peak_bpm}</span> <span class="unit">peak</span></span>
-              <span class="zone-tag"><span class="sw" style:background={`var(--zone-${Math.max(1, selStat.zone)})`} aria-hidden="true"></span>Z{selStat.zone}</span>
-              <span><span class="num">{dropText(selStat.recovery_drop)}</span> <span class="unit">in {selStat.recovery_window_s} s</span></span>
-            </p>
-          {:else}
-            <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
-          {/if}
-        {:else}
-          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Pick a set on the trace or in the table to read it.' : 'Each band is a set, in order. Pick one to read it.'}{places.size ? ' Wider, fainter bands are circuit rounds.' : ''}</p>
-        {/if}
-      </div>
-      <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
-      {#if summary.hr_status === 'ready' && source === 'server' && summary.alignment}
-        <HrAlignment sessionId={id} alignment={summary.alignment} onchange={load} />
-      {/if}
-    </section>
-
-    <!-- After the payoff: the session ends on the effort, then asks how it felt. -->
-    {#if checkin && summary && !isEmpty}
-      <CheckIn path={checkInPath('session', summary.session.id)} questions={checkin.questions} initial={checkin.checkin}
-        srpe={checkin.srpe ?? 0} session heading="How did that go?" />
-    {/if}
-
-    <!-- Wide screens: sets beside zones, rather than one stretched column. -->
-    <div class="lower">
-    {#if summary.hr_status === 'ready'}
-      <section class="block zones-block" aria-labelledby="z-h">
-        <h2 id="z-h" class="block-h">Time in zones <span class="mono muted">avg {summary.avg_bpm} bpm · zones from max {summary.max_hr}</span></h2>
-        <ZoneBar seconds={summary.zone_seconds} />
-        {#if summary.peak_bpm > summary.max_hr}
-          <p class="muted foot">Peak {summary.peak_bpm} is above the max HR of {summary.max_hr} that zones use. <a href="/settings" use:link>Change it in Settings</a></p>
-        {/if}
-      </section>
-    {/if}
-
+    <!-- The sets lead when there is no heart rate yet: they are all there is to read. -->
+    {#snippet setsBlock(summary: Summary)}
     <section class="block sets-block" aria-labelledby="sets-h">
       <h2 id="sets-h" class="block-h">Sets</h2>
       <div class="table" class:no-rest={!hasRest} role="table" aria-label="Sets with heart rate">
@@ -436,6 +401,56 @@
         <p class="muted foot">Recovery is the heart rate drop from the set's peak to 60 s after it, or to the next set if that started sooner.</p>
       {/if}
     </section>
+    {/snippet}
+    {#if !hasHR}{@render setsBlock(summary)}{/if}
+
+    <section class="hr" aria-labelledby="hr-h">
+      <h2 id="hr-h" class="block-h">Heart rate by set</h2>
+      <div class="readout" aria-live="polite">
+        {#if sel}
+          {@const p = places.get(sel.id)}
+          <p class="ro-main">
+            <span>{p ? `Round ${p.round} · ${p.pos} ${sel.exercise_name}` : `Set ${sel.set_index + 1} · ${sel.exercise_name}`}</span>
+            {#if summary.efforts?.[sel.id]}<span class="effort">looked {summary.efforts[sel.id]!.level}</span>{/if}
+          </p>
+          {#if selStat?.has_hr}
+            <p class="ro-stats">
+              <span><span class="num">{selStat.peak_bpm}</span> <span class="unit">peak</span></span>
+              <span class="zone-tag"><span class="sw" style:background={`var(--zone-${Math.max(1, selStat.zone)})`} aria-hidden="true"></span>Z{selStat.zone}</span>
+              <span><span class="num">{dropText(selStat.recovery_drop)}</span> <span class="unit">in {selStat.recovery_window_s} s</span></span>
+            </p>
+          {:else}
+            <p class="muted ro-hint">{setText(sel.reps, sel.weight_kg)}</p>
+          {/if}
+        {:else}
+          <p class="muted ro-hint">{summary.hr_status === 'ready' ? 'Pick a set on the trace or in the table to read it.' : 'Each band is a set, in order. Pick one to read it.'}{places.size ? ' Wider, fainter bands are circuit rounds.' : ''}</p>
+        {/if}
+      </div>
+      <HrTrace {summary} {selected} onselect={(sid) => (selected = sid)} />
+      {#if summary.hr_status === 'ready' && source === 'server' && summary.alignment}
+        <HrAlignment sessionId={id} alignment={summary.alignment} onchange={load} />
+      {/if}
+    </section>
+
+    <!-- After the payoff: the session ends on the effort, then asks how it felt. -->
+    {#if checkin && summary && !isEmpty}
+      <CheckIn path={checkInPath('session', summary.session.id)} questions={checkin.questions} initial={checkin.checkin}
+        srpe={checkin.srpe ?? 0} session heading="How did that go?" />
+    {/if}
+
+    <!-- Wide screens: sets beside zones, rather than one stretched column. -->
+    <div class="lower">
+    {#if summary.hr_status === 'ready'}
+      <section class="block zones-block" aria-labelledby="z-h">
+        <h2 id="z-h" class="block-h">Time in zones <span class="mono muted">avg {summary.avg_bpm} bpm · zones from max {summary.max_hr}</span></h2>
+        <ZoneBar seconds={summary.zone_seconds} />
+        {#if summary.peak_bpm > summary.max_hr}
+          <p class="muted foot">Peak {summary.peak_bpm} is above the max HR of {summary.max_hr} that zones use. <a href="/settings" use:link>Change it in Settings</a></p>
+        {/if}
+      </section>
+    {/if}
+
+    {#if hasHR}{@render setsBlock(summary)}{/if}
     </div>
 
     {#if summary.same_day?.length && source === 'server'}

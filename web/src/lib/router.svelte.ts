@@ -39,9 +39,12 @@ class Router {
   route = $state<Route>(parse(location.pathname));
   /** The in-app path before the current one, for context-aware Back links. */
   prev = $state<string | null>(null);
+  /** A screen that ends a task, like a session's summary just after it,
+   * can hide the tab bar too. */
+  immersive = $state(false);
   /** Live-session screens hide the tab bar: one action per state. */
   get chrome(): boolean {
-    return this.route.name !== 'session';
+    return this.route.name !== 'session' && !this.immersive;
   }
 
   /** A screen with unsaved work can hold navigation: return false to stay. */
