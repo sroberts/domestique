@@ -207,7 +207,8 @@
           <div><dt class="label">Resting</dt><dd><span class="num">{today.recovery.resting_hr}</span><span class="unit">bpm</span></dd></div>
         {/if}
         {#if today.sleep}
-          <div><dt class="label">Sleep</dt><dd><span class="num">{sleepText(today.sleep.asleep_s)}</span>{#if today.sleep.performance != null}<span class="unit">{today.sleep.performance}%</span>{/if}</dd></div>
+          <!-- The way into the Sleep screen: the number itself, with a chevron. -->
+          <div class="sleep"><dt class="label">Sleep</dt><dd><a class="to-sleep" href="/sleep" use:link aria-label={`Sleep ${sleepText(today.sleep.asleep_s)}${today.sleep.performance != null ? `, ${today.sleep.performance}% of need` : ''}: open sleep`}><span class="num">{sleepText(today.sleep.asleep_s)}</span>{#if today.sleep.performance != null}<span class="unit">{today.sleep.performance}%</span>{/if}<ChevronRight size={18} aria-hidden="true" /></a></dd></div>
         {/if}
       </dl>
     </section>
@@ -523,6 +524,23 @@
   }
   .vitals .num {
     font-size: var(--size-heading);
+  }
+  /* The figure is the link: 44px tall, the chevron says it goes somewhere. */
+  .to-sleep {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    margin: calc(var(--space-2) * -1) 0;
+    color: inherit;
+    text-decoration: none;
+  }
+  .to-sleep :global(svg) {
+    margin-left: var(--space-1);
+    color: var(--text-muted);
+  }
+  .to-sleep:hover .num {
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
   }
 
   /* Load */

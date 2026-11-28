@@ -44,6 +44,12 @@
   --focus: #f2c230;
   /* Sport identity in charts (validated for CVD on surface) */
   --sport-ride: #4f8fd9;
+  /* Sleep stages, in the order they stack (validated: dataviz palette
+     checks, adjacent pairs, on the page). Deep doubles as sleep's own colour. */
+  --sleep-awake: #b08341;
+  --sleep-light: #4b99d7;
+  --sleep-deep: #6556c8;
+  --sleep-rem: #009b95;
   --sport-strength: #cf7a26;
   --sport-other: #3fa88a;
   --grid: #2a2d33;
@@ -96,6 +102,10 @@
   --danger-ink: #c8323a;
   --focus: #8e6a00;
   --sport-ride: #2f6fb9;
+  --sleep-awake: #a67628;
+  --sleep-light: #3284d0;
+  --sleep-deep: #503ead;
+  --sleep-rem: #009284;
   --sport-strength: #a65b14;
   --sport-other: #0f7f5c;
   --grid: #e7e2d6;

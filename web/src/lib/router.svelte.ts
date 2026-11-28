@@ -12,6 +12,7 @@ export type Route =
   | { name: 'workouts' }
   | { name: 'workout'; id: string } // id 'new' for a new workout
   | { name: 'ask' }
+  | { name: 'sleep' }
   | { name: 'log' } // a workout already done, from text
   | { name: 'notfound' };
 
@@ -22,6 +23,7 @@ function parse(path: string): Route {
   if (path === '/settings') return { name: 'settings' };
   if (path === '/workouts') return { name: 'workouts' };
   if (path === '/ask') return { name: 'ask' };
+  if (path === '/sleep') return { name: 'sleep' };
   if (path === '/workouts/log') return { name: 'log' };
   const wk = /^\/workouts\/([A-Za-z0-9_-]+)\/?$/.exec(path);
   if (wk?.[1]) return { name: 'workout', id: wk[1] };
@@ -92,6 +94,7 @@ export function backTarget(fallback: { href: string; label: string }): { href: s
   if (p === '/trends') return { href: p, label: 'Trends' };
   if (p === '/') return { href: p, label: 'Today' };
   if (p === '/ask') return { href: p, label: 'Ask' };
+  if (p === '/sleep') return { href: p, label: 'Sleep' };
   return fallback;
 }
 

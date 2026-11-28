@@ -6,6 +6,12 @@ merges duplicate recordings, scores everything on one training-load model, logs
 strength sessions live from a PWA, and serves it all over REST (`/v1`) and MCP
 (`/mcp`).
 
+Whoop sleep is kept in full (stages, need, naps). The Sleep screen, opened
+from last night's sleep on Today or from Trends, shows last night against
+need and your own usual, the last 2–12 weeks of time asleep and bed and wake
+times, the week's sleep debt, and plain medians of how sleep lines up with
+recovery and training (`/v1/sleep/trends`, MCP `get_sleep_trends`).
+
 ## Run
 
     make run                 # builds the PWA and the binary, serves on :8099 with demo data

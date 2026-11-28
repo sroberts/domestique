@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import CoachNote from '../components/CoachNote.svelte';
   import CurveChart from '../components/CurveChart.svelte';
   import ExerciseAliases from '../components/ExerciseAliases.svelte';
@@ -6,11 +7,11 @@
   import AskLink from '../components/AskLink.svelte';
   import SyncStatus from '../components/SyncStatus.svelte';
   import WeekBars from '../components/WeekBars.svelte';
-  import { cachedGet, fetchLoad, fetchTrends } from '../lib/data';
+  import { cachedGet, fetchLoad, fetchSleep, fetchTrends } from '../lib/data';
   import { Recheck } from '../lib/recheck';
-  import { day, time } from '../lib/format';
+  import { day, hm, time } from '../lib/format';
   import { link } from '../lib/router.svelte';
-  import type { LiftPR, LoadDay, Trends, WeekNote } from '../lib/types';
+  import type { LiftPR, LoadDay, SleepTrends, Trends, WeekNote } from '../lib/types';
 
   const ranges = [
     { days: 90, label: '3 months' },
@@ -47,6 +48,12 @@
       stale = r.stale ?? stale;
       empty = !!r.data && r.data.weeks.every((w) => w.count === 0) && r.data.lifts.length === 0;
     });
+  });
+
+  // Two weeks of sleep, as a line that opens the Sleep screen.
+  let sleep = $state<SleepTrends | null>(null);
+  $effect(() => {
+    fetchSleep(2).then((r) => (sleep = r.data));
   });
 
   // Last week's note from Outpost's LLM, when there's a model.
@@ -133,6 +140,18 @@
         </p>
       {/if}
     </section>
+
+    {#if sleep?.last && sleep.nights.length}
+      <section class="block" aria-labelledby="sleep-h">
+        <h2 id="sleep-h" class="block-h">Sleep <span class="muted sub-h">last 2 weeks</span></h2>
+        <a class="sleep-row" href="/sleep" use:link>
+          <span><span class="num">{hm(sleep.avg_asleep_s)}</span><span class="unit">a night</span></span>
+          {#if sleep.avg_need_s}<span><span class="num">{hm(sleep.avg_need_s)}</span><span class="unit">needed</span></span>{/if}
+          {#if sleep.debt.nights}<span><span class="num">{hm(sleep.debt.s)}</span><span class="unit">short this week</span></span>{/if}
+          <span class="sleep-go muted">Sleep <ChevronRight size={16} aria-hidden="true" /></span>
+        </a>
+      </section>
+    {/if}
 
     {#if trends}
       <section class="block" aria-labelledby="wk-h">
@@ -296,6 +315,37 @@
   .seg button.on {
     background: var(--text);
     color: var(--bg);
+  }
+  .sleep-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--space-2) var(--space-5);
+    min-height: 2.75rem;
+    padding: var(--space-2) 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    color: inherit;
+    text-decoration: none;
+  }
+  .sleep-row .num {
+    font-size: var(--size-stat);
+    line-height: 1;
+  }
+  .sleep-row .unit {
+    margin-left: var(--space-1);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
+  .sleep-go {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    font-size: var(--size-small);
+    font-weight: 600;
+  }
+  .sleep-row:hover .sleep-go {
+    color: var(--text);
   }
   .flat-note {
     font-size: var(--size-small);

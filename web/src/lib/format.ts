@@ -20,6 +20,12 @@ export function clock(totalSeconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
+/** h:mm for a stretch of sleep: "8:09", "0:48". */
+export function hm(totalSeconds: number): string {
+  const min = Math.round(Math.abs(totalSeconds) / 60);
+  return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
+}
+
 /** "46 min", "1 h 12 min". */
 export function duration(totalSeconds: number): string {
   const min = Math.round(totalSeconds / 60);
