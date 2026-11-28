@@ -6,11 +6,18 @@
   import { link } from '../lib/router.svelte';
   import type { Bedtime } from '../lib/types';
 
-  let { now = new Date() }: { now?: Date } = $props();
+  let { now: start = new Date() }: { now?: Date } = $props();
+  // The clock moves on while the card is open: "6h 44 left" mustn't freeze.
   // svelte-ignore state_referenced_locally
-  const hour = now.getHours();
+  let now = $state(start);
+  $effect(() => {
+    const t = setInterval(() => (now = new Date()), 60_000);
+    return () => clearInterval(t);
+  });
   // svelte-ignore state_referenced_locally
-  const date = hour >= 16 ? localDate(now) : hour < 4 ? localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)) : '';
+  const hour = start.getHours();
+  // svelte-ignore state_referenced_locally
+  const date = hour >= 16 ? localDate(start) : hour < 4 ? localDate(new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1)) : '';
 
   let b = $state<Bedtime | null>(null);
   /** Minutes since the bedtime, once it has gone by (before 04:00). */
@@ -40,14 +47,17 @@
 
 {#if b}
   <section class="bedtime" aria-labelledby="bed-h">
-    <h2 id="bed-h" class="label">Bed by</h2>
-    <p class="when"><span class="num">{b.bed_by}</span> <span class="small muted">to wake at {b.wake}{b.wake_from === 'usual' ? ', your usual' : ''}</span></p>
+    <h2 id="bed-h" class="bed-h">Bedtime</h2>
     {#if late > 0}
-      <p class="small">Gone by {hm(late * 60)}. In bed now, that's {hm(left)} before {b.wake}.</p>
+      <!-- Past the target: what's left, said plainly, not the time that's gone. -->
+      <p class="when"><span class="num">{hm(left)}</span> <span class="small muted">left before {b.wake}</span></p>
+      <p class="small muted">The target was {b.bed_by}. Every minute in bed from now still counts.</p>
     {:else}
-      <p class="small">{b.why} About {hm(b.need_s)} of sleep, {hm(b.in_bed_s)} in bed.</p>
+      <p class="label">Bed by</p>
+      <p class="when"><span class="num">{b.bed_by}</span> <span class="small muted">to wake at {b.wake}{b.wake_from === 'usual' ? ', your usual' : ''}</span></p>
+      <p class="small">{b.why} Tonight's estimate: {hm(b.need_s)} of sleep, {hm(b.in_bed_s)} in bed.</p>
     {/if}
-    <a class="small muted more" href="/sleep" use:link>Sleep</a>
+    <a class="small muted more" href="/sleep" use:link>Open sleep</a>
   </section>
 {/if}
 
@@ -58,6 +68,10 @@
     border-top: 1px solid var(--line-strong);
     display: grid;
     gap: var(--space-1);
+  }
+  .bed-h {
+    font-size: var(--size-body);
+    margin-bottom: var(--space-1);
   }
   .when {
     display: flex;

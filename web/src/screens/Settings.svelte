@@ -270,7 +270,7 @@
 
   <section class="block" aria-labelledby="wake-h">
     <h2 id="wake-h">Wake times</h2>
-    <p class="muted small">Today's bedtime counts back from when you get up. Leave a day blank to use your usual from recent nights.</p>
+    <p class="muted small">Today's bedtime counts back from when you get up: Monday is the morning you wake on Monday. Leave a day blank to use your usual from recent nights.</p>
     {#if wake}
       <form class="thr wake" onsubmit={saveWake}>
         {#each WAKE_DAYS as [k, name] (k)}
@@ -280,7 +280,7 @@
           </label>
         {/each}
         <div class="thr-act">
-          <button class="btn" type="submit" disabled={savingWake}>{savingWake ? 'Saving…' : 'Save'}</button>
+          <button class="btn" type="submit" disabled={savingWake}>{savingWake ? 'Saving…' : 'Save wake times'}</button>
           {#if wakeMsg}<span class="small" role="status">{wakeMsg}</span>{/if}
         </div>
       </form>

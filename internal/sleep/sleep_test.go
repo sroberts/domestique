@@ -193,3 +193,14 @@ func TestLateTraining(t *testing.T) {
 		}
 	}
 }
+
+// After midnight, before tonight is scored, the screen's debt is the one
+// tonight's bedtime counts: the seven nights up to last night.
+func TestDebtAgreesWithBedtime(t *testing.T) {
+	ns := nightsWaking(14, "06:30", 6.5) // 1 h short a night
+	screen := Build(Input{Today: day(15), Weeks: 2, Nights: ns, Loc: utc}).Debt
+	b := PlanBedtime(BedtimeInput{Date: day(14), Nights: ns, Loc: utc})
+	if screen.S != 7*3600 || screen.Nights != 7 || b.Why != "7h 00 short this week." {
+		t.Fatalf("screen %+v, bedtime %q", screen, b.Why)
+	}
+}

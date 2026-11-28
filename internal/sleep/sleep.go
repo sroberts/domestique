@@ -162,7 +162,14 @@ func Build(in Input) Trends {
 	}
 	t.Bed = clock(beds, 12*60)
 	t.Wake = clock(wakes, 0)
-	t.Debt = debt(nights, in.Today, loc)
+	// The seven nights up to last night, as the bedtime counts them, so the
+	// screen and tonight's advice never show two different debts.
+	// After a gap without the strap, though, old nights don't count.
+	upto := in.Today
+	if t.Last != nil && t.Last.Date >= today.AddDate(0, 0, -1).Format("2006-01-02") {
+		upto = t.Last.Date
+	}
+	t.Debt = debt(nights, upto, loc)
 	t.ShortNights = shortNights(nights, in.Recovery)
 	t.HeavyDays = heavyDays(nights, in.Load, loc)
 	t.Evenings, t.EveningsLogged = evenings(in.Evenings, nights, in.Recovery, in.Workouts, loc)

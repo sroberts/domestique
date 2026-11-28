@@ -2,7 +2,8 @@
   // The evening log: from 18:00 until noon the next day, one tap per thing
   // that might touch the night. Every tap saves. "Nothing tonight" logs a
   // clear evening, which counts; an evening never logged doesn't.
-  import { getJSON, localDate, putJSON } from '../lib/api';
+  import Check from '@lucide/svelte/icons/check';
+  import { deleteJSON, getJSON, localDate, putJSON } from '../lib/api';
   import type { Evening } from '../lib/types';
 
   let { now = new Date() }: { now?: Date } = $props();
@@ -26,13 +27,17 @@
     );
   });
 
-  async function save(items: string[]) {
+  // Every tap saves. Untapping the last item doesn't make the evening clear:
+  // it goes back to unknown, since only "Nothing tonight" says nothing happened.
+  async function save(items: string[], clearEvening = false) {
     if (!ev) return;
     const before = $state.snapshot(ev);
-    ev = { ...ev, items, logged: true };
+    const unlog = items.length === 0 && !clearEvening;
+    ev = { ...ev, items, logged: !unlog };
     status = 'saving';
     try {
-      await putJSON(`/v1/evenings/${date}`, { items });
+      if (unlog) await deleteJSON(`/v1/evenings/${date}`);
+      else await putJSON(`/v1/evenings/${date}`, { items });
       status = 'saved';
     } catch {
       ev = before;
@@ -40,6 +45,10 @@
     }
   }
   const toggle = (k: string) => save(ev!.items.includes(k) ? ev!.items.filter((x) => x !== k) : [...ev!.items, k]);
+  /** What's on record for the evening, in words. */
+  let saved = $derived(
+    !ev?.logged ? '' : ev.items.length === 0 ? 'Logged: nothing' : `Logged: ${ev.items.map((k) => ev!.choices.find((c) => c.key === k)?.label.toLowerCase() ?? k).join(', ')}`,
+  );
   let clear = $derived(!!ev?.logged && ev.items.length === 0);
 </script>
 
@@ -48,16 +57,17 @@
     <div class="head">
       <h2 id="ev-h" class="ev-h">{tonight ? 'Tonight' : 'Last night'}</h2>
       <span class="small status" role="status">
-        {#if status === 'saving'}Saving…{:else if status === 'error'}Couldn't save. Check the connection.{:else if ev.logged}Logged{/if}
+        {#if status === 'saving'}Saving…{:else if status === 'error'}Couldn't save. Check the connection.{:else if ev.logged}{saved}{:else}Not logged{/if}
       </span>
     </div>
     <p class="small muted">Anything that might touch your sleep. Tap what applies.</p>
     <div class="chips">
       {#each ev.choices as c (c.key)}
-        <button type="button" class="chip" aria-pressed={ev.items.includes(c.key)} onclick={() => toggle(c.key)}>{c.label}</button>
+        <button type="button" class="chip" aria-pressed={ev.items.includes(c.key)} onclick={() => toggle(c.key)}>{#if ev.items.includes(c.key)}<Check size={16} aria-hidden="true" />{/if}{c.label}</button>
       {/each}
     </div>
-    <button type="button" class="chip none" aria-pressed={clear} onclick={() => save([])}>Nothing {tonight ? 'tonight' : 'last night'}</button>
+    <!-- Off while anything is ticked: one stray tap mustn't wipe the evening. -->
+    <button type="button" class="chip none" aria-pressed={clear} disabled={ev.items.length > 0} onclick={() => save([], true)}>{#if clear}<Check size={16} aria-hidden="true" />{/if}Nothing {tonight ? 'tonight' : 'last night'}</button>
   </section>
 {/if}
 
@@ -69,6 +79,9 @@
     border-top: 1px solid var(--line-strong);
     display: grid;
     gap: var(--space-2);
+  }
+  .status {
+    text-align: right;
   }
   .head {
     display: flex;
@@ -108,12 +121,24 @@
     cursor: pointer;
     transition: background-color var(--dur-state) var(--ease-out);
   }
+  /* Pressed is an outline and a check, not a bright fill: this is read in
+     the dark, at night. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+  }
   .chip[aria-pressed='true'] {
-    background: var(--text);
-    color: var(--bg);
-    border-color: var(--text);
+    background: var(--surface-raised);
+    border: 2px solid var(--text);
+  }
+  .none:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
   .none {
+    margin-top: var(--space-2);
     justify-self: start;
     min-width: 12rem;
     font-weight: 500;

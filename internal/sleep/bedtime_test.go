@@ -48,7 +48,7 @@ func TestBedtimeDebtAndHeavyDay(t *testing.T) {
 		t.Fatalf("need %+v", b)
 	}
 	// 9:00 at 90% is 10:00 in bed: 20:30.
-	if b.BedBy != "20:30" || b.Why != "Hard training day, and 10:30 short this week." {
+	if b.BedBy != "20:30" || b.Why != "Hard training day, and 10h 30 short this week." {
 		t.Fatalf("%s %q", b.BedBy, b.Why)
 	}
 }

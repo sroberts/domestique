@@ -159,10 +159,14 @@ func parseClock(t string) int {
 
 func clockOf(m int) string { return fmt.Sprintf("%02d:%02d", m/60%24, m%60) }
 
-// hmText is "1:12" for a stretch of time.
+// hmText is a stretch of time that can't be read as a clock: "1h 12",
+// "48 min", the way the app writes durations.
 func hmText(s int) string {
 	m := (s + 30) / 60
-	return fmt.Sprintf("%d:%02d", m/60, m%60)
+	if m < 60 {
+		return fmt.Sprintf("%d min", m)
+	}
+	return fmt.Sprintf("%dh %02d", m/60, m%60)
 }
 
 // Estimate is one night's estimated need, kept to check against what Whoop
