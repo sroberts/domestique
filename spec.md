@@ -155,7 +155,7 @@ Sleep sits beside training, not under it: what Whoop measures overnight, what th
 ## Interfaces
 
 - REST: list and query activities, streams, recovery, and training load
-- MCP tools: get\_recent\_activities, get\_training\_load, get\_recovery, get\_activity\_detail
+- MCP tools: get\_recent\_activities, get\_training\_load, get\_recovery, get\_activity\_detail, get\_sleep, get\_sleep\_trends
 - Derived metrics: TSS, CTL, ATL, TSB computed from power data
 
 ## Additional Features
