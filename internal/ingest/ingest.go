@@ -250,6 +250,15 @@ func (in *Ingester) saveRaw(ctx context.Context, sha, name string, data []byte, 
 	return in.Store.PutRaw(ctx, sha, rel, int64(len(data)), format, origin)
 }
 
+// KeepRawJSON stores a record exactly as a provider sent it, beside the
+// raw files, content-addressed so an unchanged record is stored once. It
+// keeps data no column holds yet: a field added later can be read back out.
+func (in *Ingester) KeepRawJSON(ctx context.Context, data []byte, origin string) error {
+	sum := sha256.Sum256(data)
+	sha := hex.EncodeToString(sum[:])
+	return in.saveRaw(ctx, sha, sha+".json", data, "json", origin)
+}
+
 // rawExt keeps the original extension, including .gz, so the archive is the
 // file exactly as received.
 func rawExt(name string) string {

@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -224,5 +226,27 @@ func TestGzipBombRefused(t *testing.T) {
 	}
 	if m, _ := filepath.Glob(filepath.Join(dir, "raw", "*", "*")); len(m) != 0 {
 		t.Fatalf("bomb was stored: %v", m)
+	}
+}
+
+// A provider's JSON record is kept as sent, once however often it arrives.
+func TestKeepRawJSON(t *testing.T) {
+	in, st, dir := setup(t)
+	ctx := context.Background()
+	rec := []byte(`{"id":"s1","score":{"respiratory_rate":15.6}}`)
+	for range 2 {
+		if err := in.KeepRawJSON(ctx, rec, "whoop:sleep:s1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sum := sha256.Sum256(rec)
+	sha := hex.EncodeToString(sum[:])
+	f, err := st.GetRaw(ctx, sha)
+	if err != nil || f.Format != "json" || f.Origin != "whoop:sleep:s1" {
+		t.Fatalf("raw %+v %v", f, err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, f.Path))
+	if err != nil || string(got) != string(rec) {
+		t.Fatalf("stored %q %v", got, err)
 	}
 }
