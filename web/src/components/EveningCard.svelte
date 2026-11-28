@@ -29,20 +29,29 @@
 
   // Every tap saves. Untapping the last item doesn't make the evening clear:
   // it goes back to unknown, since only "Nothing tonight" says nothing happened.
-  async function save(items: string[], clearEvening = false) {
+  // Saves go one after another, so a quick untick then tick can't land out
+  // of order; a failure rolls back only if no newer tap came since.
+  let queue: Promise<void> = Promise.resolve();
+  let seq = 0;
+  function save(items: string[], clearEvening = false) {
     if (!ev) return;
     const before = $state.snapshot(ev);
     const unlog = items.length === 0 && !clearEvening;
+    const mine = ++seq;
     ev = { ...ev, items, logged: !unlog };
     status = 'saving';
-    try {
-      if (unlog) await deleteJSON(`/v1/evenings/${date}`);
-      else await putJSON(`/v1/evenings/${date}`, { items });
-      status = 'saved';
-    } catch {
-      ev = before;
-      status = 'error';
-    }
+    queue = queue.then(async () => {
+      try {
+        if (unlog) await deleteJSON(`/v1/evenings/${date}`);
+        else await putJSON(`/v1/evenings/${date}`, { items });
+        if (mine === seq) status = 'saved';
+      } catch {
+        if (mine === seq) {
+          ev = before;
+          status = 'error';
+        }
+      }
+    });
   }
   const toggle = (k: string) => save(ev!.items.includes(k) ? ev!.items.filter((x) => x !== k) : [...ev!.items, k]);
   /** What's on record for the evening, in words. */
