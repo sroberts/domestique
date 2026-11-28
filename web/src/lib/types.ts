@@ -491,6 +491,20 @@ export interface EveningCompare extends EveningItem {
   ready: boolean;
 }
 
+/** Tonight's bedtime advice. */
+export interface Bedtime {
+  date: string;
+  bed_by: string;
+  wake: string;
+  wake_from: 'set' | 'usual';
+  need_s: number;
+  in_bed_s: number;
+  baseline_s: number;
+  debt_s: number;
+  heavy_s: number;
+  why: string;
+}
+
 export interface SleepTrends {
   weeks: number;
   last: Sleep | null;
@@ -509,6 +523,7 @@ export interface SleepTrends {
   evenings: EveningCompare[];
   evenings_logged: number;
   min_evening: number;
+  estimates: { nights: number; off_s: number };
 }
 
 export interface CurvePoint {

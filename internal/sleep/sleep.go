@@ -84,6 +84,8 @@ type Trends struct {
 	Evenings       []EveningCompare `json:"evenings"`
 	EveningsLogged int              `json:"evenings_logged"`
 	MinEvening     int              `json:"min_evening"`
+	// How the bedtime's estimated need compared with what Whoop scored.
+	Estimates EstimateCheck `json:"estimates"`
 }
 
 // ShortNightS is how far under baseline need a night must be to count as

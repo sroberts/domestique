@@ -10,7 +10,12 @@ Whoop sleep is kept in full (stages, need, naps). The Sleep screen, opened
 from last night's sleep on Today or from Trends, shows last night against
 need and your own usual, the last 2–12 weeks of time asleep and bed and wake
 times, the week's sleep debt, and plain medians of how sleep lines up with
-recovery and training (`/v1/sleep/trends`, MCP `get_sleep_trends`).
+recovery and training (`/v1/sleep/trends`, MCP `get_sleep_trends`). From
+6 pm Today asks about the evening in one tap each (caffeine, alcohol, late
+meal, screens, stress, illness; MCP `save_evening`), and from 4 pm it gives a
+bedtime: your wake time (set per weekday in Settings, or your usual) less
+tonight's estimated need over your usual efficiency (`/v1/bedtime`). The
+estimate is kept and checked against the need Whoop scores next morning.
 
 ## Run
 

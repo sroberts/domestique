@@ -95,3 +95,45 @@ func TestEveningLog(t *testing.T) {
 		}
 	}
 }
+
+func TestBedtimeAndWakeTimes(t *testing.T) {
+	a, st, h := testAPI(t)
+	ctx := context.Background()
+	now := time.Now().In(a.loc())
+	eve := now.Format("2006-01-02")
+	if w := call(t, h, "GET", "/v1/bedtime?date="+eve, ""); w.Code != 204 {
+		t.Fatalf("no nights: %d, want 204", w.Code)
+	}
+	eff := 90
+	for i := range 10 {
+		d := now.AddDate(0, 0, -i)
+		end := time.Date(d.Year(), d.Month(), d.Day(), 6, 30, 0, 0, a.loc())
+		_ = st.PutSleep(ctx, store.Sleep{ID: "whoop:b" + d.Format("0102"), Date: d.Format("2006-01-02"),
+			StartAt: end.Add(-500 * time.Minute).UnixMilli(), EndAt: end.UnixMilli(), AsleepS: 27000, Source: "whoop",
+			Efficiency: &eff, Need: &store.SleepNeed{BaselineS: 27000}})
+	}
+	w := call(t, h, "GET", "/v1/bedtime?date="+eve, "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"bed_by":"22:10"`) || !strings.Contains(w.Body.String(), `"wake_from":"usual"`) {
+		t.Fatalf("bedtime %d %s", w.Code, w.Body.String())
+	}
+	if v, err := st.SyncState(ctx, "bedtime:"+eve); err != nil || v != "27000" {
+		t.Fatalf("estimate kept %q %v", v, err)
+	}
+
+	day := []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}[now.AddDate(0, 0, 1).Weekday()]
+	if w := call(t, h, "PUT", "/v1/wake-times", `{"wake_times":{"`+day+`":"05:45"}}`); w.Code != 200 {
+		t.Fatalf("set wake: %d %s", w.Code, w.Body.String())
+	}
+	w = call(t, h, "GET", "/v1/bedtime?date="+eve, "")
+	if !strings.Contains(w.Body.String(), `"bed_by":"21:25"`) || !strings.Contains(w.Body.String(), `"wake_from":"set"`) {
+		t.Fatalf("with wake set: %s", w.Body.String())
+	}
+	for _, bad := range []string{`{"wake_times":{"monday":"06:00"}}`, `{"wake_times":{"mon":"6:00"}}`, `{"wake_times":{"mon":"15:00"}}`} {
+		if w := call(t, h, "PUT", "/v1/wake-times", bad); w.Code != 400 {
+			t.Errorf("%s: %d, want 400", bad, w.Code)
+		}
+	}
+	if w := call(t, h, "PUT", "/v1/wake-times", `{"wake_times":{}}`); w.Code != 200 || !strings.Contains(w.Body.String(), `"wake_times":{}`) {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+}

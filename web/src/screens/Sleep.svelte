@@ -105,6 +105,11 @@
         {/if}
       </dl>
       {/if}
+      {#if data.estimates.nights >= 3}
+        <p class="small muted est">
+          The bedtime's estimate of need has run {Math.abs(data.estimates.off_s) < 300 ? 'within five minutes of' : `${hm(Math.abs(data.estimates.off_s))} ${data.estimates.off_s > 0 ? 'under' : 'over'}`} what Whoop scored, over {plural(data.estimates.nights, 'night')}.
+        </p>
+      {/if}
       {#each data.last_naps as nap (nap.id)}
         <p class="small nap"><span class="label">Nap</span> {time(nap.start_at)}–{time(nap.end_at)} · {hm(nap.asleep_s)} asleep</p>
       {/each}
@@ -330,6 +335,10 @@
   .usual {
     flex-basis: 100%;
     font-size: var(--size-label);
+  }
+  .est {
+    margin-top: var(--space-3);
+    max-width: 62ch;
   }
   .nap {
     margin-top: var(--space-3);

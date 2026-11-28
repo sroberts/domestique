@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BedtimeCard from '../components/BedtimeCard.svelte';
   import EveningCard from '../components/EveningCard.svelte';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import ActionBar from '../components/ActionBar.svelte';
@@ -213,6 +214,7 @@
         {/if}
       </dl>
     </section>
+    <BedtimeCard />
     <EveningCard />
     {#if plan}
       <section class="plan" aria-labelledby="plan-h">
