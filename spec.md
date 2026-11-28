@@ -142,7 +142,7 @@ Sleep sits beside training, not under it: what Whoop measures overnight, what th
 **Bedtime target.** On Today from 16:00: "Bed by 22:40", with one line on why ("Hard ride today, and 1.2 h short this week").
 
 - Wake time: an optional wake time per weekday in Settings, otherwise the median wake time of the last 14 nights on the same kind of day (weekday or weekend)
-- Tonight's need: Whoop scores need only after the night, so it is estimated. Start from Whoop's latest baseline, add a third of the sleep debt (at most an hour) and 30 minutes after a heavy training day. These are starting values: each morning, compare the estimate with the need Whoop scored and tune them
+- Tonight's need: Whoop scores need only after the night, so it is estimated. Start from Whoop's latest baseline, add a third of the sleep debt as the Sleep screen counts it (the seven nights' shortfall against baseline, not Whoop's need-from-debt, which is only scored after a night), at most an hour, and 30 minutes after a heavy training day. These are starting values: each morning, compare the estimate with the need Whoop scored and tune them
 - Time in bed is the need divided by the median efficiency of the last 14 nights. Bed by is the wake time minus that, to the nearest five minutes
 - The target is advice. It doesn't change readiness, which still reads last night's sleep against the athlete's norm
 
