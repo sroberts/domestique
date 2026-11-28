@@ -102,6 +102,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerGear(mux)
 	a.registerAI(mux)
 	a.registerWorlds(mux)
+	a.registerSleep(mux)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "no such endpoint")
 	})

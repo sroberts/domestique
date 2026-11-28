@@ -171,6 +171,49 @@ var tools = []tool{
 		},
 	},
 	{
+		Name: "get_sleep",
+		Description: "Whoop nights and naps by wake-up date: time asleep, in bed and awake; light, deep (slow wave) and REM; " +
+			"disturbances, cycles, respiratory rate, efficiency, consistency and sleep performance %; and Whoop's sleep need " +
+			"split into baseline, debt, recent strain and nap credit (seconds). Naps are listed apart; a date's night is its main sleep.",
+		InputSchema: obj(map[string]any{
+			"from": str("First wake-up date, YYYY-MM-DD (default 13 days before to)"),
+			"to":   str("Last wake-up date, YYYY-MM-DD (default today); at most 400 days after from"),
+		}),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			q := url.Values{}
+			for _, k := range []string{"from", "to"} {
+				if v, ok := a[k].(string); ok && v != "" {
+					q.Set(k, v)
+				}
+			}
+			return s.get(r, "/v1/sleep", q)
+		},
+	},
+	{
+		Name: "get_sleep_trends",
+		Description: "The athlete's sleep picture: last night with its naps and the norms from the 28 nights before " +
+			"(respiratory rate, deep, REM, efficiency); each night of the last 2, 4 or 12 weeks against need with bed and wake " +
+			"times; median bed and wake time and how far nights stray from them; the last seven nights' debt against " +
+			"baseline need; and, over a year, median next-morning recovery after nights more than an hour short against " +
+			"the rest, and median hours asleep after heavy training days (load at least 1.5x fitness) against the rest. " +
+			"Comparisons are medians with counts, ready only with five nights a side; they say nothing about cause.",
+		InputSchema: obj(map[string]any{"weeks": num("Weeks of nights to list: 2, 4 or 12 (default 2)")}),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			w := intArg(a, "weeks", 2, 2, 12)
+			switch {
+			case w >= 12:
+				w = 12
+			case w >= 4:
+				w = 4
+			default:
+				w = 2
+			}
+			return s.get(r, "/v1/sleep/trends", url.Values{"weeks": {strconv.Itoa(w)}})
+		},
+	},
+	{
 		Name: "get_trends",
 		Description: "Long-term trends: power curve (all-time and last 90 days, with the ride that set each best), FTP by " +
 			"month, weekly volume for 26 weeks, and lift PRs (estimated 1RM) with history.",
