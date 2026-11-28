@@ -73,9 +73,10 @@ func (w *Whoop) HandleEvent(ctx context.Context, ev WhoopEvent) error {
 		}
 		return err
 	case "sleep.deleted":
-		// Whoop deletes the recovery along with its sleep.
-		date, err := w.C.Store.DeleteSleep(ctx, "whoop:"+ev.ID)
-		if err != nil || date == "" {
+		// Whoop deletes the recovery along with its sleep. A nap has no
+		// recovery of its own: the day's recovery belongs to the night.
+		date, nap, err := w.C.Store.DeleteSleep(ctx, "whoop:"+ev.ID)
+		if err != nil || date == "" || nap {
 			return err
 		}
 		return w.C.Store.DeleteRecovery(ctx, date, "whoop")

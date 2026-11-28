@@ -615,14 +615,13 @@ func (s *Store) ClearSession(ctx context.Context, activityID string) error {
 }
 
 // DeleteSleep removes a sleep and returns the date it was filed under ("" if
-// there was none).
-func (s *Store) DeleteSleep(ctx context.Context, id string) (string, error) {
-	var date string
-	err := s.db.QueryRowContext(ctx, `DELETE FROM sleep WHERE id = ? RETURNING date`, id).Scan(&date)
+// there was none), and whether it was a nap.
+func (s *Store) DeleteSleep(ctx context.Context, id string) (date string, nap bool, err error) {
+	err = s.db.QueryRowContext(ctx, `DELETE FROM sleep WHERE id = ? RETURNING date, nap`, id).Scan(&date, &nap)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return "", false, nil
 	}
-	return date, err
+	return date, nap, err
 }
 
 // SleepDate is the date a sleep is filed under, or "" if it isn't stored.

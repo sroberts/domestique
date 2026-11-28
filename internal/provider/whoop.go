@@ -96,7 +96,7 @@ func sleepOf(s whoopSleep, loc *time.Location) store.Sleep {
 		return &n
 	}
 	x := store.Sleep{ID: "whoop:" + s.ID, Date: s.End.In(loc).Format("2006-01-02"), StartAt: s.Start.UnixMilli(),
-		EndAt: s.End.UnixMilli(), AsleepS: int((ss.Light + ss.Deep + ss.REM) / 1000), Source: "whoop", Nap: s.Nap,
+		EndAt: s.End.UnixMilli(), AsleepS: sec(ss.Light) + sec(ss.Deep) + sec(ss.REM), Source: "whoop", Nap: s.Nap,
 		InBedS: sec(ss.InBed), AwakeS: sec(ss.Awake), LightS: sec(ss.Light), DeepS: sec(ss.Deep), REMS: sec(ss.REM),
 		NoDataS: sec(ss.NoData), Disturbances: ss.Disturbances, Cycles: ss.Cycles,
 		Performance: pct(s.Score.Performance), Efficiency: pct(s.Score.Efficiency), Consistency: pct(s.Score.Consistency)}
@@ -236,18 +236,20 @@ func (w *Whoop) Sync(ctx context.Context) error {
 	// walk of the whole history fills it in for the nights before.
 	sleepSince, sleepsSeen := w.since(ctx, "sleep"), map[string]bool{}
 	backfill := false
-	if v, _ := st.SyncState(ctx, sleepDetailKey); v == "" {
+	if _, err := st.SyncState(ctx, sleepDetailKey); errors.Is(err, store.ErrNotFound) {
 		sleepSince, backfill = sleepHistoryFrom, true
+	} else if err != nil {
+		return err
 	}
 	sleepErr := collectRaw(ctx, w.C, "/v2/activity/sleep", sleepSince, func(s whoopSleep, raw json.RawMessage) error {
 		sleepsSeen["whoop:"+s.ID] = true
-		if s.ScoreState != "SCORED" || s.Score == nil {
-			return nil
-		}
 		if w.In != nil {
 			if err := w.In.KeepRawJSON(ctx, raw, "whoop:sleep:"+s.ID); err != nil {
 				return err
 			}
+		}
+		if s.ScoreState != "SCORED" || s.Score == nil {
+			return nil
 		}
 		return st.PutSleep(ctx, sleepOf(s, loc))
 	})
@@ -256,13 +258,15 @@ func (w *Whoop) Sync(ctx context.Context) error {
 	}
 	if sleepErr == nil {
 		if err := w.reconcile(ctx, sleepSince, sleepsSeen, st.SleepIDsSince, func(id string) error {
-			_, err := st.DeleteSleep(ctx, id)
+			_, _, err := st.DeleteSleep(ctx, id)
 			return err
 		}); err != nil {
 			return err
 		}
 		if backfill {
-			_ = st.SetSyncState(ctx, sleepDetailKey, strconv.FormatInt(time.Now().UnixMilli(), 10))
+			if err := st.SetSyncState(ctx, sleepDetailKey, strconv.FormatInt(time.Now().UnixMilli(), 10)); err != nil {
+				return err
+			}
 		}
 	}
 	w.mark(ctx, "sleep")
