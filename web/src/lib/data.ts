@@ -2,7 +2,7 @@
 // Mini can't be reached, and says how old it is.
 import { AuthError, deleteJSON, getJSON, putForJSON, putJSON } from './api';
 import { db } from './db';
-import type { ActivityDetail, ActivityRow, Athlete, CheckIn, CheckInResp, LoadDay, ProviderStatus, RidePlan, Trends } from './types';
+import type { ActivityDetail, ActivityRow, Athlete, CheckIn, CheckInResp, LoadDay, ProviderStatus, RidePlan, SleepTrends, Trends } from './types';
 
 export interface Loaded<T> {
   data: T | null;
@@ -40,6 +40,7 @@ export const fetchActivity = (id: string, source?: string) =>
   );
 export const fetchLoad = (days: number) => cachedGet<{ days: LoadDay[]; athlete: Athlete }>(`/v1/load?days=${days}`);
 export const fetchTrends = () => cachedGet<Trends>('/v1/trends');
+export const fetchSleep = (weeks: number) => cachedGet<SleepTrends>(`/v1/sleep/trends?weeks=${weeks}`);
 export const fetchConnections = () => cachedGet<{ providers: ProviderStatus[]; redirect_base: string }>('/v1/connections');
 
 /** Rides planned from a date, two weeks on. */

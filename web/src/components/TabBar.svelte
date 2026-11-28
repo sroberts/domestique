@@ -8,7 +8,7 @@
   import { link, router } from '../lib/router.svelte';
 
   const tabs = [
-    { href: '/', label: 'Today', icon: CalendarDays, match: ['today'] },
+    { href: '/', label: 'Today', icon: CalendarDays, match: ['today', 'sleep'] },
     { href: '/workouts', label: 'Workouts', icon: Dumbbell, match: ['workouts', 'workout'] },
     { href: '/activities', label: 'Activities', icon: List, match: ['activities', 'activity', 'summary'] },
     { href: '/trends', label: 'Trends', icon: TrendingUp, match: ['trends'] },

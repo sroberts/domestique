@@ -29,6 +29,10 @@ colors:
   recovery-red: "#f0656a"
   fitness-violet: "#8c78ec"
   fatigue-rose: "#de5a78"
+  sleep-awake: "#b08341"
+  sleep-light: "#4b99d7"
+  sleep-deep: "#6556c8"
+  sleep-rem: "#009b95"
   light-bg: "#f4f1ea"
   light-surface: "#ffffff"
   light-line: "#ddd8cc"
@@ -205,6 +209,7 @@ A graphite dash and painted bone, with one stripe of team yellow and a zone ramp
 - **Recovery** (green `#4fc283`, amber `#f0973a`, red `#f0656a`; light theme `#3fae73`, `#e8892a`, `#e5575d`): the day's Whoop recovery band, painted as a solid slab behind Today's verdict with dark ink on it (all at least 5:1). The same three hues mark form states: fresh, building, overreaching. Neutral form is zone slate.
 - **Sport Identity** (ride `#4f8fd9`, strength `#cf7a26`, other `#3fa88a`; light theme `#2f6fb9`, `#a65b14`, `#0f7f5c`): which sport something is. Solid blocks behind activity icons, the sport tag on an activity, the route line on its map, effort bars, week stripes, and chart series. Ink on a sport block is graphite in dark mode and white in light mode (all at least 5:1).
 - **Chart Roles** (fitness violet `#8c78ec`, fatigue rose `#de5a78`; light theme `#6a55d8`, `#c9476a`): the fitness and fatigue lines. Power wherever it's drawn uses the fitness violet; they never share a chart. Validated with the dataviz palette checks in both themes.
+- **Sleep Stages** (awake `#b08341`, light `#4b99d7`, deep `#6556c8`, REM `#009b95`; light theme `#a67628`, `#3284d0`, `#503ead`, `#009284`): the stages of a night, in the order they stack, on the Sleep screen only. Deep doubles as sleep's own colour for time-asleep and bed-to-wake bars. Validated with the dataviz palette checks (adjacent pairs, on the page background) in both themes; every stage is named with its time beside it.
 - **Danger Red** (`#e5484d`, light theme `#c8323a`): destructive actions and errors only. It shares a value with zone 5; context keeps them apart.
 
 ### Neutral

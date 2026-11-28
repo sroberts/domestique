@@ -426,6 +426,62 @@ export interface SleepRecord {
   performance: number | null;
 }
 
+/** A night or nap as stored, with everything Whoop scored. */
+export interface Sleep extends SleepRecord {
+  id: string;
+  nap: boolean;
+  in_bed_s: number;
+  awake_s: number;
+  light_s: number;
+  deep_s: number;
+  rem_s: number;
+  no_data_s: number;
+  disturbances?: number;
+  cycles?: number;
+  respiratory_rate?: number;
+  efficiency?: number;
+  consistency?: number;
+  need?: { baseline_s: number; debt_s: number; strain_s: number; nap_s: number };
+}
+
+export interface SleepNight {
+  date: string;
+  asleep_s: number;
+  need_s?: number;
+  baseline_s?: number;
+  bed: string;
+  wake: string;
+  efficiency?: number;
+}
+
+export interface SleepSide {
+  nights: number;
+  median: number;
+}
+
+export interface SleepCompare {
+  with: SleepSide;
+  without: SleepSide;
+  ready: boolean;
+}
+
+export interface SleepTrends {
+  weeks: number;
+  last: Sleep | null;
+  last_naps: Sleep[];
+  norms: { nights: number; respiratory_rate?: number; deep_s: number; rem_s: number; efficiency?: number };
+  nights: SleepNight[];
+  avg_asleep_s: number;
+  avg_need_s?: number;
+  bed: { median: string; spread_min: number; nights: number };
+  wake: { median: string; spread_min: number; nights: number };
+  debt: { s: number; nights: number };
+  short_nights: SleepCompare;
+  heavy_days: SleepCompare;
+  short_night_s: number;
+  heavy_day_load: number;
+}
+
 export interface CurvePoint {
   duration: number;
   watts: number;

@@ -13,6 +13,7 @@
   import WorkoutEdit from './screens/WorkoutEdit.svelte';
   import AskScreen from './screens/Ask.svelte';
   import LogWorkout from './screens/LogWorkout.svelte';
+  import SleepScreen from './screens/Sleep.svelte';
 </script>
 
 {#if router.route.name === 'today'}
@@ -45,6 +46,8 @@
   {#key router.route.id}
     <WorkoutEdit id={router.route.id} />
   {/key}
+{:else if router.route.name === 'sleep'}
+  <SleepScreen />
 {:else if router.route.name === 'ask'}
   <AskScreen />
 {:else}
