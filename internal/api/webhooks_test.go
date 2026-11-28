@@ -87,6 +87,19 @@ func TestWhoopWebhook(t *testing.T) {
 	const sid = "11111111-2222-3333-4444-555555555555"
 	_ = a.Store.PutSleep(ctx, store.Sleep{ID: "whoop:" + sid, Date: "2026-11-05", StartAt: 1, EndAt: 2, AsleepS: 1, Source: "whoop"})
 	_ = a.Store.PutRecovery(ctx, store.Recovery{Date: "2026-11-05", Score: 70, HRVms: 50, RestingHR: 50, Source: "whoop"})
+
+	// A deleted nap on the same day leaves the night's recovery alone.
+	const napID = "66666666-7777-8888-9999-000000000000"
+	_ = a.Store.PutSleep(ctx, store.Sleep{ID: "whoop:" + napID, Date: "2026-11-05", StartAt: 3, EndAt: 4, AsleepS: 1, Source: "whoop", Nap: true})
+	whoopPost(t, h, "whoop-secret", fmt.Sprintf(`{"user_id":1,"id":%q,"type":"sleep.deleted","trace_id":"t2n"}`, napID))
+	eventually(t, "nap removed", func() bool {
+		d, _ := a.Store.SleepDate(ctx, "whoop:"+napID)
+		return d == ""
+	})
+	if _, err := a.Store.GetRecovery(ctx, "2026-11-05"); err != nil {
+		t.Fatalf("a nap's deletion took the night's recovery: %v", err)
+	}
+
 	whoopPost(t, h, "whoop-secret", fmt.Sprintf(`{"user_id":1,"id":%q,"type":"sleep.deleted","trace_id":"t2"}`, sid))
 	eventually(t, "sleep and recovery removed", func() bool {
 		_, err := a.Store.GetRecovery(ctx, "2026-11-05")

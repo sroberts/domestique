@@ -2,7 +2,10 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"net/url"
 	"strconv"
 	"strings"
@@ -59,12 +62,52 @@ type whoopSleep struct {
 	ScoreState string    `json:"score_state"`
 	Score      *struct {
 		StageSummary struct {
-			Light int64 `json:"total_light_sleep_time_milli"`
-			Deep  int64 `json:"total_slow_wave_sleep_time_milli"`
-			REM   int64 `json:"total_rem_sleep_time_milli"`
+			InBed        int64 `json:"total_in_bed_time_milli"`
+			Awake        int64 `json:"total_awake_time_milli"`
+			NoData       int64 `json:"total_no_data_time_milli"`
+			Light        int64 `json:"total_light_sleep_time_milli"`
+			Deep         int64 `json:"total_slow_wave_sleep_time_milli"`
+			REM          int64 `json:"total_rem_sleep_time_milli"`
+			Cycles       *int  `json:"sleep_cycle_count"`
+			Disturbances *int  `json:"disturbance_count"`
 		} `json:"stage_summary"`
-		Performance *float64 `json:"sleep_performance_percentage"`
+		Need *struct {
+			Baseline int64 `json:"baseline_milli"`
+			Debt     int64 `json:"need_from_sleep_debt_milli"`
+			Strain   int64 `json:"need_from_recent_strain_milli"`
+			Nap      int64 `json:"need_from_recent_nap_milli"`
+		} `json:"sleep_needed"`
+		RespiratoryRate *float64 `json:"respiratory_rate"`
+		Performance     *float64 `json:"sleep_performance_percentage"`
+		Consistency     *float64 `json:"sleep_consistency_percentage"`
+		Efficiency      *float64 `json:"sleep_efficiency_percentage"`
 	} `json:"score"`
+}
+
+// sleepOf is a scored Whoop sleep as stored, filed under its wake-up date.
+func sleepOf(s whoopSleep, loc *time.Location) store.Sleep {
+	ss := s.Score.StageSummary
+	sec := func(ms int64) int { return int(math.Round(float64(ms) / 1000)) } // nap credit is negative
+	pct := func(v *float64) *int {
+		if v == nil {
+			return nil
+		}
+		n := int(*v + 0.5)
+		return &n
+	}
+	x := store.Sleep{ID: "whoop:" + s.ID, Date: s.End.In(loc).Format("2006-01-02"), StartAt: s.Start.UnixMilli(),
+		EndAt: s.End.UnixMilli(), AsleepS: sec(ss.Light) + sec(ss.Deep) + sec(ss.REM), Source: "whoop", Nap: s.Nap,
+		InBedS: sec(ss.InBed), AwakeS: sec(ss.Awake), LightS: sec(ss.Light), DeepS: sec(ss.Deep), REMS: sec(ss.REM),
+		NoDataS: sec(ss.NoData), Disturbances: ss.Disturbances, Cycles: ss.Cycles,
+		Performance: pct(s.Score.Performance), Efficiency: pct(s.Score.Efficiency), Consistency: pct(s.Score.Consistency)}
+	if rr := s.Score.RespiratoryRate; rr != nil {
+		v := float64(int(*rr*10+0.5)) / 10
+		x.RespiratoryRate = &v
+	}
+	if n := s.Score.Need; n != nil {
+		x.Need = &store.SleepNeed{BaselineS: sec(n.Baseline), DebtS: sec(n.Debt), StrainS: sec(n.Strain), NapS: sec(n.Nap)}
+	}
+	return x
 }
 
 type whoopWorkout struct {
@@ -89,6 +132,13 @@ type whoopWorkout struct {
 	} `json:"score"`
 }
 
+// sleepDetailKey marks the one walk of the whole sleep history that fills
+// in detail for nights stored before it was kept.
+const sleepDetailKey = "whoop:sleep-detail"
+
+// sleepHistoryFrom is where that walk starts: before Whoop's API existed.
+var sleepHistoryFrom = time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
+
 // whoopPages caps one collection walk; a walk that hits it is incomplete.
 const whoopPages = 400
 
@@ -99,18 +149,27 @@ var errIncomplete = errors.New("whoop: collection has more pages than one sync r
 // errIncomplete, after handing over every record it read, if there were
 // more pages than it reads in one go.
 func collect[T any](ctx context.Context, c *Client, path string, start time.Time, each func(T) error) error {
+	return collectRaw(ctx, c, path, start, func(r T, _ json.RawMessage) error { return each(r) })
+}
+
+// collectRaw is collect that also hands over each record as Whoop sent it.
+func collectRaw[T any](ctx context.Context, c *Client, path string, start time.Time, each func(T, json.RawMessage) error) error {
 	next := ""
 	for page := 0; page < whoopPages; page++ {
 		q := url.Values{"limit": {"25"}, "start": {start.UTC().Format(time.RFC3339)}}
 		if next != "" {
 			q.Set("nextToken", next)
 		}
-		var p whoopPage[T]
+		var p whoopPage[json.RawMessage]
 		if err := c.GetJSON(ctx, whoopAPI+path+"?"+q.Encode(), &p); err != nil {
 			return err
 		}
-		for _, r := range p.Records {
-			if err := each(r); err != nil {
+		for _, raw := range p.Records {
+			var r T
+			if err := json.Unmarshal(raw, &r); err != nil {
+				return fmt.Errorf("whoop %s: %w", path, err)
+			}
+			if err := each(r, raw); err != nil {
 				return err
 			}
 		}
@@ -173,30 +232,41 @@ func (w *Whoop) Sync(ctx context.Context) error {
 	}
 	w.mark(ctx, "recovery")
 
+	// Sleep detail (stages, need, naps) was kept from schema v8 on: one
+	// walk of the whole history fills it in for the nights before.
 	sleepSince, sleepsSeen := w.since(ctx, "sleep"), map[string]bool{}
-	sleepErr := collect(ctx, w.C, "/v2/activity/sleep", sleepSince, func(s whoopSleep) error {
+	backfill := false
+	if _, err := st.SyncState(ctx, sleepDetailKey); errors.Is(err, store.ErrNotFound) {
+		sleepSince, backfill = sleepHistoryFrom, true
+	} else if err != nil {
+		return err
+	}
+	sleepErr := collectRaw(ctx, w.C, "/v2/activity/sleep", sleepSince, func(s whoopSleep, raw json.RawMessage) error {
 		sleepsSeen["whoop:"+s.ID] = true
-		if s.Nap || s.ScoreState != "SCORED" || s.Score == nil {
+		if w.In != nil {
+			if err := w.In.KeepRawJSON(ctx, raw, "whoop:sleep:"+s.ID); err != nil {
+				return err
+			}
+		}
+		if s.ScoreState != "SCORED" || s.Score == nil {
 			return nil
 		}
-		ss := s.Score.StageSummary
-		x := store.Sleep{ID: "whoop:" + s.ID, Date: s.End.In(loc).Format("2006-01-02"),
-			StartAt: s.Start.UnixMilli(), EndAt: s.End.UnixMilli(), AsleepS: int((ss.Light + ss.Deep + ss.REM) / 1000), Source: "whoop"}
-		if s.Score.Performance != nil {
-			p := int(*s.Score.Performance + 0.5)
-			x.Performance = &p
-		}
-		return st.PutSleep(ctx, x)
+		return st.PutSleep(ctx, sleepOf(s, loc))
 	})
 	if sleepErr != nil && !errors.Is(sleepErr, errIncomplete) {
 		return sleepErr
 	}
 	if sleepErr == nil {
 		if err := w.reconcile(ctx, sleepSince, sleepsSeen, st.SleepIDsSince, func(id string) error {
-			_, err := st.DeleteSleep(ctx, id)
+			_, _, err := st.DeleteSleep(ctx, id)
 			return err
 		}); err != nil {
 			return err
+		}
+		if backfill {
+			if err := st.SetSyncState(ctx, sleepDetailKey, strconv.FormatInt(time.Now().UnixMilli(), 10)); err != nil {
+				return err
+			}
 		}
 	}
 	w.mark(ctx, "sleep")

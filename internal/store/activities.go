@@ -429,28 +429,80 @@ func (s *Store) RecoveryRange(ctx context.Context, from, to string) ([]Recovery,
 	return out, rows.Err()
 }
 
-// Sleep is one sleep period.
+// Sleep is one sleep period: a night, or a nap.
 type Sleep struct {
 	ID          string `json:"id"`
-	Date        string `json:"date"`
+	Date        string `json:"date"` // wake-up date
 	StartAt     int64  `json:"start_at"`
 	EndAt       int64  `json:"end_at"`
 	AsleepS     int    `json:"asleep_s"`
 	Performance *int   `json:"performance"`
 	Source      string `json:"source"`
+	Nap         bool   `json:"nap"`
+
+	// Stages and time in bed, seconds. Zero before they were kept.
+	InBedS  int `json:"in_bed_s"`
+	AwakeS  int `json:"awake_s"`
+	LightS  int `json:"light_s"`
+	DeepS   int `json:"deep_s"`
+	REMS    int `json:"rem_s"`
+	NoDataS int `json:"no_data_s"`
+
+	Disturbances    *int       `json:"disturbances,omitempty"`
+	Cycles          *int       `json:"cycles,omitempty"`
+	RespiratoryRate *float64   `json:"respiratory_rate,omitempty"`
+	Efficiency      *int       `json:"efficiency,omitempty"`
+	Consistency     *int       `json:"consistency,omitempty"`
+	Need            *SleepNeed `json:"need,omitempty"`
 }
 
+// SleepNeed is Whoop's sleep need for a night, by where it comes from.
+type SleepNeed struct {
+	BaselineS int `json:"baseline_s"`
+	DebtS     int `json:"debt_s"`
+	StrainS   int `json:"strain_s"`
+	NapS      int `json:"nap_s"` // negative: a nap took some off
+}
+
+// TotalS is the whole need.
+func (n SleepNeed) TotalS() int { return n.BaselineS + n.DebtS + n.StrainS + n.NapS }
+
+const sleepCols = `id, date, start_at, end_at, asleep_s, performance, source, nap, in_bed_s, awake_s, light_s, deep_s,
+	rem_s, no_data_s, disturbances, cycles, respiratory_rate, efficiency, consistency, need_baseline_s, need_debt_s,
+	need_strain_s, need_nap_s`
+
 func (s *Store) PutSleep(ctx context.Context, x Sleep) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO sleep (id, date, start_at, end_at, asleep_s, performance, source)
-		VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET date=excluded.date, start_at=excluded.start_at,
-		end_at=excluded.end_at, asleep_s=excluded.asleep_s, performance=excluded.performance, source=excluded.source`,
-		x.ID, x.Date, x.StartAt, x.EndAt, x.AsleepS, x.Performance, x.Source)
+	var nb, nd, ns, nn *int
+	if n := x.Need; n != nil {
+		nb, nd, ns, nn = &n.BaselineS, &n.DebtS, &n.StrainS, &n.NapS
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO sleep (`+sleepCols+`)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET date=excluded.date,
+		start_at=excluded.start_at, end_at=excluded.end_at, asleep_s=excluded.asleep_s, performance=excluded.performance,
+		source=excluded.source, nap=excluded.nap, in_bed_s=excluded.in_bed_s, awake_s=excluded.awake_s,
+		light_s=excluded.light_s, deep_s=excluded.deep_s, rem_s=excluded.rem_s, no_data_s=excluded.no_data_s,
+		disturbances=excluded.disturbances, cycles=excluded.cycles, respiratory_rate=excluded.respiratory_rate,
+		efficiency=excluded.efficiency, consistency=excluded.consistency, need_baseline_s=excluded.need_baseline_s,
+		need_debt_s=excluded.need_debt_s, need_strain_s=excluded.need_strain_s, need_nap_s=excluded.need_nap_s`,
+		x.ID, x.Date, x.StartAt, x.EndAt, x.AsleepS, x.Performance, x.Source, x.Nap, x.InBedS, x.AwakeS, x.LightS,
+		x.DeepS, x.REMS, x.NoDataS, x.Disturbances, x.Cycles, x.RespiratoryRate, x.Efficiency, x.Consistency,
+		nb, nd, ns, nn)
 	return err
 }
 
+// SleepRange is the nights that ended between from and to: naps are left
+// out, so each date has its night.
 func (s *Store) SleepRange(ctx context.Context, from, to string) ([]Sleep, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, date, start_at, end_at, asleep_s, performance, source
-		FROM sleep WHERE date BETWEEN ? AND ? ORDER BY start_at`, from, to)
+	return s.sleeps(ctx, `SELECT `+sleepCols+` FROM sleep WHERE nap = 0 AND date BETWEEN ? AND ? ORDER BY start_at`, from, to)
+}
+
+// NapRange is the naps between from and to.
+func (s *Store) NapRange(ctx context.Context, from, to string) ([]Sleep, error) {
+	return s.sleeps(ctx, `SELECT `+sleepCols+` FROM sleep WHERE nap = 1 AND date BETWEEN ? AND ? ORDER BY start_at`, from, to)
+}
+
+func (s *Store) sleeps(ctx context.Context, q string, args ...any) ([]Sleep, error) {
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -458,17 +510,31 @@ func (s *Store) SleepRange(ctx context.Context, from, to string) ([]Sleep, error
 	out := []Sleep{}
 	for rows.Next() {
 		var x Sleep
-		var perf sql.NullInt64
-		if err := rows.Scan(&x.ID, &x.Date, &x.StartAt, &x.EndAt, &x.AsleepS, &perf, &x.Source); err != nil {
+		var perf, dist, cyc, eff, cons, nb, nd, ns, nn sql.NullInt64
+		var rr sql.NullFloat64
+		if err := rows.Scan(&x.ID, &x.Date, &x.StartAt, &x.EndAt, &x.AsleepS, &perf, &x.Source, &x.Nap, &x.InBedS,
+			&x.AwakeS, &x.LightS, &x.DeepS, &x.REMS, &x.NoDataS, &dist, &cyc, &rr, &eff, &cons, &nb, &nd, &ns, &nn); err != nil {
 			return nil, err
 		}
-		if perf.Valid {
-			v := int(perf.Int64)
-			x.Performance = &v
+		x.Performance, x.Disturbances, x.Cycles = intOf(perf), intOf(dist), intOf(cyc)
+		x.Efficiency, x.Consistency = intOf(eff), intOf(cons)
+		if rr.Valid {
+			x.RespiratoryRate = &rr.Float64
+		}
+		if nb.Valid {
+			x.Need = &SleepNeed{BaselineS: int(nb.Int64), DebtS: int(nd.Int64), StrainS: int(ns.Int64), NapS: int(nn.Int64)}
 		}
 		out = append(out, x)
 	}
 	return out, rows.Err()
+}
+
+func intOf(v sql.NullInt64) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int64)
+	return &n
 }
 
 // ---- OAuth tokens -------------------------------------------------------------------
@@ -549,14 +615,13 @@ func (s *Store) ClearSession(ctx context.Context, activityID string) error {
 }
 
 // DeleteSleep removes a sleep and returns the date it was filed under ("" if
-// there was none).
-func (s *Store) DeleteSleep(ctx context.Context, id string) (string, error) {
-	var date string
-	err := s.db.QueryRowContext(ctx, `DELETE FROM sleep WHERE id = ? RETURNING date`, id).Scan(&date)
+// there was none), and whether it was a nap.
+func (s *Store) DeleteSleep(ctx context.Context, id string) (date string, nap bool, err error) {
+	err = s.db.QueryRowContext(ctx, `DELETE FROM sleep WHERE id = ? RETURNING date, nap`, id).Scan(&date, &nap)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return "", false, nil
 	}
-	return date, err
+	return date, nap, err
 }
 
 // SleepDate is the date a sleep is filed under, or "" if it isn't stored.

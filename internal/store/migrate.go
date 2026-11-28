@@ -239,6 +239,25 @@ var migrations = []string{
 	);
 	CREATE INDEX checkins_workout ON checkins(workout_at);
 	`,
+	// Everything Whoop scores for a sleep, and naps (kept, but not a night).
+	`
+	ALTER TABLE sleep ADD COLUMN nap              INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN in_bed_s         INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN awake_s          INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN light_s          INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN deep_s           INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN rem_s            INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN no_data_s        INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sleep ADD COLUMN disturbances     INTEGER;
+	ALTER TABLE sleep ADD COLUMN cycles           INTEGER;
+	ALTER TABLE sleep ADD COLUMN respiratory_rate REAL;   -- breaths a minute
+	ALTER TABLE sleep ADD COLUMN efficiency       INTEGER; -- % of time in bed asleep
+	ALTER TABLE sleep ADD COLUMN consistency      INTEGER; -- Whoop sleep consistency %
+	ALTER TABLE sleep ADD COLUMN need_baseline_s  INTEGER; -- Whoop sleep need, by part
+	ALTER TABLE sleep ADD COLUMN need_debt_s      INTEGER;
+	ALTER TABLE sleep ADD COLUMN need_strain_s    INTEGER;
+	ALTER TABLE sleep ADD COLUMN need_nap_s       INTEGER;
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {
