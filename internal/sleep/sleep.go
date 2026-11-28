@@ -84,6 +84,8 @@ type Trends struct {
 	Evenings       []EveningCompare `json:"evenings"`
 	EveningsLogged int              `json:"evenings_logged"`
 	MinEvening     int              `json:"min_evening"`
+	// How the bedtime's estimated need compared with what Whoop scored.
+	Estimates EstimateCheck `json:"estimates"`
 }
 
 // ShortNightS is how far under baseline need a night must be to count as
@@ -160,7 +162,14 @@ func Build(in Input) Trends {
 	}
 	t.Bed = clock(beds, 12*60)
 	t.Wake = clock(wakes, 0)
-	t.Debt = debt(nights)
+	// The seven nights up to last night, as the bedtime counts them, so the
+	// screen and tonight's advice never show two different debts.
+	// After a gap without the strap, though, old nights don't count.
+	upto := in.Today
+	if t.Last != nil && t.Last.Date >= today.AddDate(0, 0, -1).Format("2006-01-02") {
+		upto = t.Last.Date
+	}
+	t.Debt = debt(nights, upto, loc)
 	t.ShortNights = shortNights(nights, in.Recovery)
 	t.HeavyDays = heavyDays(nights, in.Load, loc)
 	t.Evenings, t.EveningsLogged = evenings(in.Evenings, nights, in.Recovery, in.Workouts, loc)
@@ -200,13 +209,18 @@ func clock(ms []int, offset int) Clock {
 		SpreadMin: int(math.Round(median(dev))), Nights: len(ms)}
 }
 
-// debt sums the last seven nights' shortfall against baseline need; a long
-// night pays some back, and the total never goes below zero.
-func debt(nights []store.Sleep) Debt {
+// debt sums the shortfall against baseline need of the nights that woke in
+// the seven days to upto; a long night pays some back, and the total never
+// goes below zero. A gap isn't filled with nights from weeks before.
+func debt(nights []store.Sleep, upto string, loc *time.Location) Debt {
 	var d Debt
-	for i := len(nights) - 1; i >= 0 && i >= len(nights)-7; i-- {
-		x := nights[i]
-		if x.Need == nil || x.Need.BaselineS == 0 {
+	end, err := time.ParseInLocation("2006-01-02", upto, loc)
+	if err != nil {
+		return d
+	}
+	from := end.AddDate(0, 0, -6).Format("2006-01-02")
+	for _, x := range nights {
+		if x.Date < from || x.Date > upto || x.Need == nil || x.Need.BaselineS == 0 {
 			continue
 		}
 		d.S += x.Need.BaselineS - x.AsleepS

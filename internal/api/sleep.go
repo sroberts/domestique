@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"domestique/internal/load"
@@ -15,6 +18,7 @@ func (a *API) registerSleep(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sleep", a.getSleep)
 	mux.HandleFunc("GET /v1/sleep/trends", a.getSleepTrends)
 	a.registerEvenings(mux)
+	a.registerBedtime(mux)
 }
 
 // sleepYear is how far back the comparisons look: enough nights to say
@@ -24,18 +28,18 @@ const sleepYear = 365
 // getSleep lists nights and naps that ended between from and to (default
 // the last 14 days; at most 400).
 func (a *API) getSleep(w http.ResponseWriter, r *http.Request) {
-	now := time.Now().In(a.loc())
-	to := now.Format("2006-01-02")
-	from := now.AddDate(0, 0, -13).Format("2006-01-02")
 	q := r.URL.Query()
-	if v := q.Get("to"); v != "" {
-		to = v
+	to := q.Get("to")
+	if to == "" {
+		to = time.Now().In(a.loc()).Format("2006-01-02")
 	}
-	if v := q.Get("from"); v != "" {
-		from = v
+	t, err2 := time.Parse("2006-01-02", to)
+	// From defaults to 13 days before to, not before today.
+	from := q.Get("from")
+	if from == "" && err2 == nil {
+		from = t.AddDate(0, 0, -13).Format("2006-01-02")
 	}
 	f, err1 := time.Parse("2006-01-02", from)
-	t, err2 := time.Parse("2006-01-02", to)
 	if err1 != nil || err2 != nil || t.Before(f) || t.Sub(f) > 400*24*time.Hour {
 		writeErr(w, http.StatusBadRequest, "from and to must be dates (YYYY-MM-DD), from first, at most 400 days apart")
 		return
@@ -103,8 +107,21 @@ func (a *API) getSleepTrends(w http.ResponseWriter, r *http.Request) {
 	for _, x := range acts {
 		workouts = append(workouts, sleep.Workout{EndAt: x.StartAt + int64(x.ElapsedS)*1000})
 	}
-	writeJSON(w, http.StatusOK, sleep.Build(sleep.Input{Today: today, Weeks: weeks, Nights: nights, Naps: naps,
-		Recovery: rec, Load: days, Evenings: evs, Workouts: workouts, Loc: loc}))
+	kept, err := a.Store.SyncStatePrefix(ctx, estimateKey)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	var est []sleep.Estimate
+	for k, v := range kept {
+		if n, err := strconv.Atoi(v); err == nil {
+			est = append(est, sleep.Estimate{Date: strings.TrimPrefix(k, estimateKey), NeedS: n})
+		}
+	}
+	t := sleep.Build(sleep.Input{Today: today, Weeks: weeks, Nights: nights, Naps: naps,
+		Recovery: rec, Load: days, Evenings: evs, Workouts: workouts, Loc: loc})
+	t.Estimates = sleep.CheckEstimates(est, nights, loc)
+	writeJSON(w, http.StatusOK, t)
 }
 
 func (a *API) registerEvenings(mux *http.ServeMux) {
@@ -190,4 +207,113 @@ func (a *API) deleteEvening(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) registerBedtime(mux *http.ServeMux) {
+	mux.HandleFunc("GET /v1/bedtime", a.getBedtime)
+	mux.HandleFunc("GET /v1/wake-times", a.getWakeTimes)
+	mux.HandleFunc("PUT /v1/wake-times", a.putWakeTimes)
+}
+
+// estimateKey keeps each evening's estimated need, to check against the
+// need Whoop scores the next morning.
+const estimateKey = "bedtime:"
+
+func (a *API) wakeTimes(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	if v, err := a.Store.Athlete(ctx, "wake_times"); err == nil {
+		_ = json.Unmarshal([]byte(v), &out)
+	}
+	return out
+}
+
+// getBedtime is tonight's advice for the evening of date (the app asks
+// from 16:00, and until 04:00 for the evening before). 204 when there's
+// nothing to go on yet.
+func (a *API) getBedtime(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	loc := a.loc()
+	date := r.URL.Query().Get("date")
+	eve, err := time.ParseInLocation("2006-01-02", date, loc)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "date must be YYYY-MM-DD")
+		return
+	}
+	nights, err := a.Store.SleepRange(ctx, eve.AddDate(0, 0, -21).Format("2006-01-02"), date)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	days, err := load.Daily(ctx, a.Store, eve, eve, loc)
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	var today *load.Day
+	for i := range days {
+		if days[i].Date == date {
+			today = &days[i]
+		}
+	}
+	b := sleep.PlanBedtime(sleep.BedtimeInput{Date: date, Nights: nights, Today: today, Wake: a.wakeTimes(ctx), Loc: loc})
+	if b == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	// Keep the estimate: the last one asked for each evening. Only for
+	// tonight or last night (the card's 16:00 to 04:00 window): a GET for any
+	// other date mustn't add a key or rewrite a past evening's estimate.
+	now := time.Now().In(loc)
+	if date == now.Format("2006-01-02") || date == now.AddDate(0, 0, -1).Format("2006-01-02") {
+		_ = a.Store.SetSyncState(ctx, estimateKey+date, strconv.Itoa(b.NeedS))
+	}
+	writeJSON(w, http.StatusOK, b)
+}
+
+func (a *API) getWakeTimes(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"wake_times": a.wakeTimes(r.Context()), "days": sleep.Weekdays})
+}
+
+// putWakeTimes sets the wake time for any weekday ("mon": "06:30"); an
+// empty value clears it, back to the usual from recent nights.
+func (a *API) putWakeTimes(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		WakeTimes map[string]string `json:"wake_times"`
+	}
+	if !readJSON(w, r, &body) {
+		return
+	}
+	ok := map[string]bool{}
+	for _, d := range sleep.Weekdays {
+		ok[d] = true
+	}
+	out := map[string]string{}
+	for d, t := range body.WakeTimes {
+		if !ok[d] {
+			writeErr(w, http.StatusBadRequest, "unknown day "+strconv.Quote(d))
+			return
+		}
+		if t == "" {
+			continue
+		}
+		c, err := time.Parse("15:04", t)
+		if err != nil || len(t) != 5 || c.Hour() < 3 || c.Hour() > 12 {
+			writeErr(w, http.StatusBadRequest, "wake times are HH:MM, between 03:00 and 12:59")
+			return
+		}
+		out[d] = t
+	}
+	ctx := r.Context()
+	var err error
+	if len(out) == 0 {
+		err = a.Store.DeleteAthlete(ctx, "wake_times")
+	} else {
+		v, _ := json.Marshal(out)
+		err = a.Store.SetAthlete(ctx, "wake_times", string(v))
+	}
+	if err != nil {
+		a.fail(w, r, err)
+		return
+	}
+	a.getWakeTimes(w, r)
 }

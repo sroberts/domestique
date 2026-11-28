@@ -75,6 +75,42 @@
     }
   }
 
+  // Wake times, by weekday: the bedtime counts back from these. Blank is
+  // the usual from recent nights.
+  const WAKE_DAYS = [
+    ['mon', 'Monday'],
+    ['tue', 'Tuesday'],
+    ['wed', 'Wednesday'],
+    ['thu', 'Thursday'],
+    ['fri', 'Friday'],
+    ['sat', 'Saturday'],
+    ['sun', 'Sunday'],
+  ] as const;
+  let wake = $state<Record<string, string> | null>(null);
+  let savingWake = $state(false);
+  let wakeMsg = $state('');
+  async function loadWake() {
+    try {
+      wake = (await getJSON<{ wake_times: Record<string, string> }>('/v1/wake-times')).wake_times;
+    } catch {
+      /* offline: section shows a note */
+    }
+  }
+  async function saveWake(e: SubmitEvent) {
+    e.preventDefault();
+    savingWake = true;
+    wakeMsg = '';
+    try {
+      await putJSON('/v1/wake-times', { wake_times: $state.snapshot(wake) });
+      await loadWake();
+      wakeMsg = 'Saved.';
+    } catch (err) {
+      wakeMsg = err instanceof AuthError ? 'Sign in again to save.' : `Couldn't save: ${(err as Error).message}`;
+    } finally {
+      savingWake = false;
+    }
+  }
+
   async function saveAthlete(e: SubmitEvent) {
     e.preventDefault();
     savingAth = true;
@@ -163,6 +199,7 @@
     void loadMe();
     void loadConnections();
     void loadAthlete();
+    void loadWake();
     void loadJobs();
     return () => poll && clearInterval(poll);
   });
@@ -224,6 +261,27 @@
         <div class="thr-act">
           <button class="btn" type="submit" disabled={savingAth}>{savingAth ? 'Rescoring…' : 'Save'}</button>
           {#if athMsg}<span class="small" role="status">{athMsg}</span>{/if}
+        </div>
+      </form>
+    {:else}
+      <p class="muted small">Needs a connection to the Mac Mini.</p>
+    {/if}
+  </section>
+
+  <section class="block" aria-labelledby="wake-h">
+    <h2 id="wake-h">Wake times</h2>
+    <p class="muted small">Today's bedtime counts back from when you get up: Monday is the morning you wake on Monday. Leave a day blank to use your usual from recent nights.</p>
+    {#if wake}
+      <form class="thr wake" onsubmit={saveWake}>
+        {#each WAKE_DAYS as [k, name] (k)}
+          <label>
+            <span class="label">{name}</span>
+            <span class="field"><input class="mono" type="time" min="03:00" max="12:59" bind:value={wake[k]} /></span>
+          </label>
+        {/each}
+        <div class="thr-act">
+          <button class="btn" type="submit" disabled={savingWake}>{savingWake ? 'Saving…' : 'Save wake times'}</button>
+          {#if wakeMsg}<span class="small" role="status">{wakeMsg}</span>{/if}
         </div>
       </form>
     {:else}
@@ -513,6 +571,17 @@
   .unit {
     color: var(--text-muted);
     font-size: var(--size-small);
+  }
+  .wake {
+    grid-template-columns: repeat(2, minmax(0, 11rem));
+    gap: var(--space-3) var(--space-4);
+  }
+  .wake .field,
+  .wake .field input {
+    width: 100%;
+  }
+  .wake .thr-act {
+    grid-column: 1 / -1;
   }
   .thr-act {
     display: flex;

@@ -168,7 +168,9 @@
   onDestroy(() => map?.remove());
 </script>
 
-<div class="map" bind:this={el} role="img" aria-label={world ? `Map of the route in Zwift's ${world.name}` : 'Map of the route'}>
+<!-- A labelled region, not an image: the map holds focusable controls
+     (zoom, attribution), and an image can't contain those. -->
+<div class="map" bind:this={el} role="region" aria-label={world ? `Map of the route in Zwift's ${world.name}` : 'Map of the route'}>
   {#if world}
     <p class="world"><span class="label">Zwift</span> {world.name}</p>
   {/if}

@@ -19,13 +19,30 @@
     { weeks: 4, label: '4 weeks' },
     { weeks: 12, label: '12 weeks' },
   ];
-  let weeks = $state(2);
+  // The range is remembered on this device; it's only a view.
+  let weeks = $state(readWeeks());
+  function readWeeks(): number {
+    try {
+      const v = Number(localStorage.getItem('domestique:sleep-weeks'));
+      return [2, 4, 12].includes(v) ? v : 2;
+    } catch {
+      return 2;
+    }
+  }
+  /** The night picked on either chart; both show it. */
+  let picked = $state<number | null>(null);
   let data = $state<SleepTrends | null>(null);
   let stale = $state<number | null>(null);
   let failed = $state(false);
 
   $effect(() => {
     const w = weeks;
+    picked = null;
+    try {
+      localStorage.setItem('domestique:sleep-weeks', String(w));
+    } catch {
+      /* private mode: fine */
+    }
     fetchSleep(w).then((r) => {
       if (r.data) data = r.data;
       stale = r.stale;
@@ -40,9 +57,11 @@
   let needWhy = $derived.by(() => {
     const n = last?.need;
     if (!n) return '';
-    const parts = [`Your usual need is ${hm(n.baseline_s)}`];
-    if (n.debt_s >= 300) parts.push(`plus ${hm(n.debt_s)} for recent short nights`);
-    if (n.strain_s >= 300) parts.push(`${n.debt_s >= 300 ? '' : 'plus '}${hm(n.strain_s)} for training`);
+    // Whoop's own split of tonight's need; its "debt" part isn't the
+    // screen's seven-night debt below, so it's named as Whoop's.
+    const parts = [`Whoop's need: your usual ${hm(n.baseline_s)}`];
+    if (n.debt_s >= 300) parts.push(`plus ${hm(n.debt_s)} it adds for recent short nights`);
+    if (n.strain_s >= 300) parts.push(`${hm(n.strain_s)} for training`);
     if (n.nap_s <= -300) parts.push(`less ${hm(-n.nap_s)} for a nap`);
     return `${parts.join(', ')}.`;
   });
@@ -75,7 +94,7 @@
     </section>
   {:else if data && last}
     <p class="mono meta">
-      {[`Night to ${dayOf(last.date)}`, `${time(last.start_at)}–${time(last.end_at)}`, last.performance != null ? `${last.performance}% of need (Whoop)` : ''].filter(Boolean).join(' · ')}
+      {[`Night to ${dayOf(last.date)}`, `${time(last.start_at)}–${time(last.end_at)}`, last.performance != null ? `Whoop sleep performance ${last.performance}%` : ''].filter(Boolean).join(' · ')}
     </p>
 
     <section class="block night" aria-labelledby="night-h">
@@ -83,7 +102,7 @@
       <p class="headline">
         <span class="num big">{hm(last.asleep_s)}</span>
         <span class="unit">asleep</span>
-        {#if need}<span class="num of">of {hm(need)}</span><span class="unit">needed</span>{/if}
+        {#if need}<span class="num of">of {hm(need)}</span><span class="unit">Whoop's need</span>{/if}
       </p>
       {#if need && baseline}
         <p class="small muted need-why">{needWhy}</p>
@@ -105,6 +124,11 @@
         {/if}
       </dl>
       {/if}
+      {#if data.estimates.nights >= 3}
+        <p class="small muted est">
+          The bedtime's estimate of need has run {Math.abs(data.estimates.off_s) < 300 ? 'within five minutes of' : `${hm(Math.abs(data.estimates.off_s))} ${data.estimates.off_s > 0 ? 'under' : 'over'}`} what Whoop scored, over {plural(data.estimates.nights, 'night')}.
+        </p>
+      {/if}
       {#each data.last_naps as nap (nap.id)}
         <p class="small nap"><span class="label">Nap</span> {time(nap.start_at)}–{time(nap.end_at)} · {hm(nap.asleep_s)} asleep</p>
       {/each}
@@ -122,9 +146,9 @@
       <section class="block" aria-labelledby="asleep-h">
         <h2 id="asleep-h" class="block-h">
           Asleep against need
-          <span class="mono muted">{hm(data.avg_asleep_s)} a night{#if data.avg_need_s}, {hm(data.avg_need_s)} needed{/if}</span>
+          <span class="mono muted">{hm(data.avg_asleep_s)} a night{#if data.avg_need_s}, Whoop's need {hm(data.avg_need_s)}{/if}</span>
         </h2>
-        <SleepNights nights={data.nights} />
+        <SleepNights nights={data.nights} bind:selected={picked} />
       </section>
 
       <section class="block" aria-labelledby="window-h">
@@ -133,7 +157,7 @@
           <div><dt class="label">Usual bedtime</dt><dd><span class="num">{data.bed.median}</span><span class="mono muted usual">give or take {data.bed.spread_min} min</span></dd></div>
           <div><dt class="label">Usual wake</dt><dd><span class="num">{data.wake.median}</span><span class="mono muted usual">give or take {data.wake.spread_min} min</span></dd></div>
         </dl>
-        <SleepWindow nights={data.nights} bed={data.bed.median} wake={data.wake.median} />
+        <SleepWindow nights={data.nights} bed={data.bed.median} wake={data.wake.median} bind:selected={picked} />
       </section>
     {/if}
 
@@ -142,8 +166,8 @@
       {#if data.debt.nights === 0}
         <p class="small muted">Whoop hasn't scored a sleep need for these nights yet.</p>
       {:else if data.debt.s > 0}
-        <p class="headline"><span class="num big">{hm(data.debt.s)}</span><span class="unit">short</span></p>
-        <p class="small muted">{baseline ? `Against your usual need of ${hm(baseline)} a night` : 'Against your usual need'}, over {plural(data.debt.nights, 'night')}. A long night pays some back.</p>
+        <p class="headline"><span class="num debt">{hm(data.debt.s)}</span><span class="unit">short</span></p>
+        <p class="small muted">{baseline ? `Against your usual need of ${hm(baseline)} a night` : 'Against your usual need'}, over {plural(data.debt.nights, 'night')}. A long night pays some back. Tonight's bedtime adds a third of it, at most an hour.</p>
       {:else}
         <p class="small">Nothing owed: the last {plural(data.debt.nights, 'night')} met your usual need.</p>
       {/if}
@@ -168,9 +192,9 @@
           <dt>Time asleep after a heavy training day</dt>
           {#if data.heavy_days.ready}
             <dd>
-              <span><span class="num">{data.heavy_days.with.median.toFixed(1)}</span><span class="unit">h</span> <span class="mono muted">{plural(data.heavy_days.with.nights, 'night')}</span></span>
+              <span><span class="num">{hm(data.heavy_days.with.median * 3600)}</span> <span class="mono muted">{plural(data.heavy_days.with.nights, 'night')}</span></span>
               <span class="vs muted">against</span>
-              <span><span class="num">{data.heavy_days.without.median.toFixed(1)}</span><span class="unit">h</span> <span class="mono muted">{plural(data.heavy_days.without.nights, 'other night')}</span></span>
+              <span><span class="num">{hm(data.heavy_days.without.median * 3600)}</span> <span class="mono muted">{plural(data.heavy_days.without.nights, 'other night')}</span></span>
             </dd>
           {:else}
             <dd class="small muted">Shows once there are 5 nights each way ({sofar(data.heavy_days)}).</dd>
@@ -185,7 +209,7 @@
     <section class="block" aria-labelledby="ev-h">
       <h2 id="ev-h" class="block-h">Evenings <span class="mono muted">{plural(data.evenings_logged, 'logged evening')}, last year</span></h2>
       {#if data.evenings_logged === 0}
-        <p class="small muted">Log your evenings on Today, from 6 pm. Each thing shows here once it has {data.min_evening} logged evenings with it and {data.min_evening} without.</p>
+        <p class="small muted">Log your evenings on Today, from 18:00. Each thing shows here once it has {data.min_evening} logged evenings with it and {data.min_evening} without.</p>
       {:else}
         {#each readyEvenings as c (c.key)}
           <table class="ev">
@@ -194,7 +218,7 @@
               <tr><th scope="col"><span class="visually-hidden">Measure</span></th><th scope="col">With <span class="mono">{c.with.nights}</span></th><th scope="col">Without <span class="mono">{c.without.nights}</span></th></tr>
             </thead>
             <tbody>
-              <tr><th scope="row">Asleep</th><td><span class="num">{c.with.asleep_h.toFixed(1)}</span><span class="unit">h</span></td><td><span class="num">{c.without.asleep_h.toFixed(1)}</span><span class="unit">h</span></td></tr>
+              <tr><th scope="row">Asleep</th><td><span class="num">{hm(c.with.asleep_h * 3600)}</span></td><td><span class="num">{hm(c.without.asleep_h * 3600)}</span></td></tr>
               {#if c.with.efficiency != null && c.without.efficiency != null}
                 <tr><th scope="row">Efficiency</th><td><span class="num">{c.with.efficiency}</span><span class="unit">%</span></td><td><span class="num">{c.without.efficiency}</span><span class="unit">%</span></td></tr>
               {/if}
@@ -206,7 +230,7 @@
         {/each}
         {#if waiting.length}
           <p class="small muted gathering">
-            Still gathering ({data.min_evening} logged evenings each way): {waiting.map((c) => `${c.label.toLowerCase()} ${Math.min(c.with.nights, c.without.nights)} of ${data!.min_evening}`).join(', ')}.
+            Still gathering ({data.min_evening} logged evenings each way): {waiting.map((c) => `${c.label.toLowerCase()} ${c.with.nights} with, ${c.without.nights} without`).join('; ')}.
           </p>
         {/if}
         <p class="small muted foot">Only evenings you logged count; one you didn't is unknown, not clear. Late training is filled in from your workouts: one ending within three hours of bed.</p>
@@ -220,6 +244,11 @@
     max-width: var(--page-list);
     margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + var(--space-2)) var(--gutter) 0;
+  }
+  @media (min-width: 900px) {
+    .page {
+      max-width: var(--page-wide);
+    }
   }
   .top {
     display: flex;
@@ -283,6 +312,10 @@
     font-size: var(--size-target);
     line-height: 0.9;
   }
+  .debt {
+    font-size: var(--size-stat);
+    line-height: 1;
+  }
   .of {
     margin-left: var(--space-2);
     font-size: var(--size-stat);
@@ -330,6 +363,10 @@
   .usual {
     flex-basis: 100%;
     font-size: var(--size-label);
+  }
+  .est {
+    margin-top: var(--space-3);
+    max-width: 62ch;
   }
   .nap {
     margin-top: var(--space-3);

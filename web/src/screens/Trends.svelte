@@ -147,7 +147,7 @@
         <a class="sleep-row" href="/sleep" use:link>
           <span><span class="num">{hm(sleep.avg_asleep_s)}</span><span class="unit">a night</span></span>
           {#if sleep.avg_need_s}<span><span class="num">{hm(sleep.avg_need_s)}</span><span class="unit">needed</span></span>{/if}
-          {#if sleep.debt.nights}<span><span class="num">{hm(sleep.debt.s)}</span><span class="unit">short this week</span></span>{/if}
+          {#if sleep.debt.nights}<span><span class="num">{hm(sleep.debt.s)}</span><span class="unit">short, last 7 nights</span></span>{/if}
           <span class="sleep-go muted">Sleep <ChevronRight size={16} aria-hidden="true" /></span>
         </a>
       </section>

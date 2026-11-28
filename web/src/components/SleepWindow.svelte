@@ -5,10 +5,10 @@
   import { day } from '../lib/format';
   import type { SleepNight } from '../lib/types';
 
-  let { nights, bed, wake }: { nights: SleepNight[]; bed: string; wake: string } = $props();
+  let { nights, bed, wake, selected = $bindable(null) }: { nights: SleepNight[]; bed: string; wake: string; selected?: number | null } = $props();
   let width = $state(0);
   const H = 176;
-  const PAD = { top: 10, right: 4, bottom: 22, left: 40 };
+  const PAD = { top: 10, right: 16, bottom: 22, left: 40 }; // room for the last date
 
   /** Minutes after noon: bedtime before noon is the small hours. */
   function fromNoon(t: string, isWake: boolean): number {
@@ -30,9 +30,28 @@
     return out;
   });
   const clockOf = (m: number) => `${String((Math.floor(m / 60) + 12) % 24).padStart(2, '0')}:00`;
-  let hover = $state<number | null>(null);
+  // The night picked, shared with the other chart on the screen.
+  let hover = $derived(selected);
   let cur = $derived(nights[hover ?? nights.length - 1]);
   const dayOf = (d: string) => day(new Date(`${d}T12:00`).getTime());
+  // A tap keeps its night; only a mouse moving away lets go.
+  const enter = (e: PointerEvent, i: number) => {
+    if (e.pointerType === 'mouse') selected = i;
+  };
+  const leave = (e: PointerEvent) => {
+    if (e.pointerType === 'mouse') selected = null;
+  };
+  // Arrow keys step through the nights; Escape goes back to last night.
+  function key(e: KeyboardEvent) {
+    const last = nights.length - 1;
+    const cur = selected ?? last;
+    if (e.key === 'ArrowLeft') selected = Math.max(0, cur - 1);
+    else if (e.key === 'ArrowRight') selected = Math.min(last, cur + 1);
+    else if (e.key === 'Home') selected = 0;
+    else if (e.key === 'End' || e.key === 'Escape') selected = null;
+    else return;
+    e.preventDefault();
+  }
   let every = $derived(Math.max(1, Math.ceil(nights.length / 6)));
   let typical = $derived(bed && wake ? { from: fromNoon(bed, false), to: fromNoon(wake, true) } : null);
 </script>
@@ -45,7 +64,11 @@
     </p>
   {/if}
   {#if width > 0 && rows.length}
-    <svg {width} height={H} role="img" aria-label={`Bed and wake times for ${nights.length} nights; usually ${bed} to ${wake}`}>
+    <!-- Stepped like a slider: each night is a value the readout above speaks. -->
+    <svg {width} height={H} role="slider" tabindex="0" onkeydown={key}
+      aria-label={`Bed and wake times for ${nights.length} nights; usually ${bed} to ${wake}`}
+      aria-valuemin={0} aria-valuemax={nights.length - 1} aria-valuenow={hover ?? nights.length - 1}
+      aria-valuetext={cur ? `${dayOf(cur.date)}: bed ${cur.bed}, up ${cur.wake}` : ''}>
       {#each hours as m (m)}
         <line class="grid" x1={PAD.left} x2={width - PAD.right} y1={y(m)} y2={y(m)} />
         <text class="axis" x={PAD.left - 6} y={y(m) + 4} text-anchor="end">{clockOf(m)}</text>
@@ -59,12 +82,13 @@
         <rect class="inbed" class:dim={hover != null && hover !== i} x={cx - bw / 2} width={bw} y={y(r.from)}
           height={Math.max(2, y(r.to) - y(r.from))} rx={Math.min(3, bw / 2)} />
         <rect class="hit" x={PAD.left + slot * i} width={slot} y={PAD.top} height={H - PAD.top - PAD.bottom}
-          role="presentation" onpointerenter={() => (hover = i)} onpointerdown={() => (hover = i)} onpointerleave={() => (hover = null)} />
+          role="presentation" onpointerenter={(e) => enter(e, i)} onpointerdown={() => (selected = i)} onpointerleave={leave} />
         {#if (nights.length - 1 - i) % every === 0}
           <text class="axis" x={cx} y={H - 6} text-anchor="middle">{new Date(`${r.n.date}T12:00`).toLocaleString('en-GB', { day: 'numeric', month: 'short' })}</text>
         {/if}
       {/each}
     </svg>
+    {#if typical}<p class="key-usual"><span class="sw" aria-hidden="true"></span>Shaded: your usual bed to wake, {bed}–{wake}</p>{/if}
   {/if}
 </div>
 
@@ -81,6 +105,13 @@
     color: var(--text-muted);
     margin-right: var(--space-2);
   }
+  svg:focus:not(:focus-visible) {
+    outline: none; /* a tap picks a night; only the keyboard gets the ring */
+  }
+  svg:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 4px;
+  }
   svg {
     display: block;
     overflow: visible;
@@ -95,7 +126,22 @@
     fill: var(--text-muted);
   }
   .usual {
-    fill: var(--band);
+    fill: var(--band-active);
+  }
+  .key-usual {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
+  .key-usual .sw {
+    width: 0.875rem;
+    height: 0.625rem;
+    border-radius: 2px;
+    background: var(--band-active);
+    border: 1px solid var(--line-strong);
   }
   .inbed {
     fill: var(--sleep-deep);

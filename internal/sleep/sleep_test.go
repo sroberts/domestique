@@ -58,6 +58,11 @@ func TestDebt(t *testing.T) {
 	if long.Debt.S != 0 {
 		t.Fatalf("long nights left debt %d, want 0", long.Debt.S)
 	}
+	// Ten days without the strap: nights from before the gap don't count.
+	gap := Build(Input{Today: day(18), Weeks: 4, Nights: ns, Loc: utc})
+	if gap.Debt.S != 0 || gap.Debt.Nights != 0 {
+		t.Fatalf("debt after a gap %+v, want none", gap.Debt)
+	}
 }
 
 // Comparisons wait for five nights a side, and pair a night with the
@@ -186,5 +191,16 @@ func TestLateTraining(t *testing.T) {
 		if got.Key != "late_training" || (got.With.Nights == 1) != c.late {
 			t.Errorf("ended %s before bed: %+v, want late=%v", bed.Sub(c.end), got, c.late)
 		}
+	}
+}
+
+// After midnight, before tonight is scored, the screen's debt is the one
+// tonight's bedtime counts: the seven nights up to last night.
+func TestDebtAgreesWithBedtime(t *testing.T) {
+	ns := nightsWaking(14, "06:30", 6.5) // 1 h short a night
+	screen := Build(Input{Today: day(15), Weeks: 2, Nights: ns, Loc: utc}).Debt
+	b := PlanBedtime(BedtimeInput{Date: day(14), Nights: ns, Loc: utc})
+	if screen.S != 7*3600 || screen.Nights != 7 || b.Why != "7h 00 short this week." {
+		t.Fatalf("screen %+v, bedtime %q", screen, b.Why)
 	}
 }

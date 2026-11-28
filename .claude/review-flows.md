@@ -42,3 +42,20 @@ sessions. Each step lists its expected outcome.
 ## 7. Offline
 1. Load `/` online, then go offline and reload. → App shell loads from the service worker; "No connection. Showing today as of …" notice; status reads "Offline".
 2. Start a session and log a set offline. → Set is kept; status shows it waiting; going back online syncs it.
+
+## 8. Sleep screen
+1. On Today, tap last night's sleep figure (link with a chevron, shown when there's a sleep for today). → `/sleep`, Back reads "Today".
+2. → Header "Night to <day> · bed–wake · N% of need (Whoop)"; time asleep "of X needed" with why need is what it is; stage bar (awake, light, deep, REM) with each stage named and timed, deep and REM against "usual"; efficiency, breathing, disturbances, cycles.
+3. Tap "4 weeks", then "12 weeks". → Asleep-against-need bars with a need tick per night; Bed and wake chart over the usual window with usual bedtime/wake "give or take"; hover or tap a night reads it out.
+4. → Sleep debt for the last 7 nights; Sleep and recovery comparisons (or "Shows once there are 5 nights each way"); Evenings section; no horizontal scroll at 390.
+5. Open `/trends`. → A "Sleep, last 2 weeks" row (a night, needed, short this week) that opens `/sleep`.
+
+## 9. Evening log
+1. On Today between 18:00 and 12:00, scroll to "Tonight" (or "Last night" after 04:00). → Six chips and "Nothing tonight".
+2. Tap two chips. → Each toggles and saves ("Logged"); reload keeps them.
+3. Tap "Nothing tonight". → Chips clear and it's logged as a clear evening.
+4. Open `/sleep`. → Evenings section counts logged evenings; items with 8 each way show a with/without table, the rest a "Still gathering" line.
+
+## 10. Bedtime and wake times
+1. On Today between 16:00 and 04:00. → "Bed by HH:MM to wake at HH:MM", why, and sleep/time in bed; after the bedtime has passed, "Gone by …" and the time left before waking.
+2. Open `/settings`, Wake times: set Monday to 06:15 and Save. → "Saved."; `GET /v1/wake-times` has mon 06:15; clearing it and saving removes it.
