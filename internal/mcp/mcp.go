@@ -230,8 +230,11 @@ var tools = []tool{
 		InputSchema: obj(map[string]any{"date": str("The evening, YYYY-MM-DD (its night ends the next day)")}, "date"),
 		Annotations: readOnly,
 		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
-			d, _ := a["date"].(string)
-			return s.get(r, "/v1/evenings/"+url.PathEscape(d), nil)
+			d, err := dateArg(a)
+			if err != nil {
+				return nil, err
+			}
+			return s.get(r, "/v1/evenings/"+d, nil)
 		},
 	},
 	{
@@ -245,12 +248,15 @@ var tools = []tool{
 				"items": map[string]any{"type": "string", "enum": eveningKeys()}},
 		}, "date", "items"),
 		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
-			d, _ := a["date"].(string)
+			d, err := dateArg(a)
+			if err != nil {
+				return nil, err
+			}
 			items, _ := a["items"].([]any)
 			if items == nil {
 				items = []any{}
 			}
-			return s.send(r, http.MethodPut, "/v1/evenings/"+url.PathEscape(d), map[string]any{"items": items})
+			return s.send(r, http.MethodPut, "/v1/evenings/"+d, map[string]any{"items": items})
 		},
 	},
 	{
@@ -476,6 +482,16 @@ func checkInPath(a map[string]any) (string, error) {
 		return "/v1/activities/" + url.PathEscape(id) + "/checkin", nil
 	}
 	return "", errors.New("give activity_id or session_id")
+}
+
+// dateArg is the "date" argument, checked to be YYYY-MM-DD before it goes
+// into the inner REST call's path.
+func dateArg(a map[string]any) (string, error) {
+	d, _ := a["date"].(string)
+	if _, err := time.Parse("2006-01-02", d); err != nil {
+		return "", errors.New("date must be YYYY-MM-DD")
+	}
+	return d, nil
 }
 
 func intArg(a map[string]any, k string, def, lo, hi int) int {

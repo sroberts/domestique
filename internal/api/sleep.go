@@ -260,8 +260,13 @@ func (a *API) getBedtime(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	// Keep the estimate: the last one asked for each evening.
-	_ = a.Store.SetSyncState(ctx, estimateKey+date, strconv.Itoa(b.NeedS))
+	// Keep the estimate: the last one asked for each evening. Only for
+	// tonight or last night (the card's 16:00 to 04:00 window): a GET for any
+	// other date mustn't add a key or rewrite a past evening's estimate.
+	now := time.Now().In(loc)
+	if date == now.Format("2006-01-02") || date == now.AddDate(0, 0, -1).Format("2006-01-02") {
+		_ = a.Store.SetSyncState(ctx, estimateKey+date, strconv.Itoa(b.NeedS))
+	}
 	writeJSON(w, http.StatusOK, b)
 }
 

@@ -124,6 +124,14 @@ func TestBedtimeAndWakeTimes(t *testing.T) {
 	if v, err := st.SyncState(ctx, "bedtime:"+eve); err != nil || v != "27000" {
 		t.Fatalf("estimate kept %q %v", v, err)
 	}
+	// Any other evening is advice only: nothing kept.
+	old := now.AddDate(0, 0, -5).Format("2006-01-02")
+	if w := call(t, h, "GET", "/v1/bedtime?date="+old, ""); w.Code != 200 {
+		t.Fatalf("past bedtime %d", w.Code)
+	}
+	if v, _ := st.SyncState(ctx, "bedtime:"+old); v != "" {
+		t.Fatalf("past evening's estimate written: %q", v)
+	}
 
 	day := []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}[now.AddDate(0, 0, 1).Weekday()]
 	if w := call(t, h, "PUT", "/v1/wake-times", `{"wake_times":{"`+day+`":"05:45"}}`); w.Code != 200 {
