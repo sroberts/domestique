@@ -278,9 +278,11 @@
           <h1 class="ex-name" in:fly={{ y: 6, duration: 150, easing: quintOut }}>{shown.exercise.name}</h1>
         {/key}
         <p class="mono ex-pos">{posText}</p>
-        {#if shown.exercise.notes && c.phase !== 'active'}
-          <!-- The coach's cue, there when wanted, never over the numbers mid-set. -->
-          <div class="cue">
+        {#if shown.exercise.notes}
+          <!-- The coach's cue, there when wanted, never over the numbers mid-set.
+               Held (invisible, still taking its space) in a set, so the plate
+               doesn't jump when Start set is tapped. -->
+          <div class="cue" class:held={c.phase === 'active'} inert={c.phase === 'active'} aria-hidden={c.phase === 'active'}>
             <button class="btn btn-quiet cue-toggle" aria-expanded={formOpen} aria-controls="form-cue" onclick={() => (formOpen = !formOpen)}>Form cue</button>
             {#if formOpen}<p id="form-cue" class="cue-text">{shown.exercise.notes}</p>{/if}
           </div>
@@ -530,6 +532,9 @@
   }
   .cue {
     margin-top: var(--space-1);
+  }
+  .cue.held {
+    visibility: hidden;
   }
   .cue-toggle {
     min-height: 2.75rem;
