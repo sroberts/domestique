@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"domestique/internal/checkin"
+	"domestique/internal/sleep"
 )
 
 type Server struct {
@@ -61,6 +62,15 @@ func obj(props map[string]any, required ...string) map[string]any {
 		m["required"] = required
 	}
 	return m
+}
+
+// eveningKeys are the evening log's items, as the sleep package lists them.
+func eveningKeys() []string {
+	out := make([]string, len(sleep.EveningItems))
+	for i, it := range sleep.EveningItems {
+		out[i] = it.Key
+	}
+	return out
 }
 
 func num(desc string) map[string]any { return map[string]any{"type": "number", "description": desc} }
@@ -211,6 +221,36 @@ var tools = []tool{
 				w = 2
 			}
 			return s.get(r, "/v1/sleep/trends", url.Values{"weeks": {strconv.Itoa(w)}})
+		},
+	},
+	{
+		Name: "get_evening",
+		Description: "The athlete's evening log for a date: what they did before that night (caffeine after 2 pm, alcohol, " +
+			"late meal, screens in bed, stressed, ill). logged false means unknown, which is not the same as a clear evening.",
+		InputSchema: obj(map[string]any{"date": str("The evening, YYYY-MM-DD (its night ends the next day)")}, "date"),
+		Annotations: readOnly,
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			d, _ := a["date"].(string)
+			return s.get(r, "/v1/evenings/"+url.PathEscape(d), nil)
+		},
+	},
+	{
+		Name: "save_evening",
+		Description: "Log an evening from the athlete's words: every item that applied, or an empty list for a clear evening " +
+			"(nothing of note). It replaces that evening's log. Only logged evenings count when the Sleep screen compares " +
+			"nights; late training is filled in from workouts, so don't ask about it.",
+		InputSchema: obj(map[string]any{
+			"date": str("The evening, YYYY-MM-DD, today or before"),
+			"items": map[string]any{"type": "array", "description": "What applied",
+				"items": map[string]any{"type": "string", "enum": eveningKeys()}},
+		}, "date", "items"),
+		call: func(s *Server, r *http.Request, a map[string]any) (any, error) {
+			d, _ := a["date"].(string)
+			items, _ := a["items"].([]any)
+			if items == nil {
+				items = []any{}
+			}
+			return s.send(r, http.MethodPut, "/v1/evenings/"+url.PathEscape(d), map[string]any{"items": items})
 		},
 	},
 	{

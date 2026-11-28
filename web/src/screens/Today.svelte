@@ -1,4 +1,5 @@
 <script lang="ts">
+  import EveningCard from '../components/EveningCard.svelte';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import ActionBar from '../components/ActionBar.svelte';
   import ActivityRow from '../components/ActivityRow.svelte';
@@ -212,6 +213,7 @@
         {/if}
       </dl>
     </section>
+    <EveningCard />
     {#if plan}
       <section class="plan" aria-labelledby="plan-h">
         <div class="plan-head">

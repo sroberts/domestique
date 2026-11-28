@@ -258,6 +258,14 @@ var migrations = []string{
 	ALTER TABLE sleep ADD COLUMN need_strain_s    INTEGER;
 	ALTER TABLE sleep ADD COLUMN need_nap_s       INTEGER;
 	`,
+	// The evening log: what the athlete did before a night, one tap each.
+	`
+	CREATE TABLE evenings (
+		date       TEXT PRIMARY KEY,           -- the evening; its night ends the next day
+		items      TEXT NOT NULL DEFAULT '[]', -- JSON []string: caffeine, alcohol, late_meal, screens, stressed, ill
+		updated_at INTEGER NOT NULL
+	);
+	`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

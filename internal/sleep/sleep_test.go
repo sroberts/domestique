@@ -26,7 +26,9 @@ func night(date, bed string, asleepH float64) store.Sleep {
 		Need: &store.SleepNeed{BaselineS: 27000}}
 }
 
-func day(i int) string { return time.Date(2026, 11, 1, 0, 0, 0, 0, utc).AddDate(0, 0, i).Format("2006-01-02") }
+func day(i int) string {
+	return time.Date(2026, 11, 1, 0, 0, 0, 0, utc).AddDate(0, 0, i).Format("2006-01-02")
+}
 
 // Bedtimes either side of midnight are close, not 23 hours apart.
 func TestBedtimeAcrossMidnight(t *testing.T) {
@@ -122,5 +124,67 @@ func TestLastAndNorms(t *testing.T) {
 	}
 	if got := fmt.Sprint(tr.AvgAsleepS); got != "25200" {
 		t.Fatalf("average %s", got)
+	}
+}
+
+// Only logged evenings count: an evening with no log is unknown, not a
+// "without". Items need eight logged evenings a side.
+func TestEveningsOnlyLogged(t *testing.T) {
+	var ns []store.Sleep
+	var evs []store.Evening
+	var rec []store.Recovery
+	for i := range 20 {
+		h, score := 7.5, 70
+		items := []string{}
+		if i%2 == 0 {
+			items, h, score = []string{"alcohol"}, 6, 45
+		}
+		ns = append(ns, night(day(i+1), "23:00", h))
+		rec = append(rec, store.Recovery{Date: day(i + 1), Score: score})
+		if i < 16 { // the last four evenings weren't logged
+			evs = append(evs, store.Evening{Date: day(i), Items: items})
+		}
+	}
+	tr := Build(Input{Today: day(20), Weeks: 2, Nights: ns, Recovery: rec, Evenings: evs, Loc: utc})
+	var alc EveningCompare
+	for _, c := range tr.Evenings {
+		if c.Key == "alcohol" {
+			alc = c
+		}
+	}
+	if !alc.Ready || alc.With.Nights != 8 || alc.Without.Nights != 8 || alc.With.AsleepH != 6 || alc.Without.AsleepH != 7.5 {
+		t.Fatalf("alcohol %+v", alc)
+	}
+	if *alc.With.Recovery != 45 || *alc.Without.Recovery != 70 || tr.EveningsLogged != 16 {
+		t.Fatalf("recovery %v/%v logged %d", *alc.With.Recovery, *alc.Without.Recovery, tr.EveningsLogged)
+	}
+	short := Build(Input{Today: day(20), Weeks: 2, Nights: ns, Recovery: rec, Evenings: evs[:15], Loc: utc})
+	for _, c := range short.Evenings {
+		if c.Key == "alcohol" && c.Ready {
+			t.Fatalf("ready with %d and %d", c.With.Nights, c.Without.Nights)
+		}
+	}
+}
+
+// Late training is filled in: a workout ending within three hours of that
+// night's bedtime, not one earlier in the day.
+func TestLateTraining(t *testing.T) {
+	n := night(day(2), "23:00", 7) // in bed 23:00 on day(1)
+	bed := time.UnixMilli(n.StartAt)
+	evs := []store.Evening{{Date: day(1), Items: []string{}}}
+	cases := []struct {
+		end  time.Time
+		late bool
+	}{
+		{bed.Add(-90 * time.Minute), true},
+		{bed.Add(-4 * time.Hour), false},
+		{bed.Add(30 * time.Minute), false}, // after bed: not before this night
+	}
+	for _, c := range cases {
+		tr := Build(Input{Today: day(2), Weeks: 2, Nights: []store.Sleep{n}, Evenings: evs, Workouts: []Workout{{EndAt: c.end.UnixMilli()}}, Loc: utc})
+		got := tr.Evenings[len(tr.Evenings)-1]
+		if got.Key != "late_training" || (got.With.Nights == 1) != c.late {
+			t.Errorf("ended %s before bed: %+v, want late=%v", bed.Sub(c.end), got, c.late)
+		}
 	}
 }
