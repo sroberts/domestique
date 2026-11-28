@@ -66,6 +66,16 @@ func TestBedtimeWakeSetInSettings(t *testing.T) {
 	}
 }
 
+func TestBedtimeAfterMidnight(t *testing.T) {
+	// A late wake puts bed past midnight: 09:00 - 8:20 = 00:40.
+	eve, _ := time.ParseInLocation("2006-01-02", day(14), utc)
+	key := Weekdays[eve.AddDate(0, 0, 1).Weekday()]
+	b := PlanBedtime(BedtimeInput{Date: day(14), Nights: nightsWaking(14, "06:30", 7.5), Wake: map[string]string{key: "09:00"}, Loc: utc})
+	if b == nil || b.BedBy != "00:40" {
+		t.Fatalf("%+v", b)
+	}
+}
+
 func TestCheckEstimates(t *testing.T) {
 	ns := nightsWaking(4, "06:30", 7.5) // need 7:30 each
 	est := []Estimate{{Date: day(1), NeedS: 26000}, {Date: day(2), NeedS: 28000}, {Date: day(3), NeedS: 27500}, {Date: day(9), NeedS: 1}}

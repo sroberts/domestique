@@ -58,6 +58,11 @@ func TestDebt(t *testing.T) {
 	if long.Debt.S != 0 {
 		t.Fatalf("long nights left debt %d, want 0", long.Debt.S)
 	}
+	// Ten days without the strap: nights from before the gap don't count.
+	gap := Build(Input{Today: day(18), Weeks: 4, Nights: ns, Loc: utc})
+	if gap.Debt.S != 0 || gap.Debt.Nights != 0 {
+		t.Fatalf("debt after a gap %+v, want none", gap.Debt)
+	}
 }
 
 // Comparisons wait for five nights a side, and pair a night with the

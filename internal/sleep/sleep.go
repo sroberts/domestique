@@ -162,7 +162,7 @@ func Build(in Input) Trends {
 	}
 	t.Bed = clock(beds, 12*60)
 	t.Wake = clock(wakes, 0)
-	t.Debt = debt(nights)
+	t.Debt = debt(nights, in.Today, loc)
 	t.ShortNights = shortNights(nights, in.Recovery)
 	t.HeavyDays = heavyDays(nights, in.Load, loc)
 	t.Evenings, t.EveningsLogged = evenings(in.Evenings, nights, in.Recovery, in.Workouts, loc)
@@ -202,13 +202,18 @@ func clock(ms []int, offset int) Clock {
 		SpreadMin: int(math.Round(median(dev))), Nights: len(ms)}
 }
 
-// debt sums the last seven nights' shortfall against baseline need; a long
-// night pays some back, and the total never goes below zero.
-func debt(nights []store.Sleep) Debt {
+// debt sums the shortfall against baseline need of the nights that woke in
+// the seven days to upto; a long night pays some back, and the total never
+// goes below zero. A gap isn't filled with nights from weeks before.
+func debt(nights []store.Sleep, upto string, loc *time.Location) Debt {
 	var d Debt
-	for i := len(nights) - 1; i >= 0 && i >= len(nights)-7; i-- {
-		x := nights[i]
-		if x.Need == nil || x.Need.BaselineS == 0 {
+	end, err := time.ParseInLocation("2006-01-02", upto, loc)
+	if err != nil {
+		return d
+	}
+	from := end.AddDate(0, 0, -6).Format("2006-01-02")
+	for _, x := range nights {
+		if x.Date < from || x.Date > upto || x.Need == nil || x.Need.BaselineS == 0 {
 			continue
 		}
 		d.S += x.Need.BaselineS - x.AsleepS

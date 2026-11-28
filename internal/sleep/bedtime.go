@@ -106,7 +106,7 @@ func PlanBedtime(in BedtimeInput) *Bedtime {
 	}
 
 	// Tonight's need: the usual, some of the week's debt, more after a hard day.
-	d := debt(before)
+	d := debt(before, in.Date, loc)
 	b.DebtS = min(d.S/DebtShare, DebtCapS)
 	heavy := in.Today != nil && in.Today.CTL > 5 && in.Today.TSS >= HeavyDayLoad*in.Today.CTL
 	if heavy {

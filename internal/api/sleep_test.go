@@ -55,6 +55,11 @@ func TestSleepEndpoints(t *testing.T) {
 		t.Fatalf("trends %s", w.Body.String())
 	}
 
+	// Only to: from is 13 days before it, not before today.
+	if w := call(t, h, "GET", "/v1/sleep?to=2025-03-01", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"from":"2025-02-16"`) {
+		t.Fatalf("only to: %d %s", w.Code, w.Body.String())
+	}
+
 	for _, bad := range []string{"/v1/sleep/trends?weeks=3", "/v1/sleep?from=2026-11-10&to=2026-11-01", "/v1/sleep?from=2024-01-01&to=2026-01-01"} {
 		if w := call(t, h, "GET", bad, ""); w.Code != 400 {
 			t.Errorf("%s: %d, want 400", bad, w.Code)

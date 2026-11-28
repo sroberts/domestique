@@ -28,18 +28,18 @@ const sleepYear = 365
 // getSleep lists nights and naps that ended between from and to (default
 // the last 14 days; at most 400).
 func (a *API) getSleep(w http.ResponseWriter, r *http.Request) {
-	now := time.Now().In(a.loc())
-	to := now.Format("2006-01-02")
-	from := now.AddDate(0, 0, -13).Format("2006-01-02")
 	q := r.URL.Query()
-	if v := q.Get("to"); v != "" {
-		to = v
+	to := q.Get("to")
+	if to == "" {
+		to = time.Now().In(a.loc()).Format("2006-01-02")
 	}
-	if v := q.Get("from"); v != "" {
-		from = v
+	t, err2 := time.Parse("2006-01-02", to)
+	// From defaults to 13 days before to, not before today.
+	from := q.Get("from")
+	if from == "" && err2 == nil {
+		from = t.AddDate(0, 0, -13).Format("2006-01-02")
 	}
 	f, err1 := time.Parse("2006-01-02", from)
-	t, err2 := time.Parse("2006-01-02", to)
 	if err1 != nil || err2 != nil || t.Before(f) || t.Sub(f) > 400*24*time.Hour {
 		writeErr(w, http.StatusBadRequest, "from and to must be dates (YYYY-MM-DD), from first, at most 400 days apart")
 		return
