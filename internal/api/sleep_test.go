@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,40 @@ func TestSleepEndpoints(t *testing.T) {
 	for _, bad := range []string{"/v1/sleep/trends?weeks=3", "/v1/sleep?from=2026-11-10&to=2026-11-01", "/v1/sleep?from=2024-01-01&to=2026-01-01"} {
 		if w := call(t, h, "GET", bad, ""); w.Code != 400 {
 			t.Errorf("%s: %d, want 400", bad, w.Code)
+		}
+	}
+}
+
+func TestEveningLog(t *testing.T) {
+	a, _, h := testAPI(t)
+	today := time.Now().In(a.loc()).Format("2006-01-02")
+	w := call(t, h, "GET", "/v1/evenings/"+today, "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"logged":false`) || !strings.Contains(w.Body.String(), `"late_meal"`) {
+		t.Fatalf("unlogged evening: %d %s", w.Code, w.Body.String())
+	}
+	w = call(t, h, "PUT", "/v1/evenings/"+today, `{"items":["alcohol","screens","alcohol"]}`)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"items":["alcohol","screens"]`) {
+		t.Fatalf("log: %d %s", w.Code, w.Body.String())
+	}
+	// A clear evening is logged, with no items.
+	w = call(t, h, "PUT", "/v1/evenings/"+today, `{"items":[]}`)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"logged":true,"items":[]`) {
+		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
+	}
+	if w = call(t, h, "DELETE", "/v1/evenings/"+today, ""); w.Code != 204 {
+		t.Fatalf("delete: %d", w.Code)
+	}
+	if w = call(t, h, "GET", "/v1/evenings/"+today, ""); !strings.Contains(w.Body.String(), `"logged":false`) {
+		t.Fatalf("after delete: %s", w.Body.String())
+	}
+	tomorrow := time.Now().In(a.loc()).AddDate(0, 0, 1).Format("2006-01-02")
+	for _, c := range []struct{ path, body string }{
+		{"/v1/evenings/" + today, `{"items":["coffee"]}`},
+		{"/v1/evenings/" + tomorrow, `{"items":[]}`},
+		{"/v1/evenings/yesterday", `{"items":[]}`},
+	} {
+		if w := call(t, h, "PUT", c.path, c.body); w.Code != 400 {
+			t.Errorf("%s %s: %d, want 400", c.path, c.body, w.Code)
 		}
 	}
 }

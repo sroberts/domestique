@@ -465,6 +465,32 @@ export interface SleepCompare {
   ready: boolean;
 }
 
+export interface EveningItem {
+  key: string;
+  label: string;
+}
+
+/** One evening's log. logged false is unknown, not the same as clear. */
+export interface Evening {
+  date: string;
+  logged: boolean;
+  items: string[];
+  choices: EveningItem[];
+}
+
+export interface EveningSide {
+  nights: number;
+  asleep_h: number;
+  efficiency?: number;
+  recovery?: number;
+}
+
+export interface EveningCompare extends EveningItem {
+  with: EveningSide;
+  without: EveningSide;
+  ready: boolean;
+}
+
 export interface SleepTrends {
   weeks: number;
   last: Sleep | null;
@@ -480,6 +506,9 @@ export interface SleepTrends {
   heavy_days: SleepCompare;
   short_night_s: number;
   heavy_day_load: number;
+  evenings: EveningCompare[];
+  evenings_logged: number;
+  min_evening: number;
 }
 
 export interface CurvePoint {

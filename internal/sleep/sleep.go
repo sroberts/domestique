@@ -80,6 +80,10 @@ type Trends struct {
 	HeavyDays    Compare       `json:"heavy_days"`   // hours asleep, after a heavy day or not
 	ShortNightS  int           `json:"short_night_s"`
 	HeavyDayLoad float64       `json:"heavy_day_load"`
+	// What goes with the nights after logged evenings, item by item.
+	Evenings       []EveningCompare `json:"evenings"`
+	EveningsLogged int              `json:"evenings_logged"`
+	MinEvening     int              `json:"min_evening"`
 }
 
 // ShortNightS is how far under baseline need a night must be to count as
@@ -99,6 +103,8 @@ type Input struct {
 	Naps     []store.Sleep
 	Recovery []store.Recovery
 	Load     []load.Day
+	Evenings []store.Evening // logged evenings over the comparison window
+	Workouts []Workout       // when workouts ended, for late training
 	Loc      *time.Location
 }
 
@@ -157,6 +163,8 @@ func Build(in Input) Trends {
 	t.Debt = debt(nights)
 	t.ShortNights = shortNights(nights, in.Recovery)
 	t.HeavyDays = heavyDays(nights, in.Load, loc)
+	t.Evenings, t.EveningsLogged = evenings(in.Evenings, nights, in.Recovery, in.Workouts, loc)
+	t.MinEvening = MinEvening
 	return t
 }
 

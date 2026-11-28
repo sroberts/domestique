@@ -50,6 +50,8 @@
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   /** "3 and 12 so far": what a comparison still waits for. */
   const sofar = (c: SleepCompare) => `${c.with.nights} and ${c.without.nights} so far`;
+  let readyEvenings = $derived(data?.evenings.filter((c) => c.ready) ?? []);
+  let waiting = $derived(data?.evenings.filter((c) => !c.ready) ?? []);
 </script>
 
 <main class="page">
@@ -178,6 +180,37 @@
       <p class="small muted foot">
         Medians. Short means more than an hour under your usual need; heavy means a day's load at least {data.heavy_day_load}× your fitness. They show what goes together, not what causes what.
       </p>
+    </section>
+
+    <section class="block" aria-labelledby="ev-h">
+      <h2 id="ev-h" class="block-h">Evenings <span class="mono muted">{plural(data.evenings_logged, 'logged evening')}, last year</span></h2>
+      {#if data.evenings_logged === 0}
+        <p class="small muted">Log your evenings on Today, from 6 pm. Each thing shows here once it has {data.min_evening} logged evenings with it and {data.min_evening} without.</p>
+      {:else}
+        {#each readyEvenings as c (c.key)}
+          <table class="ev">
+            <caption>The night after: {c.label.toLowerCase()}</caption>
+            <thead>
+              <tr><th scope="col"><span class="visually-hidden">Measure</span></th><th scope="col">With <span class="mono">{c.with.nights}</span></th><th scope="col">Without <span class="mono">{c.without.nights}</span></th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Asleep</th><td><span class="num">{c.with.asleep_h.toFixed(1)}</span><span class="unit">h</span></td><td><span class="num">{c.without.asleep_h.toFixed(1)}</span><span class="unit">h</span></td></tr>
+              {#if c.with.efficiency != null && c.without.efficiency != null}
+                <tr><th scope="row">Efficiency</th><td><span class="num">{c.with.efficiency}</span><span class="unit">%</span></td><td><span class="num">{c.without.efficiency}</span><span class="unit">%</span></td></tr>
+              {/if}
+              {#if c.with.recovery != null && c.without.recovery != null}
+                <tr><th scope="row">Recovery</th><td><span class="num">{c.with.recovery}</span><span class="unit">%</span></td><td><span class="num">{c.without.recovery}</span><span class="unit">%</span></td></tr>
+              {/if}
+            </tbody>
+          </table>
+        {/each}
+        {#if waiting.length}
+          <p class="small muted gathering">
+            Still gathering ({data.min_evening} logged evenings each way): {waiting.map((c) => `${c.label.toLowerCase()} ${Math.min(c.with.nights, c.without.nights)} of ${data!.min_evening}`).join(', ')}.
+          </p>
+        {/if}
+        <p class="small muted foot">Only evenings you logged count; one you didn't is unknown, not clear. Late training is filled in from your workouts: one ending within three hours of bed.</p>
+      {/if}
     </section>
   {/if}
 </main>
@@ -364,6 +397,47 @@
   }
   .vs {
     font-size: var(--size-small);
+  }
+  /* One small table per thing logged: with and without side by side. */
+  .ev {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: var(--space-4);
+    font-variant-numeric: tabular-nums;
+  }
+  .ev caption {
+    caption-side: top;
+    text-align: left;
+    font-size: var(--size-small);
+    font-weight: 600;
+    padding-bottom: var(--space-2);
+  }
+  .ev th,
+  .ev td {
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+    font-weight: 400;
+  }
+  .ev thead th {
+    font-size: var(--size-label);
+    color: var(--text-muted);
+    width: 6.5rem;
+  }
+  .ev thead th:first-child {
+    width: auto;
+  }
+  .ev tbody th {
+    text-align: left;
+    font-size: var(--size-small);
+    color: var(--text-muted);
+  }
+  .ev .num {
+    font-size: var(--size-lead);
+  }
+  .gathering {
+    margin-top: var(--space-3);
+    max-width: 62ch;
   }
   .foot {
     margin-top: var(--space-3);
